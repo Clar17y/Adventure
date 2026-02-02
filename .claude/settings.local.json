@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(codex-review)",
+      "mcp__codex__codex",
+      "Bash(npx tsx:*)",
+      "WebSearch",
+      "mcp__grepai__grepai_search"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "context7",
+    "sequential-thinking"
+  ]
+}

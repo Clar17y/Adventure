@@ -1,0 +1,259 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// PLAYERS & AUTH
+// =============================================================================
+
+model Player {
+  id           String    @id @default(uuid())
+  username     String    @unique @db.VarChar(32)
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastActiveAt DateTime? @map("last_active_at")
+
+  turnBank       TurnBank?
+  skills         PlayerSkill[]
+  equipment      PlayerEquipment[]
+  items          Item[]
+  bestiary       PlayerBestiary[]
+  activityLogs   ActivityLog[]
+  refreshTokens  RefreshToken[]
+
+  @@map("players")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  playerId  String   @map("player_id")
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// =============================================================================
+// TURN ECONOMY
+// =============================================================================
+
+model TurnBank {
+  playerId     String   @id @map("player_id")
+  currentTurns Int      @default(86400) @map("current_turns")
+  lastRegenAt  DateTime @default(now()) @map("last_regen_at")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@map("turn_banks")
+}
+
+// =============================================================================
+// SKILLS
+// =============================================================================
+
+model PlayerSkill {
+  id             String   @id @default(uuid())
+  playerId       String   @map("player_id")
+  skillType      String   @map("skill_type") @db.VarChar(32)
+  level          Int      @default(1)
+  xp             BigInt   @default(0)
+  dailyXpGained  Int      @default(0) @map("daily_xp_gained")
+  lastXpResetAt  DateTime @default(now()) @map("last_xp_reset_at") @db.Date
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, skillType])
+  @@map("player_skills")
+}
+
+// =============================================================================
+// EQUIPMENT
+// =============================================================================
+
+model PlayerEquipment {
+  playerId String  @map("player_id")
+  slot     String  @db.VarChar(16)
+  itemId   String? @map("item_id")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  item   Item?  @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@id([playerId, slot])
+  @@map("player_equipment")
+}
+
+// =============================================================================
+// ITEMS
+// =============================================================================
+
+model ItemTemplate {
+  id             String  @id @default(uuid())
+  name           String  @db.VarChar(64)
+  itemType       String  @map("item_type") @db.VarChar(32)
+  slot           String? @db.VarChar(16)
+  tier           Int     @default(1)
+  baseStats      Json    @default("{}") @map("base_stats")
+  requiredSkill  String? @map("required_skill") @db.VarChar(32)
+  requiredLevel  Int     @default(1) @map("required_level")
+  maxDurability  Int     @default(100) @map("max_durability")
+  stackable      Boolean @default(false)
+
+  items       Item[]
+  dropTables  DropTable[]
+  recipes     CraftingRecipe[]
+
+  @@map("item_templates")
+}
+
+model Item {
+  id                String   @id @default(uuid())
+  templateId        String   @map("template_id")
+  ownerId           String   @map("owner_id")
+  currentDurability Int?     @map("current_durability")
+  maxDurability     Int?     @map("max_durability")
+  quantity          Int      @default(1)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  template  ItemTemplate      @relation(fields: [templateId], references: [id])
+  owner     Player            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  equipment PlayerEquipment[]
+
+  @@map("items")
+}
+
+// =============================================================================
+// ZONES
+// =============================================================================
+
+model Zone {
+  id          String  @id @default(uuid())
+  name        String  @db.VarChar(64)
+  description String? @db.Text
+  difficulty  Int     @default(1)
+  travelCost  Int     @map("travel_cost")
+  isStarter   Boolean @default(false) @map("is_starter")
+
+  mobs          MobTemplate[]
+  resourceNodes ResourceNode[]
+
+  @@map("zones")
+}
+
+// =============================================================================
+// MOBS & COMBAT
+// =============================================================================
+
+model MobTemplate {
+  id              String @id @default(uuid())
+  name            String @db.VarChar(64)
+  zoneId          String @map("zone_id")
+  hp              Int
+  attack          Int
+  defence         Int
+  evasion         Int
+  damageMin       Int    @map("damage_min")
+  damageMax       Int    @map("damage_max")
+  xpReward        Int    @map("xp_reward")
+  encounterWeight Int    @default(100) @map("encounter_weight")
+  spellPattern    Json   @default("[]") @map("spell_pattern")
+
+  zone       Zone             @relation(fields: [zoneId], references: [id])
+  dropTables DropTable[]
+  bestiary   PlayerBestiary[]
+
+  @@map("mob_templates")
+}
+
+model DropTable {
+  id             String  @id @default(uuid())
+  mobTemplateId  String  @map("mob_template_id")
+  itemTemplateId String  @map("item_template_id")
+  dropChance     Decimal @map("drop_chance") @db.Decimal(5, 4)
+  minQuantity    Int     @default(1) @map("min_quantity")
+  maxQuantity    Int     @default(1) @map("max_quantity")
+
+  mobTemplate  MobTemplate  @relation(fields: [mobTemplateId], references: [id], onDelete: Cascade)
+  itemTemplate ItemTemplate @relation(fields: [itemTemplateId], references: [id], onDelete: Cascade)
+
+  @@map("drop_tables")
+}
+
+// =============================================================================
+// BESTIARY
+// =============================================================================
+
+model PlayerBestiary {
+  playerId           String   @map("player_id")
+  mobTemplateId      String   @map("mob_template_id")
+  kills              Int      @default(0)
+  firstEncounteredAt DateTime @default(now()) @map("first_encountered_at")
+
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  mobTemplate MobTemplate @relation(fields: [mobTemplateId], references: [id], onDelete: Cascade)
+
+  @@id([playerId, mobTemplateId])
+  @@map("player_bestiary")
+}
+
+// =============================================================================
+// RESOURCES & GATHERING
+// =============================================================================
+
+model ResourceNode {
+  id              String  @id @default(uuid())
+  zoneId          String  @map("zone_id")
+  resourceType    String  @map("resource_type") @db.VarChar(32)
+  skillRequired   String  @map("skill_required") @db.VarChar(32)
+  levelRequired   Int     @default(1) @map("level_required")
+  baseYield       Int     @map("base_yield")
+  discoveryChance Decimal @map("discovery_chance") @db.Decimal(5, 4)
+
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@map("resource_nodes")
+}
+
+// =============================================================================
+// CRAFTING
+// =============================================================================
+
+model CraftingRecipe {
+  id               String @id @default(uuid())
+  skillType        String @map("skill_type") @db.VarChar(32)
+  requiredLevel    Int    @map("required_level")
+  resultTemplateId String @map("result_template_id")
+  turnCost         Int    @map("turn_cost")
+  materials        Json
+  xpReward         Int    @map("xp_reward")
+
+  resultTemplate ItemTemplate @relation(fields: [resultTemplateId], references: [id])
+
+  @@map("crafting_recipes")
+}
+
+// =============================================================================
+// ACTIVITY LOGS
+// =============================================================================
+
+model ActivityLog {
+  id           String   @id @default(uuid())
+  playerId     String   @map("player_id")
+  activityType String   @map("activity_type") @db.VarChar(32)
+  turnsSpent   Int      @map("turns_spent")
+  result       Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, createdAt])
+  @@map("activity_logs")
+}

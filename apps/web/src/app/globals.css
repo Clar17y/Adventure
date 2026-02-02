@@ -1,0 +1,79 @@
+:root {
+  /* UI Neutrals */
+  --color-black: #0a0a0c;
+  --color-dark-gray: #2a2a3a;
+  --color-mid-gray: #5a5a6a;
+  --color-light-gray: #9a9aaa;
+  --color-off-white: #e8e8e0;
+
+  /* Earth/Wood */
+  --color-dark-brown: #3d2618;
+  --color-brown: #6b4423;
+  --color-tan: #a67c52;
+  --color-sand: #d4b896;
+
+  /* Stone/Metal */
+  --color-slate: #3a3d4a;
+  --color-steel: #6a7080;
+  --color-silver: #a8b0b8;
+  --color-gold: #d4a84b;
+
+  /* Greens */
+  --color-dark-green: #1e3d2a;
+  --color-forest-green: #3d6b4a;
+  --color-grass: #6aaa5a;
+  --color-mint: #a8d8a0;
+
+  /* Blues */
+  --color-navy: #1a2a4a;
+  --color-ocean: #2a5a8a;
+  --color-sky: #5aaad4;
+  --color-pale-blue: #a8d8e8;
+
+  /* Reds/Warm */
+  --color-maroon: #5a1a1a;
+  --color-red: #aa3a3a;
+  --color-orange: #d47a3a;
+  --color-peach: #e8b090;
+
+  /* Magic/Rare */
+  --color-deep-purple: #3a2a5a;
+  --color-purple: #7a4a9a;
+  --color-bright-purple: #aa6ad4;
+
+  /* Rarity */
+  --rarity-common: #9a9aaa;
+  --rarity-uncommon: #3d6b4a;
+  --rarity-rare: #2a5a8a;
+  --rarity-epic: #7a4a9a;
+  --rarity-legendary: #d4a84b;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-black);
+  color: var(--color-off-white);
+}
+
+a {
+  color: var(--color-sky);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}

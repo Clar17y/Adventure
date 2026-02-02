@@ -15,7 +15,7 @@ Turn-based async RPG with real-time turn regeneration. Players explore, fight mo
 
 ```
 apps/
-  web/          # Next.js frontend (port 3000)
+  web/          # Next.js frontend (port 3002)
   api/          # Express backend (port 4000)
 packages/
   shared/       # Types, constants, utilities
@@ -58,6 +58,7 @@ docker-compose up -d
 DATABASE_URL=postgresql://postgres:postgres@localhost:5433/adventure
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=your-dev-secret-min-32-chars-long
+CORS_ORIGIN=http://localhost:3002
 ```
 
 ## Key Design Decisions

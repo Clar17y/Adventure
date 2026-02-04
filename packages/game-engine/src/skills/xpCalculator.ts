@@ -40,42 +40,51 @@ export function xpToNextLevel(currentXp: number, currentLevel: number): number {
 }
 
 /**
- * Calculate efficiency based on daily XP already gained.
+ * Calculate efficiency based on XP gained in current window.
  * Returns value between 0 and 1.
  */
 export function calculateEfficiency(
-  dailyXpGained: number,
+  windowXpGained: number,
   skillType: SkillType
 ): number {
-  const cap = getDailyCap(skillType);
+  const cap = getWindowCap(skillType);
 
   // Combat skills have hard cap (efficiency goes to 0 at cap)
   if (COMBAT_SKILLS.includes(skillType)) {
-    return dailyXpGained >= cap ? 0 : 1;
+    return windowXpGained >= cap ? 0 : 1;
   }
 
   // Other skills have diminishing returns
-  if (dailyXpGained >= cap) return 0;
+  if (windowXpGained >= cap) return 0;
 
-  const ratio = dailyXpGained / cap;
+  const ratio = windowXpGained / cap;
   const efficiency = Math.max(0, 1 - Math.pow(ratio, SKILL_CONSTANTS.EFFICIENCY_DECAY_POWER));
   return efficiency;
 }
 
 /**
- * Get daily cap for a skill type.
+ * Get number of XP windows per day.
  */
-export function getDailyCap(skillType: SkillType): number {
+export function getWindowsPerDay(): number {
+  return 24 / SKILL_CONSTANTS.XP_WINDOW_HOURS;
+}
+
+/**
+ * Get per-window XP cap for a skill type.
+ * Daily cap divided by number of windows (8 for 3-hour windows).
+ */
+export function getWindowCap(skillType: SkillType): number {
+  const windowsPerDay = getWindowsPerDay();
   if (COMBAT_SKILLS.includes(skillType)) {
-    return SKILL_CONSTANTS.DAILY_CAP_COMBAT;
+    return Math.floor(SKILL_CONSTANTS.DAILY_CAP_COMBAT / windowsPerDay);
   }
   if (GATHERING_SKILLS.includes(skillType)) {
-    return SKILL_CONSTANTS.DAILY_CAP_GATHERING;
+    return Math.floor(SKILL_CONSTANTS.DAILY_CAP_GATHERING / windowsPerDay);
   }
   if (CRAFTING_SKILLS.includes(skillType)) {
-    return SKILL_CONSTANTS.DAILY_CAP_CRAFTING;
+    return Math.floor(SKILL_CONSTANTS.DAILY_CAP_CRAFTING / windowsPerDay);
   }
-  return SKILL_CONSTANTS.DAILY_CAP_COMBAT;
+  return Math.floor(SKILL_CONSTANTS.DAILY_CAP_COMBAT / windowsPerDay);
 }
 
 /**
@@ -85,17 +94,17 @@ export function getDailyCap(skillType: SkillType): number {
 export function applyXpGain(
   currentXp: number,
   currentLevel: number,
-  dailyXpGained: number,
+  windowXpGained: number,
   rawXpGain: number,
   skillType: SkillType
 ): SkillXpResult {
-  const efficiency = calculateEfficiency(dailyXpGained, skillType);
+  const efficiency = calculateEfficiency(windowXpGained, skillType);
   const xpAfterEfficiency = Math.floor(rawXpGain * efficiency);
 
   const newTotalXp = currentXp + xpAfterEfficiency;
   const newLevel = levelFromXp(newTotalXp);
-  const newDailyXpGained = dailyXpGained + xpAfterEfficiency;
-  const atDailyCap = calculateEfficiency(newDailyXpGained, skillType) === 0;
+  const newWindowXpGained = windowXpGained + xpAfterEfficiency;
+  const atDailyCap = calculateEfficiency(newWindowXpGained, skillType) === 0;
 
   return {
     xpGained: rawXpGain,
@@ -108,14 +117,32 @@ export function applyXpGain(
 }
 
 /**
- * Check if daily cap reset is needed (new day).
+ * Get the window index for a given time (0-7 for 3-hour windows).
  */
-export function shouldResetDailyCap(lastResetDate: Date, now: Date = new Date()): boolean {
-  const lastReset = new Date(lastResetDate);
-  lastReset.setHours(0, 0, 0, 0);
-
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-
-  return today.getTime() > lastReset.getTime();
+export function getWindowIndex(date: Date): number {
+  const hours = date.getHours();
+  return Math.floor(hours / SKILL_CONSTANTS.XP_WINDOW_HOURS);
 }
+
+/**
+ * Check if window cap reset is needed (new 3-hour window).
+ */
+export function shouldResetWindowCap(lastResetDate: Date, now: Date = new Date()): boolean {
+  const lastReset = new Date(lastResetDate);
+  const current = new Date(now);
+
+  // Different day = definitely new window
+  const lastDay = lastReset.toDateString();
+  const currentDay = current.toDateString();
+  if (lastDay !== currentDay) {
+    return true;
+  }
+
+  // Same day - check if different window
+  const lastWindow = getWindowIndex(lastReset);
+  const currentWindow = getWindowIndex(current);
+  return currentWindow !== lastWindow;
+}
+
+// Keep old name as alias for backwards compatibility
+export const shouldResetDailyCap = shouldResetWindowCap;

@@ -49,20 +49,24 @@ function xpForLevel(level: number): number {
   return Math.floor(SKILL_CONSTANTS.XP_BASE * Math.pow(level, SKILL_CONSTANTS.XP_EXPONENT));
 }
 
-function calculateEfficiency(dailyXpGained: number, skillType: string): number {
+function calculateEfficiency(windowXpGained: number, skillType: string): number {
   const skill = skillType as any;
+  const windowsPerDay = 24 / SKILL_CONSTANTS.XP_WINDOW_HOURS;
 
   if (COMBAT_SKILLS.includes(skill)) {
-    return dailyXpGained >= SKILL_CONSTANTS.DAILY_CAP_COMBAT ? 0 : 1;
+    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_COMBAT / windowsPerDay);
+    return windowXpGained >= windowCap ? 0 : 1;
   }
   if (GATHERING_SKILLS.includes(skill)) {
-    if (dailyXpGained >= SKILL_CONSTANTS.DAILY_CAP_GATHERING) return 0;
-    const ratio = dailyXpGained / SKILL_CONSTANTS.DAILY_CAP_GATHERING;
+    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_GATHERING / windowsPerDay);
+    if (windowXpGained >= windowCap) return 0;
+    const ratio = windowXpGained / windowCap;
     return Math.max(0, 1 - Math.pow(ratio, SKILL_CONSTANTS.EFFICIENCY_DECAY_POWER));
   }
   if (CRAFTING_SKILLS.includes(skill)) {
-    if (dailyXpGained >= SKILL_CONSTANTS.DAILY_CAP_CRAFTING) return 0;
-    const ratio = dailyXpGained / SKILL_CONSTANTS.DAILY_CAP_CRAFTING;
+    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_CRAFTING / windowsPerDay);
+    if (windowXpGained >= windowCap) return 0;
+    const ratio = windowXpGained / windowCap;
     return Math.max(0, 1 - Math.pow(ratio, SKILL_CONSTANTS.EFFICIENCY_DECAY_POWER));
   }
 

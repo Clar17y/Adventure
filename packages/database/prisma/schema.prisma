@@ -69,7 +69,7 @@ model PlayerSkill {
   level          Int      @default(1)
   xp             BigInt   @default(0)
   dailyXpGained  Int      @default(0) @map("daily_xp_gained")
-  lastXpResetAt  DateTime @default(now()) @map("last_xp_reset_at") @db.Date
+  lastXpResetAt  DateTime @default(now()) @map("last_xp_reset_at")
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 

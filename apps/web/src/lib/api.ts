@@ -292,7 +292,16 @@ export async function startExploration(zoneId: string, turns: number) {
     zone: { id: string; name: string; difficulty: number };
     turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
     outcomes: Array<{ type: string; turnOccurred: number }>;
-    mobEncounters: Array<{ turnOccurred: number; mobTemplateId: string; mobName: string }>;
+    mobEncounters: Array<{
+      encounterId: string;
+      zoneId: string;
+      zoneName: string;
+      turnOccurred: number;
+      mobTemplateId: string;
+      mobName: string;
+      createdAt: string;
+      expiresAt: string;
+    }>;
     resourceDiscoveries: Array<{ turnOccurred: number; resourceNodeId: string; resourceType: string }>;
     hiddenCaches: Array<{ type: string; turnOccurred: number }>;
     zoneExitDiscovered: boolean;
@@ -310,6 +319,7 @@ export async function startCombat(zoneId: string, attackSkill: 'melee' | 'ranged
     combat: {
       zoneId: string;
       mobTemplateId: string;
+      pendingEncounterId: string | null;
       outcome: 'victory' | 'defeat' | 'fled';
       log: Array<{ round: number; actor: 'player' | 'mob'; action: string; message: string }>;
     };
@@ -332,6 +342,61 @@ export async function startCombat(zoneId: string, attackSkill: 'melee' | 'ranged
   }>('/api/v1/combat/start', {
     method: 'POST',
     body: JSON.stringify({ zoneId, attackSkill, ...(mobTemplateId ? { mobTemplateId } : {}) }),
+  });
+}
+
+export async function startCombatFromPendingEncounter(pendingEncounterId: string, attackSkill: 'melee' | 'ranged' | 'magic' = 'melee') {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    combat: {
+      zoneId: string;
+      mobTemplateId: string;
+      pendingEncounterId: string | null;
+      outcome: 'victory' | 'defeat' | 'fled';
+      log: Array<{ round: number; actor: 'player' | 'mob'; action: string; message: string }>;
+    };
+    rewards: {
+      xp: number;
+      loot: Array<{ itemTemplateId: string; quantity: number }>;
+      durabilityLost: Array<{ itemId: string; amount: number }>;
+      skillXp: null | {
+        skillType: string;
+        xpGained: number;
+        xpAfterEfficiency: number;
+        efficiency: number;
+        leveledUp: boolean;
+        newLevel: number;
+        atDailyCap: boolean;
+        newTotalXp: number;
+        newDailyXpGained: number;
+      };
+    };
+  }>('/api/v1/combat/start', {
+    method: 'POST',
+    body: JSON.stringify({ pendingEncounterId, attackSkill }),
+  });
+}
+
+export async function getPendingEncounters() {
+  return fetchApi<{
+    pendingEncounters: Array<{
+      encounterId: string;
+      zoneId: string;
+      zoneName: string;
+      mobTemplateId: string;
+      mobName: string;
+      turnOccurred: number;
+      createdAt: string;
+      expiresAt: string;
+    }>;
+  }>('/api/v1/combat/pending');
+}
+
+export async function abandonPendingEncounters(zoneId?: string) {
+  return fetchApi<{ success: boolean; abandoned: number }>('/api/v1/combat/pending/abandon', {
+    method: 'POST',
+    body: JSON.stringify(zoneId ? { zoneId } : {}),
   });
 }
 

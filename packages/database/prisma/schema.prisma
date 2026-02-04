@@ -25,6 +25,7 @@ model Player {
   items          Item[]
   bestiary       PlayerBestiary[]
   activityLogs   ActivityLog[]
+  pendingEncounters PendingEncounter[]
   refreshTokens  RefreshToken[]
 
   @@map("players")
@@ -144,6 +145,7 @@ model Zone {
 
   mobs          MobTemplate[]
   resourceNodes ResourceNode[]
+  pendingEncounters PendingEncounter[]
 
   @@map("zones")
 }
@@ -169,6 +171,7 @@ model MobTemplate {
   zone       Zone             @relation(fields: [zoneId], references: [id])
   dropTables DropTable[]
   bestiary   PlayerBestiary[]
+  pendingEncounters PendingEncounter[]
 
   @@map("mob_templates")
 }
@@ -253,7 +256,28 @@ model ActivityLog {
   createdAt    DateTime @default(now()) @map("created_at")
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  pendingEncounters PendingEncounter[]
 
   @@index([playerId, createdAt])
   @@map("activity_logs")
+}
+
+model PendingEncounter {
+  id           String   @id @default(uuid())
+  playerId     String   @map("player_id")
+  zoneId       String   @map("zone_id")
+  mobTemplateId String  @map("mob_template_id")
+  turnOccurred Int      @map("turn_occurred")
+  sourceLogId  String?  @map("source_log_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  expiresAt    DateTime @map("expires_at")
+
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  zone        Zone        @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  mobTemplate MobTemplate @relation(fields: [mobTemplateId], references: [id], onDelete: Cascade)
+  sourceLog   ActivityLog? @relation(fields: [sourceLogId], references: [id], onDelete: SetNull)
+
+  @@index([playerId, createdAt])
+  @@index([playerId, expiresAt])
+  @@map("pending_encounters")
 }

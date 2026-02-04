@@ -14,13 +14,18 @@ export const combatRouter = Router();
 
 combatRouter.use(authenticate);
 
+const prismaAny = prisma as unknown as any;
+
 const attackSkillSchema = z.enum(['melee', 'ranged', 'magic']);
 type AttackSkill = z.infer<typeof attackSkillSchema>;
 
 const startSchema = z.object({
-  zoneId: z.string().uuid(),
+  pendingEncounterId: z.string().uuid().optional(),
+  zoneId: z.string().uuid().optional(),
   mobTemplateId: z.string().uuid().optional(),
   attackSkill: attackSkillSchema.optional(),
+}).refine((v) => Boolean(v.pendingEncounterId || v.zoneId), {
+  message: 'pendingEncounterId or zoneId is required',
 });
 
 function pickWeighted<T extends { encounterWeight: number }>(items: T[]): T | null {
@@ -78,6 +83,72 @@ async function getSkillLevel(playerId: string, skillType: SkillType): Promise<nu
 }
 
 /**
+ * GET /api/v1/combat/pending
+ * List pending encounters for the current player.
+ */
+combatRouter.get('/pending', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const now = new Date();
+
+    await prismaAny.pendingEncounter.deleteMany({
+      where: { playerId, expiresAt: { lte: now } },
+    });
+
+    const pending = await prismaAny.pendingEncounter.findMany({
+      where: { playerId, expiresAt: { gt: now } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        zone: { select: { name: true } },
+        mobTemplate: { select: { name: true } },
+      },
+    });
+
+    res.json({
+      pendingEncounters: pending.map((p: any) => ({
+        encounterId: p.id,
+        zoneId: p.zoneId,
+        zoneName: p.zone.name,
+        mobTemplateId: p.mobTemplateId,
+        mobName: p.mobTemplate.name,
+        turnOccurred: p.turnOccurred,
+        createdAt: p.createdAt.toISOString(),
+        expiresAt: p.expiresAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const abandonSchema = z.object({
+  zoneId: z.string().uuid().optional(),
+});
+
+/**
+ * POST /api/v1/combat/pending/abandon
+ * Abandon pending encounters (optionally by zone).
+ */
+combatRouter.post('/pending/abandon', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = abandonSchema.parse(req.body ?? {});
+
+    const result = await prismaAny.pendingEncounter.deleteMany({
+      where: {
+        playerId,
+        ...(body.zoneId ? { zoneId: body.zoneId } : {}),
+      },
+    });
+
+    res.json({ success: true, abandoned: result.count ?? 0 });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/v1/combat/start
  * Spend turns and run a single combat encounter.
  */
@@ -86,21 +157,49 @@ combatRouter.post('/start', async (req, res, next) => {
     const playerId = req.player!.playerId;
     const body = startSchema.parse(req.body);
 
-    const zone = await prisma.zone.findUnique({ where: { id: body.zoneId } });
+    let zoneId = body.zoneId ?? null;
+    let mobTemplateId = body.mobTemplateId ?? null;
+    let consumedPendingEncounterId = null as null | string;
+
+    if (body.pendingEncounterId) {
+      const pending = await prismaAny.pendingEncounter.findFirst({
+        where: { id: body.pendingEncounterId, playerId },
+        select: { id: true, zoneId: true, mobTemplateId: true, expiresAt: true },
+      });
+
+      if (!pending) {
+        throw new AppError(404, 'Pending encounter not found', 'NOT_FOUND');
+      }
+
+      if (pending.expiresAt && pending.expiresAt < new Date()) {
+        await prismaAny.pendingEncounter.deleteMany({ where: { id: pending.id, playerId } });
+        throw new AppError(410, 'Pending encounter expired', 'ENCOUNTER_EXPIRED');
+      }
+
+      consumedPendingEncounterId = pending.id;
+      zoneId = pending.zoneId;
+      mobTemplateId = pending.mobTemplateId;
+    }
+
+    if (!zoneId) {
+      throw new AppError(400, 'zoneId is required', 'INVALID_REQUEST');
+    }
+
+    const zone = await prisma.zone.findUnique({ where: { id: zoneId } });
     if (!zone) {
       throw new AppError(404, 'Zone not found', 'NOT_FOUND');
     }
 
     let mob = null as null | (MobTemplate & { spellPattern: unknown });
 
-    if (body.mobTemplateId) {
-      const found = await prisma.mobTemplate.findUnique({ where: { id: body.mobTemplateId } });
-      if (!found || found.zoneId !== body.zoneId) {
+    if (mobTemplateId) {
+      const found = await prisma.mobTemplate.findUnique({ where: { id: mobTemplateId } });
+      if (!found || found.zoneId !== zoneId) {
         throw new AppError(400, 'Invalid mobTemplateId for this zone', 'INVALID_MOB');
       }
       mob = found as unknown as MobTemplate & { spellPattern: unknown };
     } else {
-      const mobs = await prisma.mobTemplate.findMany({ where: { zoneId: body.zoneId } });
+      const mobs = await prisma.mobTemplate.findMany({ where: { zoneId } });
       const picked = pickWeighted(mobs);
       if (!picked) {
         throw new AppError(400, 'No mobs available for this zone', 'NO_MOBS');
@@ -160,10 +259,11 @@ combatRouter.post('/start', async (req, res, next) => {
         activityType: 'combat',
         turnsSpent: COMBAT_CONSTANTS.ENCOUNTER_TURN_COST,
         result: {
-          zoneId: body.zoneId,
+          zoneId,
           zoneName: zone.name,
           mobTemplateId: mob.id,
           mobName: mob.name,
+          pendingEncounterId: consumedPendingEncounterId,
           outcome: combatResult.outcome,
           log: combatResult.log,
           rewards: {
@@ -183,12 +283,19 @@ combatRouter.post('/start', async (req, res, next) => {
       },
     });
 
+    if (consumedPendingEncounterId) {
+      await prismaAny.pendingEncounter
+        .delete({ where: { id: consumedPendingEncounterId } })
+        .catch(() => null);
+    }
+
     res.json({
       logId: combatLog.id,
       turns: turnSpend,
       combat: {
-        zoneId: body.zoneId,
+        zoneId,
         mobTemplateId: mob.id,
+        pendingEncounterId: consumedPendingEncounterId,
         outcome: combatResult.outcome,
         log: combatResult.log,
       },

@@ -11,11 +11,13 @@ import {
   getGatheringNodes,
   getInventory,
   getSkills,
+  getPendingEncounters,
   getTurns,
   getZones,
   mine,
   repairItem,
-  startCombat,
+  abandonPendingEncounters,
+  startCombatFromPendingEncounter,
   startExploration,
   destroyInventoryItem,
 } from '@/lib/api';
@@ -228,7 +230,16 @@ export default function GamePage() {
   }>>([]);
   const [explorationLog, setExplorationLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>>([]);
   const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
-  const [pendingEncounters, setPendingEncounters] = useState<Array<{ mobTemplateId: string; mobName: string; turnOccurred: number }>>([]);
+  const [pendingEncounters, setPendingEncounters] = useState<Array<{
+    encounterId: string;
+    zoneId: string;
+    zoneName: string;
+    mobTemplateId: string;
+    mobName: string;
+    turnOccurred: number;
+    createdAt: string;
+    expiresAt: string;
+  }>>([]);
   const [lastCombat, setLastCombat] = useState<null | { outcome: string; log: Array<{ round: number; actor: string; message: string }>; rewards: { xp: number; loot: Array<{ itemTemplateId: string; quantity: number }> } }>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -276,13 +287,14 @@ export default function GamePage() {
   const loadAll = async () => {
     setActionError(null);
 
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes] = await Promise.all([
+    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes] = await Promise.all([
       getTurns(),
       getSkills(),
       getZones(),
       getInventory(),
       getEquipment(),
       getCraftingRecipes(),
+      getPendingEncounters(),
     ]);
 
     if (turnRes.data) setTurns(turnRes.data.currentTurns);
@@ -297,6 +309,7 @@ export default function GamePage() {
     if (invRes.data) setInventory(invRes.data.items);
     if (equipRes.data) setEquipment(equipRes.data.equipment.map(e => ({ slot: e.slot, itemId: e.itemId, item: e.item ? { id: e.item.id, currentDurability: e.item.currentDurability, maxDurability: e.item.maxDurability, template: e.item.template } : null })));
     if (recipesRes.data) setCraftingRecipes(recipesRes.data.recipes);
+    if (pendingRes.data) setPendingEncounters(pendingRes.data.pendingEncounters);
   };
 
   const loadBestiary = async () => {
@@ -385,7 +398,22 @@ export default function GamePage() {
       ]);
 
       if (data.mobEncounters.length > 0) {
-        setPendingEncounters(data.mobEncounters.map((m) => ({ mobTemplateId: m.mobTemplateId, mobName: m.mobName, turnOccurred: m.turnOccurred })));
+        setPendingEncounters((prev) => {
+          const existing = new Set(prev.map((p) => p.encounterId));
+          const fresh = data.mobEncounters
+            .filter((m) => !existing.has(m.encounterId))
+            .map((m) => ({
+              encounterId: m.encounterId,
+              zoneId: m.zoneId,
+              zoneName: m.zoneName,
+              mobTemplateId: m.mobTemplateId,
+              mobName: m.mobName,
+              turnOccurred: m.turnOccurred,
+              createdAt: m.createdAt,
+              expiresAt: m.expiresAt,
+            }));
+          return [...fresh, ...prev];
+        });
         setExplorationLog((prev) => [
           { timestamp: nowStamp(), type: 'success', message: `Encountered ${data.mobEncounters.length} mob(s). Check Combat tab.` },
           ...prev,
@@ -403,16 +431,18 @@ export default function GamePage() {
     }
   };
 
-  const handleStartCombat = async (mobTemplateId?: string) => {
-    if (!currentZone) return;
+  const handleStartCombat = async (pendingEncounterId: string) => {
     if (busyAction) return;
 
     setBusyAction('combat');
     setActionError(null);
     try {
-      const res = await startCombat(currentZone.id, 'melee', mobTemplateId);
+      const res = await startCombatFromPendingEncounter(pendingEncounterId, 'melee');
       const data = res.data;
       if (!data) {
+        if (res.error?.code === 'ENCOUNTER_EXPIRED' || res.error?.code === 'NOT_FOUND') {
+          setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
+        }
         setActionError(res.error?.message ?? 'Combat failed');
         return;
       }
@@ -436,7 +466,7 @@ export default function GamePage() {
 
       // Refresh inventory/equipment/skills after loot/durability/XP changes
       await Promise.all([loadAll(), loadTurns()]);
-      setPendingEncounters((prev) => prev.filter((p) => p.mobTemplateId !== mobTemplateId));
+      setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
     } finally {
       setBusyAction(null);
     }
@@ -679,7 +709,22 @@ export default function GamePage() {
               isCurrent: z.id === activeZoneId,
               imageSrc: z.discovered && z.name !== '???' ? zoneImageSrc(z.name) : undefined,
             }))}
-            onTravel={(id) => {
+            onTravel={async (id) => {
+              const leavingZoneId = activeZoneId;
+              const leavingCount = leavingZoneId
+                ? pendingEncounters.filter((p) => p.zoneId === leavingZoneId).length
+                : 0;
+
+              if (leavingZoneId && leavingCount > 0) {
+                const ok = window.confirm(
+                  `You have ${leavingCount} pending encounter(s) in this zone. Traveling will abandon them. Continue?`
+                );
+                if (!ok) return;
+
+                await abandonPendingEncounters(leavingZoneId);
+                setPendingEncounters((prev) => prev.filter((p) => p.zoneId !== leavingZoneId));
+              }
+
               setActiveZoneId(id);
               setActiveScreen('explore');
             }}
@@ -778,13 +823,15 @@ export default function GamePage() {
               <div className="space-y-2">
                 <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Pending Encounters</h2>
                 {pendingEncounters.map((e) => (
-                  <div key={e.mobTemplateId} className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 flex items-center justify-between">
+                  <div key={e.encounterId} className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 flex items-center justify-between">
                     <div>
                       <div className="text-[var(--rpg-text-primary)] font-semibold">{e.mobName}</div>
-                      <div className="text-xs text-[var(--rpg-text-secondary)]">Turn {e.turnOccurred}</div>
+                      <div className="text-xs text-[var(--rpg-text-secondary)]">
+                        Zone: {e.zoneName} • Turn {e.turnOccurred} • Expires in {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - Date.now()) / 60000))}m
+                      </div>
                     </div>
                     <button
-                      onClick={() => void handleStartCombat(e.mobTemplateId)}
+                      onClick={() => void handleStartCombat(e.encounterId)}
                       disabled={busyAction === 'combat'}
                       className="px-3 py-2 rounded bg-[var(--rpg-gold)] text-[var(--rpg-background)] font-semibold"
                     >

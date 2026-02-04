@@ -9,6 +9,23 @@ build/
 .next/
 out/
 
+# Accidental TypeScript emits (should not be committed)
+apps/web/src/**/*.js
+apps/web/src/**/*.js.map
+apps/web/src/**/*.d.ts
+apps/web/src/**/*.d.ts.map
+apps/api/src/**/*.js
+apps/api/src/**/*.js.map
+apps/api/src/**/*.d.ts
+apps/api/src/**/*.d.ts.map
+apps/web/tailwind.config.js
+apps/web/tailwind.config.d.ts
+apps/web/tailwind.config.d.ts.map
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+
 # Environment
 .env
 .env.local
@@ -44,3 +61,5 @@ packages/database/prisma/*.db-journal
 
 # Assets
 docs/assets/
+docs/design/
+apps/web/public/assets/

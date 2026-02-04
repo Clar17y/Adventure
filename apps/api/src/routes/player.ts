@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '@adventure/database';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { ensureEquipmentSlots } from '../services/equipmentService';
 
 export const playerRouter = Router();
 
@@ -74,6 +75,8 @@ playerRouter.get('/skills', async (req, res, next) => {
 playerRouter.get('/equipment', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
+
+    await ensureEquipmentSlots(playerId);
 
     const equipment = await prisma.playerEquipment.findMany({
       where: { playerId },

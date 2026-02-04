@@ -50,13 +50,13 @@ D:\code\Adventure\
 
 ---
 
-## Phase 1: Project Foundation (Week 1)
+## Phase 1: Project Foundation (Week 1) ✅
 
 ### 1.1 Project Scaffolding
-- [ ] Initialize monorepo with workspaces (apps/web, apps/api, packages/*)
-- [ ] Configure TypeScript (strict mode, path aliases)
-- [ ] Configure ESLint/Prettier
-- [ ] Docker Compose for PostgreSQL + Redis
+- [x] Initialize monorepo with workspaces (apps/web, apps/api, packages/*)
+- [x] Configure TypeScript (strict mode, path aliases)
+- [x] Configure ESLint/Prettier
+- [x] Docker Compose for PostgreSQL + Redis
 - [ ] Basic CI/CD (type checking, lint)
 
 ### 1.2 Database Schema
@@ -206,96 +206,101 @@ resource_nodes (
 
 ---
 
-## Phase 2: Turn Economy & Auth (Week 2)
+## Phase 2: Turn Economy & Auth (Week 2) ✅
 
 ### 2.1 Turn System Backend
-- [ ] Turn regeneration service (Redis-based, lazy calculation)
-- [ ] `POST /api/turns/spend` - turn deduction
-- [ ] `GET /api/turns` - current balance + time to cap
+- [x] Turn regeneration service (Redis-based, lazy calculation)
+- [x] `POST /api/turns/spend` - turn deduction
+- [x] `GET /api/turns` - current balance + time to cap
 
 ### 2.2 Authentication System
-- [ ] `POST /api/auth/register` - create account, init turn bank + skills
-- [ ] `POST /api/auth/login` - JWT tokens
-- [ ] Auth middleware (JWT verification, rate limiting)
+- [x] `POST /api/auth/register` - create account, init turn bank + skills
+- [x] `POST /api/auth/login` - JWT tokens
+- [x] Auth middleware (JWT verification, rate limiting)
 
 ### 2.3 Frontend Auth UI
-- [ ] Login page
-- [ ] Register page
-- [ ] Auth context provider
-- [ ] Protected route wrapper
+- [x] Login page
+- [x] Register page
+- [x] Auth context provider (useAuth hook)
+- [x] Protected route wrapper (dashboard redirect)
 
 ---
 
-## Phase 3: Core Game Engine (Week 3)
+## Phase 3: Core Game Engine (Week 3) ✅
 
 ### 3.1 Combat Resolution Engine
-- [ ] Combat state machine (initiative, turn order, rounds)
-- [ ] Attack resolution (hit roll vs defence, evasion check, damage calc)
-- [ ] Combat log generation (narrative format)
-- [ ] Combat outcome (XP, loot rolls, durability)
+- [x] Combat state machine (initiative, turn order, rounds)
+- [x] Attack resolution (hit roll vs defence, evasion check, damage calc)
+- [x] Combat log generation (narrative format)
+- [x] Combat outcome (XP, loot rolls, durability)
 
 **Key file:** `packages/game-engine/src/combat/combatEngine.ts`
 
 ### 3.2 Exploration Probability Model
-- [ ] Per-turn probability calculator: `cumulative = 1 - (1 - p)^n`
-- [ ] Outcome types: mob encounter, resource node, hidden cache, zone exit
-- [ ] Exploration resolver (turn count → discovery list)
+- [x] Per-turn probability calculator: `cumulative = 1 - (1 - p)^n`
+- [x] Outcome types: mob encounter, resource node, hidden cache, zone exit
+- [x] Exploration resolver (turn count → discovery list)
 
 **Key file:** `packages/game-engine/src/exploration/probabilityModel.ts`
 
 ### 3.3 Skill Progression System
-- [ ] XP curve: `xp_for_level = base * (level ^ exponent)`
-- [ ] Daily cap enforcement (hard cap combat, diminishing returns others)
-- [ ] Efficiency calculator: `efficiency = max(0, 1 - (turns/cap)^n)`
+- [x] XP curve: `xp_for_level = base * (level ^ exponent)`
+- [x] Daily cap enforcement (hard cap combat, diminishing returns others)
+- [x] Efficiency calculator: `efficiency = max(0, 1 - (turns/cap)^n)`
 
 **Key file:** `packages/game-engine/src/skills/xpCalculator.ts`
 
 ---
 
-## Phase 4: Exploration & Combat API (Week 4)
+## Phase 4: Exploration & Combat API (Week 4) ✅
 
 ### 4.1 Exploration Endpoints
-- [ ] `POST /api/exploration/start` - spend turns, get encounters
-- [ ] `GET /api/exploration/estimate` - probability preview
-- [ ] `GET /api/zones` - discovered zones
+- [x] `POST /api/exploration/start` - spend turns, get encounters
+- [x] `GET /api/exploration/estimate` - probability preview
+- [x] `GET /api/zones` - discovered zones
 
 ### 4.2 Combat Endpoints
-- [ ] `POST /api/combat/start` - run combat, return log + rewards
-- [ ] `GET /api/combat/logs/:id` - playback data
+- [x] `POST /api/combat/start` - run combat, return log + rewards
+- [x] `GET /api/combat/logs/:id` - playback data
 
 ### 4.3 Loot & Rewards
-- [ ] Loot resolver (drop tables → item instances)
-- [ ] XP grant service (cap checking, efficiency)
+- [x] Loot resolver (drop tables → item instances)
+- [x] XP grant service (cap checking, efficiency)
+
+### 4.4 Verification & Testing
+- [x] Seed data for local testing (`npm run db:seed`)
+- [x] Manual smoke test doc (`docs/testing/phase-4.md`)
+- [ ] Minimal dev UI harness (optional; can pull forward from Phase 7–8)
 
 ---
 
-## Phase 5: Inventory & Equipment (Week 5)
+## Phase 5: Inventory & Equipment (Week 5) ✅
 
 ### 5.1 Inventory Backend
-- [ ] `GET /api/inventory` - all items
-- [ ] `DELETE /api/inventory/:id` - destroy item
-- [ ] Stack management
+- [x] `GET /api/inventory` - all items
+- [x] `DELETE /api/inventory/:id` - destroy item (supports stack reduction)
+- [x] Stack management (loot merge + quantities)
 
 ### 5.2 Equipment System
-- [ ] `POST /api/equipment/equip` - validate requirements, equip
-- [ ] `POST /api/equipment/unequip`
-- [ ] Equipment stat calculator (aggregate + skill scaling)
+- [x] `POST /api/equipment/equip` - validate requirements, equip
+- [x] `POST /api/equipment/unequip`
+- [x] Equipment stat calculator (aggregate + skill scaling)
 
 ### 5.3 Durability System
-- [ ] Degrade on combat
-- [ ] Basic repair (turns + max durability decay)
+- [x] Degrade on combat
+- [x] Basic repair (turns + max durability decay) (`POST /api/inventory/repair`)
 
 ---
 
-## Phase 6: Gathering & Crafting (Week 6)
+## Phase 6: Gathering & Crafting (Week 6) ✅
 
 ### 6.1 Mining System
-- [ ] `POST /api/gathering/mine` - spend turns, get resources + XP
-- [ ] Resource node discovery (via exploration)
+- [x] `POST /api/gathering/mine` - spend turns, get resources + XP
+- [~] Resource node discovery (via exploration) (discovery exists; mining doesn’t strictly enforce “discovered” yet)
 
 ### 6.2 Weaponsmithing System
-- [ ] `GET /api/crafting/recipes` - available recipes
-- [ ] `POST /api/crafting/craft` - validate, deduct, create item
+- [x] `GET /api/crafting/recipes` - available recipes
+- [x] `POST /api/crafting/craft` - validate, deduct, create item
 
 ---
 

@@ -1,0 +1,64 @@
+import { PixelCard } from '@/components/PixelCard';
+import { StatBar } from '@/components/StatBar';
+import Image from 'next/image';
+import type { LucideIcon } from 'lucide-react';
+
+interface SkillCardProps {
+  name: string;
+  icon?: LucideIcon;
+  imageSrc?: string;
+  level: number;
+  currentXP: number;
+  nextLevelXP: number;
+  efficiency: number;
+  iconColor?: string;
+}
+
+export function SkillCard({
+  name,
+  icon: Icon,
+  imageSrc,
+  level,
+  currentXP,
+  nextLevelXP,
+  efficiency,
+  iconColor = 'var(--rpg-gold)',
+}: SkillCardProps) {
+  return (
+    <PixelCard className="flex items-center gap-4">
+      <div
+        className="w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: 'var(--rpg-background)' }}
+      >
+        {imageSrc ? (
+          <Image
+            src={imageSrc}
+            alt={name}
+            width={48}
+            height={48}
+            className="image-rendering-pixelated"
+          />
+        ) : Icon ? (
+          <Icon size={32} style={{ color: iconColor }} />
+        ) : null}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between mb-1">
+          <h3 className="font-semibold text-[var(--rpg-text-primary)]">{name}</h3>
+          <span className="text-2xl font-bold text-[var(--rpg-gold)] ml-2">
+            {level}
+          </span>
+        </div>
+        <StatBar current={currentXP} max={nextLevelXP} color="xp" size="sm" showNumbers={false} />
+        <div className="flex justify-between items-center mt-1">
+          <span className="text-xs text-[var(--rpg-text-secondary)]">
+            {currentXP.toLocaleString()} / {nextLevelXP.toLocaleString()} XP
+          </span>
+          <span className="text-xs text-[var(--rpg-green-light)]">
+            {efficiency}% efficiency
+          </span>
+        </div>
+      </div>
+    </PixelCard>
+  );
+}

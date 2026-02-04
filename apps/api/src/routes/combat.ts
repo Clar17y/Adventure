@@ -89,9 +89,14 @@ async function getSkillLevel(playerId: string, skillType: SkillType): Promise<nu
 combatRouter.get('/pending', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
+    const now = new Date();
+
+    await prismaAny.pendingEncounter.deleteMany({
+      where: { playerId, expiresAt: { lte: now } },
+    });
 
     const pending = await prismaAny.pendingEncounter.findMany({
-      where: { playerId },
+      where: { playerId, expiresAt: { gt: now } },
       orderBy: { createdAt: 'desc' },
       take: 100,
       include: {
@@ -109,8 +114,35 @@ combatRouter.get('/pending', async (req, res, next) => {
         mobName: p.mobTemplate.name,
         turnOccurred: p.turnOccurred,
         createdAt: p.createdAt.toISOString(),
+        expiresAt: p.expiresAt.toISOString(),
       })),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const abandonSchema = z.object({
+  zoneId: z.string().uuid().optional(),
+});
+
+/**
+ * POST /api/v1/combat/pending/abandon
+ * Abandon pending encounters (optionally by zone).
+ */
+combatRouter.post('/pending/abandon', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = abandonSchema.parse(req.body ?? {});
+
+    const result = await prismaAny.pendingEncounter.deleteMany({
+      where: {
+        playerId,
+        ...(body.zoneId ? { zoneId: body.zoneId } : {}),
+      },
+    });
+
+    res.json({ success: true, abandoned: result.count ?? 0 });
   } catch (err) {
     next(err);
   }
@@ -132,11 +164,16 @@ combatRouter.post('/start', async (req, res, next) => {
     if (body.pendingEncounterId) {
       const pending = await prismaAny.pendingEncounter.findFirst({
         where: { id: body.pendingEncounterId, playerId },
-        select: { id: true, zoneId: true, mobTemplateId: true },
+        select: { id: true, zoneId: true, mobTemplateId: true, expiresAt: true },
       });
 
       if (!pending) {
         throw new AppError(404, 'Pending encounter not found', 'NOT_FOUND');
+      }
+
+      if (pending.expiresAt && pending.expiresAt < new Date()) {
+        await prismaAny.pendingEncounter.deleteMany({ where: { id: pending.id, playerId } });
+        throw new AppError(410, 'Pending encounter expired', 'ENCOUNTER_EXPIRED');
       }
 
       consumedPendingEncounterId = pending.id;

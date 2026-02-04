@@ -270,6 +270,7 @@ model PendingEncounter {
   turnOccurred Int      @map("turn_occurred")
   sourceLogId  String?  @map("source_log_id")
   createdAt    DateTime @default(now()) @map("created_at")
+  expiresAt    DateTime @map("expires_at")
 
   player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
   zone        Zone        @relation(fields: [zoneId], references: [id], onDelete: Cascade)
@@ -277,5 +278,6 @@ model PendingEncounter {
   sourceLog   ActivityLog? @relation(fields: [sourceLogId], references: [id], onDelete: SetNull)
 
   @@index([playerId, createdAt])
+  @@index([playerId, expiresAt])
   @@map("pending_encounters")
 }

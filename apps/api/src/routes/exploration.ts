@@ -11,6 +11,11 @@ export const explorationRouter = Router();
 explorationRouter.use(authenticate);
 
 const prismaAny = prisma as unknown as any;
+const PENDING_ENCOUNTER_TTL_SECONDS = (() => {
+  const raw = process.env.PENDING_ENCOUNTER_TTL_SECONDS ?? '3600';
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 3600;
+})();
 
 const estimateQuerySchema = z.object({
   turns: z.coerce.number().int(),
@@ -144,8 +149,9 @@ explorationRouter.post('/start', async (req, res, next) => {
             mobTemplateId: m.mobTemplateId,
             turnOccurred: m.turnOccurred,
             sourceLogId: explorationLog.id,
+            expiresAt: new Date(Date.now() + PENDING_ENCOUNTER_TTL_SECONDS * 1000),
           },
-          select: { id: true },
+          select: { id: true, createdAt: true, expiresAt: true },
         })
       )
     );
@@ -164,6 +170,8 @@ explorationRouter.post('/start', async (req, res, next) => {
         encounterId: pendingEncounters[idx]!.id,
         zoneId: body.zoneId,
         zoneName: zone.name,
+        createdAt: pendingEncounters[idx]!.createdAt.toISOString(),
+        expiresAt: pendingEncounters[idx]!.expiresAt.toISOString(),
       })),
       resourceDiscoveries,
       hiddenCaches: outcomes.filter(o => o.type === 'hidden_cache'),

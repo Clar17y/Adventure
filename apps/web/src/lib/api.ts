@@ -299,6 +299,8 @@ export async function startExploration(zoneId: string, turns: number) {
       turnOccurred: number;
       mobTemplateId: string;
       mobName: string;
+      createdAt: string;
+      expiresAt: string;
     }>;
     resourceDiscoveries: Array<{ turnOccurred: number; resourceNodeId: string; resourceType: string }>;
     hiddenCaches: Array<{ type: string; turnOccurred: number }>;
@@ -386,8 +388,16 @@ export async function getPendingEncounters() {
       mobName: string;
       turnOccurred: number;
       createdAt: string;
+      expiresAt: string;
     }>;
   }>('/api/v1/combat/pending');
+}
+
+export async function abandonPendingEncounters(zoneId?: string) {
+  return fetchApi<{ success: boolean; abandoned: number }>('/api/v1/combat/pending/abandon', {
+    method: 'POST',
+    body: JSON.stringify(zoneId ? { zoneId } : {}),
+  });
 }
 
 export async function getCombatLog(id: string) {

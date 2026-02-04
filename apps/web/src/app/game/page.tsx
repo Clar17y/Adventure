@@ -16,6 +16,7 @@ import {
   getZones,
   mine,
   repairItem,
+  abandonPendingEncounters,
   startCombatFromPendingEncounter,
   startExploration,
   destroyInventoryItem,
@@ -237,6 +238,7 @@ export default function GamePage() {
     mobName: string;
     turnOccurred: number;
     createdAt: string;
+    expiresAt: string;
   }>>([]);
   const [lastCombat, setLastCombat] = useState<null | { outcome: string; log: Array<{ round: number; actor: string; message: string }>; rewards: { xp: number; loot: Array<{ itemTemplateId: string; quantity: number }> } }>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -407,7 +409,8 @@ export default function GamePage() {
               mobTemplateId: m.mobTemplateId,
               mobName: m.mobName,
               turnOccurred: m.turnOccurred,
-              createdAt: new Date().toISOString(),
+              createdAt: m.createdAt,
+              expiresAt: m.expiresAt,
             }));
           return [...fresh, ...prev];
         });
@@ -437,6 +440,9 @@ export default function GamePage() {
       const res = await startCombatFromPendingEncounter(pendingEncounterId, 'melee');
       const data = res.data;
       if (!data) {
+        if (res.error?.code === 'ENCOUNTER_EXPIRED' || res.error?.code === 'NOT_FOUND') {
+          setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
+        }
         setActionError(res.error?.message ?? 'Combat failed');
         return;
       }
@@ -703,7 +709,22 @@ export default function GamePage() {
               isCurrent: z.id === activeZoneId,
               imageSrc: z.discovered && z.name !== '???' ? zoneImageSrc(z.name) : undefined,
             }))}
-            onTravel={(id) => {
+            onTravel={async (id) => {
+              const leavingZoneId = activeZoneId;
+              const leavingCount = leavingZoneId
+                ? pendingEncounters.filter((p) => p.zoneId === leavingZoneId).length
+                : 0;
+
+              if (leavingZoneId && leavingCount > 0) {
+                const ok = window.confirm(
+                  `You have ${leavingCount} pending encounter(s) in this zone. Traveling will abandon them. Continue?`
+                );
+                if (!ok) return;
+
+                await abandonPendingEncounters(leavingZoneId);
+                setPendingEncounters((prev) => prev.filter((p) => p.zoneId !== leavingZoneId));
+              }
+
               setActiveZoneId(id);
               setActiveScreen('explore');
             }}
@@ -805,7 +826,9 @@ export default function GamePage() {
                   <div key={e.encounterId} className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 flex items-center justify-between">
                     <div>
                       <div className="text-[var(--rpg-text-primary)] font-semibold">{e.mobName}</div>
-                      <div className="text-xs text-[var(--rpg-text-secondary)]">Zone: {e.zoneName} • Turn {e.turnOccurred}</div>
+                      <div className="text-xs text-[var(--rpg-text-secondary)]">
+                        Zone: {e.zoneName} • Turn {e.turnOccurred} • Expires in {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - Date.now()) / 60000))}m
+                      </div>
                     </div>
                     <button
                       onClick={() => void handleStartCombat(e.encounterId)}

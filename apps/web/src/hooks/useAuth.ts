@@ -25,12 +25,30 @@ export function useAuth() {
   const checkAuth = useCallback(async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) {
+      const refreshTok = localStorage.getItem('refreshToken');
+      if (refreshTok) {
+        const refreshResult = await refreshTokenApi(refreshTok);
+        if (refreshResult.data) {
+          localStorage.setItem('accessToken', refreshResult.data.accessToken);
+          localStorage.setItem('refreshToken', refreshResult.data.refreshToken);
+          const retryResult = await getPlayer();
+          if (retryResult.data) {
+            setState({
+              player: retryResult.data.player,
+              isLoading: false,
+              isAuthenticated: true,
+            });
+            return;
+          }
+        }
+      }
+
       setState({ player: null, isLoading: false, isAuthenticated: false });
       return;
     }
 
     const { data, error } = await getPlayer();
-    if (error) {
+    if (error || !data) {
       // Try refresh
       const refreshTok = localStorage.getItem('refreshToken');
       if (refreshTok) {

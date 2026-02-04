@@ -119,8 +119,8 @@ export const GATHERING_CONSTANTS = {
   /** Base resource yield per action */
   BASE_YIELD: 1,
 
-  /** Bonus yield per 10 levels above requirement */
-  YIELD_BONUS_PER_10_LEVELS: 1,
+  /** Yield multiplier bonus per level above requirement (0.1 = +10% per level) */
+  YIELD_MULTIPLIER_PER_LEVEL: 0.1,
 } as const;
 
 // =============================================================================

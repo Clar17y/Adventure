@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import {
   generateAccessToken,
   generateRefreshToken,
+  refreshTokenExpiresAt,
   verifyRefreshToken,
 } from '../middleware/auth';
 
@@ -84,7 +85,7 @@ authRouter.post('/register', async (req, res, next) => {
       data: {
         playerId: player.id,
         token: refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        expiresAt: refreshTokenExpiresAt(),
       },
     });
 
@@ -135,7 +136,7 @@ authRouter.post('/login', async (req, res, next) => {
       data: {
         playerId: player.id,
         token: refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: refreshTokenExpiresAt(),
       },
     });
 
@@ -187,7 +188,7 @@ authRouter.post('/refresh', async (req, res, next) => {
       data: {
         playerId: payload.playerId,
         token: newRefreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: refreshTokenExpiresAt(),
       },
     });
 

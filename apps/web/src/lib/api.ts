@@ -5,34 +5,133 @@ interface ApiResponse<T> {
   error?: { message: string; code: string };
 }
 
+type RefreshOutcome =
+  | { ok: true; accessToken: string; refreshToken: string }
+  | { ok: false; reason: 'missing' | 'invalid' | 'network' | 'bad_response' };
+
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+function clearStoredTokens() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+
+function getJwtExpMs(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const payloadJson = atob(padded);
+    const payload = JSON.parse(payloadJson) as { exp?: number };
+
+    if (typeof payload.exp !== 'number') return null;
+    return payload.exp * 1000;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshTokens(): Promise<RefreshOutcome> {
+  if (typeof window === 'undefined') return { ok: false, reason: 'missing' };
+
+  const currentRefreshToken = localStorage.getItem('refreshToken');
+  if (!currentRefreshToken) return { ok: false, reason: 'missing' };
+
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: currentRefreshToken }),
+        });
+
+        const json = (await res.json().catch(() => null)) as
+          | { accessToken?: string; refreshToken?: string; error?: { message: string; code: string } }
+          | null;
+
+        if (!res.ok) {
+          const code = json?.error?.code;
+          const isInvalid = code === 'INVALID_TOKEN' || code === 'MISSING_TOKEN';
+          return { ok: false, reason: isInvalid ? 'invalid' : 'network' } as const;
+        }
+        if (!json?.accessToken || !json.refreshToken) return { ok: false, reason: 'bad_response' };
+
+        localStorage.setItem('accessToken', json.accessToken);
+        localStorage.setItem('refreshToken', json.refreshToken);
+        return { ok: true, accessToken: json.accessToken, refreshToken: json.refreshToken } as const;
+      } catch {
+        return { ok: false, reason: 'network' } as const;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+
+  return refreshInFlight;
+}
+
 async function fetchApi<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  attempt = 0
 ): Promise<ApiResponse<T>> {
+  const isAuthEndpoint = endpoint.startsWith('/api/v1/auth/');
+
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+
+    if (!isAuthEndpoint && token) {
+      const expMs = getJwtExpMs(token);
+      const shouldRefreshSoon = typeof expMs === 'number' && expMs - Date.now() < 60_000;
+      if (shouldRefreshSoon) {
+        await refreshTokens();
+      }
+    }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) || {}),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  const latestToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : token;
+  if (latestToken) {
+    headers['Authorization'] = `Bearer ${latestToken}`;
   }
 
   try {
     const res = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers,
+      credentials: options.credentials ?? 'include',
     });
 
-    const json = await res.json();
+    const json = (await res.json().catch(() => null)) as
+      | (T & { error?: { message: string; code: string } })
+      | { error?: { message: string; code: string } }
+      | null;
 
     if (!res.ok) {
-      return { error: json.error || { message: 'Unknown error', code: 'UNKNOWN' } };
+      if (!isAuthEndpoint && res.status === 401 && attempt === 0) {
+        const refreshed = await refreshTokens();
+        if (refreshed?.ok) {
+          return fetchApi<T>(endpoint, options, attempt + 1);
+        }
+        if (refreshed?.reason === 'invalid') clearStoredTokens();
+      }
+
+      const error = (json && 'error' in json ? json.error : undefined) || {
+        message: 'Unknown error',
+        code: 'UNKNOWN',
+      };
+      return { error };
     }
 
-    return { data: json };
+    if (!json) return { error: { message: 'Invalid server response', code: 'INVALID_RESPONSE' } };
+    return { data: json as T };
   } catch (err) {
     return { error: { message: 'Network error', code: 'NETWORK_ERROR' } };
   }
@@ -86,6 +185,59 @@ export async function getSkills() {
   }>('/api/v1/player/skills');
 }
 
+export async function getEquipment() {
+  return fetchApi<{
+    equipment: Array<{
+      playerId: string;
+      slot: string;
+      itemId: string | null;
+      item: null | {
+        id: string;
+        templateId: string;
+        ownerId: string;
+        currentDurability: number | null;
+        maxDurability: number | null;
+        quantity: number;
+        createdAt: string;
+        template: {
+          id: string;
+          name: string;
+          itemType: string;
+          slot: string | null;
+          tier: number;
+          baseStats: Record<string, unknown>;
+          requiredSkill: string | null;
+          requiredLevel: number;
+          maxDurability: number;
+          stackable: boolean;
+        };
+      };
+    }>;
+  }>('/api/v1/player/equipment');
+}
+
+export async function getBestiary() {
+  return fetchApi<{
+    mobs: Array<{
+      id: string;
+      name: string;
+      level: number;
+      isDiscovered: boolean;
+      killCount: number;
+      stats: { hp: number; attack: number; defence: number };
+      zones: string[];
+      description: string;
+      drops: Array<{
+        item: { id: string; name: string; itemType: string; tier: number };
+        rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+        dropRate: number;
+        minQuantity: number;
+        maxQuantity: number;
+      }>;
+    }>;
+  }>('/api/v1/bestiary');
+}
+
 // Turns
 export async function getTurns() {
   return fetchApi<{
@@ -104,4 +256,220 @@ export async function spendTurns(amount: number, reason?: string) {
     method: 'POST',
     body: JSON.stringify({ amount, reason }),
   });
+}
+
+// Zones
+export async function getZones() {
+  return fetchApi<{
+    zones: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      difficulty: number;
+      travelCost: number;
+      isStarter: boolean;
+      discovered: boolean;
+    }>;
+  }>('/api/v1/zones');
+}
+
+// Exploration
+export async function estimateExploration(turns: number) {
+  return fetchApi<{
+    estimate: {
+      turns: number;
+      mobEncounterChance: number;
+      resourceNodeChance: number;
+      hiddenCacheChance: number;
+      expectedMobEncounters: number;
+    };
+  }>(`/api/v1/exploration/estimate?turns=${turns}`);
+}
+
+export async function startExploration(zoneId: string, turns: number) {
+  return fetchApi<{
+    logId: string;
+    zone: { id: string; name: string; difficulty: number };
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    outcomes: Array<{ type: string; turnOccurred: number }>;
+    mobEncounters: Array<{ turnOccurred: number; mobTemplateId: string; mobName: string }>;
+    resourceDiscoveries: Array<{ turnOccurred: number; resourceNodeId: string; resourceType: string }>;
+    hiddenCaches: Array<{ type: string; turnOccurred: number }>;
+    zoneExitDiscovered: boolean;
+  }>('/api/v1/exploration/start', {
+    method: 'POST',
+    body: JSON.stringify({ zoneId, turns }),
+  });
+}
+
+// Combat
+export async function startCombat(zoneId: string, attackSkill: 'melee' | 'ranged' | 'magic' = 'melee', mobTemplateId?: string) {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    combat: {
+      zoneId: string;
+      mobTemplateId: string;
+      outcome: 'victory' | 'defeat' | 'fled';
+      log: Array<{ round: number; actor: 'player' | 'mob'; action: string; message: string }>;
+    };
+    rewards: {
+      xp: number;
+      loot: Array<{ itemTemplateId: string; quantity: number }>;
+      durabilityLost: Array<{ itemId: string; amount: number }>;
+      skillXp: null | {
+        skillType: string;
+        xpGained: number;
+        xpAfterEfficiency: number;
+        efficiency: number;
+        leveledUp: boolean;
+        newLevel: number;
+        atDailyCap: boolean;
+        newTotalXp: number;
+        newDailyXpGained: number;
+      };
+    };
+  }>('/api/v1/combat/start', {
+    method: 'POST',
+    body: JSON.stringify({ zoneId, attackSkill, ...(mobTemplateId ? { mobTemplateId } : {}) }),
+  });
+}
+
+export async function getCombatLog(id: string) {
+  return fetchApi<{
+    logId: string;
+    createdAt: string;
+    combat: unknown;
+  }>(`/api/v1/combat/logs/${id}`);
+}
+
+// Inventory & Equipment
+export async function getInventory() {
+  return fetchApi<{
+    items: Array<{
+      id: string;
+      templateId: string;
+      ownerId: string;
+      currentDurability: number | null;
+      maxDurability: number | null;
+      quantity: number;
+      createdAt: string;
+      template: {
+        id: string;
+        name: string;
+        itemType: string;
+        slot: string | null;
+        tier: number;
+        baseStats: Record<string, unknown>;
+        requiredSkill: string | null;
+        requiredLevel: number;
+        maxDurability: number;
+        stackable: boolean;
+      };
+      equippedSlot: string | null;
+    }>;
+  }>('/api/v1/inventory');
+}
+
+export async function destroyInventoryItem(id: string, quantity?: number) {
+  const q = quantity ? `?quantity=${quantity}` : '';
+  return fetchApi<{ destroyed: boolean; itemId: string; remainingQuantity?: number }>(`/api/v1/inventory/${id}${q}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function repairItem(itemId: string) {
+  return fetchApi<{
+    repaired: boolean;
+    turns?: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    itemId: string;
+    currentDurability: number | null;
+    maxDurability: number | null;
+    maxDurabilityDecay?: number;
+  }>('/api/v1/inventory/repair', {
+    method: 'POST',
+    body: JSON.stringify({ itemId }),
+  });
+}
+
+export async function equip(itemId: string, slot: string) {
+  return fetchApi<{ success: true }>('/api/v1/equipment/equip', {
+    method: 'POST',
+    body: JSON.stringify({ itemId, slot }),
+  });
+}
+
+export async function unequip(slot: string) {
+  return fetchApi<{ success: true }>('/api/v1/equipment/unequip', {
+    method: 'POST',
+    body: JSON.stringify({ slot }),
+  });
+}
+
+// Gathering & Crafting
+export async function mine(resourceNodeId: string, turns: number) {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    node: { id: string; zoneId: string; zoneName: string; resourceType: string; levelRequired: number };
+    results: { actions: number; yieldPerAction: number; totalYield: number; itemTemplateId: string; itemId: string };
+    xp: { skillType: string; xpAfterEfficiency: number; efficiency: number; leveledUp: boolean; newLevel: number; atDailyCap: boolean; newTotalXp: number; newDailyXpGained: number };
+  }>('/api/v1/gathering/mine', {
+    method: 'POST',
+    body: JSON.stringify({ resourceNodeId, turns }),
+  });
+}
+
+export async function getCraftingRecipes() {
+  return fetchApi<{
+    recipes: Array<{
+      id: string;
+      skillType: string;
+      requiredLevel: number;
+      resultTemplate: {
+        id: string;
+        name: string;
+        itemType: string;
+        slot: string | null;
+        tier: number;
+        baseStats: Record<string, unknown>;
+        requiredSkill: string | null;
+        requiredLevel: number;
+        maxDurability: number;
+        stackable: boolean;
+      };
+      turnCost: number;
+      materials: Array<{ templateId: string; quantity: number }>;
+      materialTemplates: Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
+      xpReward: number;
+    }>;
+  }>('/api/v1/crafting/recipes');
+}
+
+export async function craft(recipeId: string, quantity: number = 1) {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    crafted: { recipeId: string; resultTemplateId: string; quantity: number; craftedItemIds: string[] };
+    xp: { skillType: string; xpAfterEfficiency: number; efficiency: number; leveledUp: boolean; newLevel: number; atDailyCap: boolean; newTotalXp: number; newDailyXpGained: number };
+  }>('/api/v1/crafting/craft', {
+    method: 'POST',
+    body: JSON.stringify({ recipeId, quantity }),
+  });
+}
+
+export async function getGatheringNodes(zoneId?: string) {
+  const q = zoneId ? `?zoneId=${zoneId}` : '';
+  return fetchApi<{
+    nodes: Array<{
+      id: string;
+      zoneId: string;
+      zoneName: string;
+      resourceType: string;
+      skillRequired: string;
+      levelRequired: number;
+      baseYield: number;
+      discoveryChance: number;
+    }>;
+  }>(`/api/v1/gathering/nodes${q}`);
 }

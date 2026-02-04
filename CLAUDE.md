@@ -82,8 +82,8 @@ CORS_ORIGIN=http://localhost:3002
 
 ### Auth
 - Custom JWT (access + refresh tokens)
-- Access token: 15 min expiry
-- Refresh token: 7 days, stored in httpOnly cookie
+- Access token: 15 min expiry (configurable via `ACCESS_TOKEN_TTL_MINUTES`)
+- Refresh token: 30 days sliding expiry (configurable via `REFRESH_TOKEN_TTL_DAYS`), rotated on refresh and stored in DB (client currently persists the refresh token)
 - No external auth provider dependency
 
 ## Coding Guidelines

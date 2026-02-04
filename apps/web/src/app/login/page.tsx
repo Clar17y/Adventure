@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { login } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,11 +8,17 @@ import styles from './page.module.css';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setTokens } = useAuth();
+  const { setTokens, isLoading, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.push('/game');
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +35,7 @@ export default function LoginPage() {
 
     if (data) {
       setTokens(data.accessToken, data.refreshToken, data.player);
-      router.push('/dashboard');
+      router.push('/game');
     }
 
     setLoading(false);

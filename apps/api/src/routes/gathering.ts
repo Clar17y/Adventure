@@ -16,31 +16,55 @@ const nodesQuerySchema = z.object({
   zoneId: z.string().uuid().optional(),
 });
 
+function getNodeSizeName(remaining: number, maxCapacity: number): string {
+  const ratio = remaining / maxCapacity;
+  if (ratio <= 0.25) return 'Tiny';
+  if (ratio <= 0.5) return 'Small';
+  if (ratio <= 0.75) return 'Medium';
+  if (ratio <= 0.9) return 'Large';
+  return 'Huge';
+}
+
 /**
  * GET /api/v1/gathering/nodes?zoneId=...
- * List gatherable resource nodes (MVP: not gated by discovery).
+ * List player's discovered resource nodes with remaining capacity.
  */
 gatheringRouter.get('/nodes', async (req, res, next) => {
   try {
+    const playerId = req.player!.playerId;
     const query = nodesQuerySchema.parse(req.query);
 
-    const nodes = await prisma.resourceNode.findMany({
-      where: query.zoneId ? { zoneId: query.zoneId } : undefined,
-      include: { zone: true },
-      orderBy: [{ levelRequired: 'asc' }],
+    const playerNodes = await prisma.playerResourceNode.findMany({
+      where: {
+        playerId,
+        ...(query.zoneId ? { resourceNode: { zoneId: query.zoneId } } : {}),
+      },
+      include: {
+        resourceNode: {
+          include: { zone: true },
+        },
+      },
+      orderBy: [{ discoveredAt: 'desc' }],
     });
 
     res.json({
-      nodes: nodes.map((n) => ({
-        id: n.id,
-        zoneId: n.zoneId,
-        zoneName: n.zone.name,
-        resourceType: n.resourceType,
-        skillRequired: n.skillRequired,
-        levelRequired: n.levelRequired,
-        baseYield: n.baseYield,
-        discoveryChance: n.discoveryChance.toNumber(),
-      })),
+      nodes: playerNodes.map((pn) => {
+        const template = pn.resourceNode;
+        return {
+          id: pn.id, // PlayerResourceNode ID (what frontend uses to mine)
+          templateId: template.id,
+          zoneId: template.zoneId,
+          zoneName: template.zone.name,
+          resourceType: template.resourceType,
+          skillRequired: template.skillRequired,
+          levelRequired: template.levelRequired,
+          baseYield: template.baseYield,
+          remainingCapacity: pn.remainingCapacity,
+          maxCapacity: template.maxCapacity,
+          sizeName: getNodeSizeName(pn.remainingCapacity, template.maxCapacity),
+          discoveredAt: pn.discoveredAt.toISOString(),
+        };
+      }),
     });
   } catch (err) {
     next(err);
@@ -48,8 +72,9 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
 });
 
 const mineSchema = z.object({
-  resourceNodeId: z.string().uuid(),
+  playerNodeId: z.string().uuid(),
   turns: z.number().int().positive(),
+  currentZoneId: z.string().uuid(),
 });
 
 function toResourceTemplateKey(name: string): string {
@@ -57,7 +82,6 @@ function toResourceTemplateKey(name: string): string {
 }
 
 async function getResourceTemplateId(resourceType: string): Promise<string> {
-  // MVP convention: item template name -> snake_case matches resourceType (e.g. "Copper Ore" -> "copper_ore")
   const templates = await prisma.itemTemplate.findMany({
     where: { itemType: 'resource' },
     select: { id: true, name: true },
@@ -81,24 +105,37 @@ async function getSkillLevel(playerId: string, skillType: SkillType): Promise<nu
 
 /**
  * POST /api/v1/gathering/mine
- * Spend turns at a discovered resource node, gain resources + Mining XP.
+ * Mine from a discovered resource node, depleting its capacity.
  */
 gatheringRouter.post('/mine', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = mineSchema.parse(req.body);
 
-    const node = await prisma.resourceNode.findUnique({
-      where: { id: body.resourceNodeId },
-      include: { zone: true },
+    // Find the player's discovered node
+    const playerNode = await prisma.playerResourceNode.findUnique({
+      where: { id: body.playerNodeId },
+      include: {
+        resourceNode: {
+          include: { zone: true },
+        },
+      },
     });
-    if (!node) {
+
+    if (!playerNode || playerNode.playerId !== playerId) {
       throw new AppError(404, 'Resource node not found', 'NOT_FOUND');
     }
 
-    const skillRequired = node.skillRequired as SkillType;
+    const template = playerNode.resourceNode;
+
+    // Validate player is in the correct zone
+    if (template.zoneId !== body.currentZoneId) {
+      throw new AppError(400, 'You must travel to this zone to mine this resource', 'WRONG_ZONE');
+    }
+
+    const skillRequired = template.skillRequired as SkillType;
     const level = await getSkillLevel(playerId, skillRequired);
-    if (level < node.levelRequired) {
+    if (level < template.levelRequired) {
       throw new AppError(400, 'Insufficient level to gather this resource', 'INSUFFICIENT_LEVEL');
     }
 
@@ -106,21 +143,49 @@ gatheringRouter.post('/mine', async (req, res, next) => {
       throw new AppError(400, `Minimum is ${GATHERING_CONSTANTS.BASE_TURN_COST} turns`, 'INVALID_TURNS');
     }
 
-    const actions = Math.floor(body.turns / GATHERING_CONSTANTS.BASE_TURN_COST);
+    // Calculate how many actions we can do (limited by turns AND remaining capacity)
+    const maxActionsByTurns = Math.floor(body.turns / GATHERING_CONSTANTS.BASE_TURN_COST);
+
+    // Linear yield scaling: +10% per level above requirement
+    const levelsAbove = Math.max(0, level - template.levelRequired);
+    const yieldMultiplier = 1 + levelsAbove * GATHERING_CONSTANTS.YIELD_MULTIPLIER_PER_LEVEL;
+    const baseYield = Math.max(template.baseYield, GATHERING_CONSTANTS.BASE_YIELD);
+    const yieldPerAction = Math.floor(baseYield * yieldMultiplier);
+
+    // Cap actions by remaining capacity
+    const maxActionsByCapacity = Math.ceil(playerNode.remainingCapacity / yieldPerAction);
+    const actions = Math.min(maxActionsByTurns, maxActionsByCapacity);
+
+    if (actions <= 0) {
+      throw new AppError(400, 'Node is depleted', 'NODE_DEPLETED');
+    }
+
     const turnsSpent = actions * GATHERING_CONSTANTS.BASE_TURN_COST;
+    const totalYield = Math.min(actions * yieldPerAction, playerNode.remainingCapacity);
 
     const turnSpend = await spendPlayerTurns(playerId, turnsSpent);
 
-    // Linear yield scaling: +10% per level above requirement
-    const levelsAbove = Math.max(0, level - node.levelRequired);
-    const yieldMultiplier = 1 + levelsAbove * GATHERING_CONSTANTS.YIELD_MULTIPLIER_PER_LEVEL;
-    const baseYield = Math.max(node.baseYield, GATHERING_CONSTANTS.BASE_YIELD);
-    const totalYield = Math.floor(actions * baseYield * yieldMultiplier);
+    // Deplete the node
+    const newCapacity = playerNode.remainingCapacity - totalYield;
+    const nodeDepleted = newCapacity <= 0;
 
-    const resourceTemplateId = await getResourceTemplateId(node.resourceType);
+    if (nodeDepleted) {
+      // Remove the depleted node
+      await prisma.playerResourceNode.delete({
+        where: { id: playerNode.id },
+      });
+    } else {
+      // Update remaining capacity
+      await prisma.playerResourceNode.update({
+        where: { id: playerNode.id },
+        data: { remainingCapacity: newCapacity },
+      });
+    }
+
+    const resourceTemplateId = await getResourceTemplateId(template.resourceType);
     const stack = await addStackableItem(playerId, resourceTemplateId, totalYield);
 
-    // Simple XP model: 5 XP per action
+    // XP: 5 XP per action
     const rawXp = actions * 5;
     const xpGrant = await grantSkillXp(playerId, 'mining', rawXp);
 
@@ -130,14 +195,17 @@ gatheringRouter.post('/mine', async (req, res, next) => {
         activityType: 'mining',
         turnsSpent,
         result: {
-          zoneId: node.zoneId,
-          zoneName: node.zone.name,
-          resourceNodeId: node.id,
-          resourceType: node.resourceType,
+          zoneId: template.zoneId,
+          zoneName: template.zone.name,
+          playerNodeId: playerNode.id,
+          resourceNodeId: template.id,
+          resourceType: template.resourceType,
           actions,
           baseYield,
           yieldMultiplier,
           totalYield,
+          remainingCapacity: nodeDepleted ? 0 : newCapacity,
+          nodeDepleted,
           itemTemplateId: resourceTemplateId,
           itemId: stack.itemId,
           xp: {
@@ -154,11 +222,14 @@ gatheringRouter.post('/mine', async (req, res, next) => {
       logId: log.id,
       turns: turnSpend,
       node: {
-        id: node.id,
-        zoneId: node.zoneId,
-        zoneName: node.zone.name,
-        resourceType: node.resourceType,
-        levelRequired: node.levelRequired,
+        id: playerNode.id,
+        templateId: template.id,
+        zoneId: template.zoneId,
+        zoneName: template.zone.name,
+        resourceType: template.resourceType,
+        levelRequired: template.levelRequired,
+        remainingCapacity: nodeDepleted ? 0 : newCapacity,
+        nodeDepleted,
       },
       results: {
         actions,

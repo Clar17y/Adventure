@@ -19,14 +19,15 @@ model Player {
   createdAt    DateTime  @default(now()) @map("created_at")
   lastActiveAt DateTime? @map("last_active_at")
 
-  turnBank       TurnBank?
-  skills         PlayerSkill[]
-  equipment      PlayerEquipment[]
-  items          Item[]
-  bestiary       PlayerBestiary[]
-  activityLogs   ActivityLog[]
+  turnBank          TurnBank?
+  skills            PlayerSkill[]
+  equipment         PlayerEquipment[]
+  items             Item[]
+  bestiary          PlayerBestiary[]
+  activityLogs      ActivityLog[]
   pendingEncounters PendingEncounter[]
-  refreshTokens  RefreshToken[]
+  refreshTokens     RefreshToken[]
+  resourceNodes     PlayerResourceNode[]
 
   @@map("players")
 }
@@ -211,6 +212,7 @@ model PlayerBestiary {
 // RESOURCES & GATHERING
 // =============================================================================
 
+// Template defining what resource types can be found in a zone
 model ResourceNode {
   id              String  @id @default(uuid())
   zoneId          String  @map("zone_id")
@@ -219,10 +221,29 @@ model ResourceNode {
   levelRequired   Int     @default(1) @map("level_required")
   baseYield       Int     @map("base_yield")
   discoveryChance Decimal @map("discovery_chance") @db.Decimal(5, 4)
+  minCapacity     Int     @default(20) @map("min_capacity")
+  maxCapacity     Int     @default(100) @map("max_capacity")
+  discoveryWeight Int     @default(100) @map("discovery_weight")
 
-  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  zone            Zone                 @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  playerNodes     PlayerResourceNode[]
 
   @@map("resource_nodes")
+}
+
+// Player's discovered resource node instance with remaining capacity
+model PlayerResourceNode {
+  id                String   @id @default(uuid())
+  playerId          String   @map("player_id")
+  resourceNodeId    String   @map("resource_node_id")
+  remainingCapacity Int      @map("remaining_capacity")
+  discoveredAt      DateTime @default(now()) @map("discovered_at")
+
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  resourceNode ResourceNode @relation(fields: [resourceNodeId], references: [id], onDelete: Cascade)
+
+  @@index([playerId])
+  @@map("player_resource_nodes")
 }
 
 // =============================================================================

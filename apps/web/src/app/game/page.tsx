@@ -211,12 +211,17 @@ export default function GamePage() {
   }>>([]);
   const [gatheringNodes, setGatheringNodes] = useState<Array<{
     id: string;
+    templateId: string;
     zoneId: string;
     zoneName: string;
     resourceType: string;
     skillRequired: string;
     levelRequired: number;
     baseYield: number;
+    remainingCapacity: number;
+    maxCapacity: number;
+    sizeName: string;
+    discoveredAt: string;
   }>>([]);
   const [craftingRecipes, setCraftingRecipes] = useState<Array<{
     id: string;
@@ -287,7 +292,7 @@ export default function GamePage() {
   const loadAll = async () => {
     setActionError(null);
 
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes] = await Promise.all([
+    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, nodesRes] = await Promise.all([
       getTurns(),
       getSkills(),
       getZones(),
@@ -295,6 +300,7 @@ export default function GamePage() {
       getEquipment(),
       getCraftingRecipes(),
       getPendingEncounters(),
+      getGatheringNodes(),
     ]);
 
     if (turnRes.data) setTurns(turnRes.data.currentTurns);
@@ -309,6 +315,7 @@ export default function GamePage() {
     if (invRes.data) setInventory(invRes.data.items);
     if (equipRes.data) setEquipment(equipRes.data.equipment.map(e => ({ slot: e.slot, itemId: e.itemId, item: e.item ? { id: e.item.id, currentDurability: e.item.currentDurability, maxDurability: e.item.maxDurability, template: e.item.template } : null })));
     if (recipesRes.data) setCraftingRecipes(recipesRes.data.recipes);
+    if (nodesRes.data) setGatheringNodes(nodesRes.data.nodes);
     if (pendingRes.data) setPendingEncounters(pendingRes.data.pendingEncounters);
   };
 
@@ -330,14 +337,8 @@ export default function GamePage() {
     }
   }, [isAuthenticated, activeScreen]);
 
-  useEffect(() => {
-    if (isAuthenticated && activeZoneId) {
-      void loadGatheringNodes(activeZoneId);
-    }
-  }, [isAuthenticated, activeZoneId]);
-
-  const loadGatheringNodes = async (zoneId: string) => {
-    const { data } = await getGatheringNodes(zoneId);
+  const loadGatheringNodes = async () => {
+    const { data } = await getGatheringNodes(); // Load all player's discovered nodes
     if (data) setGatheringNodes(data.nodes);
   };
 
@@ -425,6 +426,8 @@ export default function GamePage() {
           { timestamp: nowStamp(), type: 'success', message: `Found ${data.resourceDiscoveries.length} resource node(s).` },
           ...prev,
         ]);
+        // Refresh gathering nodes so new discoveries appear immediately
+        await loadGatheringNodes();
       }
     } finally {
       setBusyAction(null);
@@ -472,12 +475,13 @@ export default function GamePage() {
     }
   };
 
-  const handleMine = async (resourceNodeId: string, turnSpend: number) => {
+  const handleMine = async (playerNodeId: string, turnSpend: number) => {
     if (busyAction) return;
+    if (!activeZoneId) return;
     setBusyAction('mining');
     setActionError(null);
     try {
-      const res = await mine(resourceNodeId, turnSpend);
+      const res = await mine(playerNodeId, turnSpend, activeZoneId);
       const data = res.data;
       if (!data) {
         setActionError(res.error?.message ?? 'Mining failed');
@@ -497,11 +501,20 @@ export default function GamePage() {
         });
       }
 
-      newLogs.push({
-        timestamp: nowStamp(),
-        type: 'success',
-        message: `Mined ${data.results.totalYield} resource(s).`,
-      });
+      // Node depletion notification
+      if (data.node.nodeDepleted) {
+        newLogs.push({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Vein depleted! Mined ${data.results.totalYield} resource(s).`,
+        });
+      } else {
+        newLogs.push({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Mined ${data.results.totalYield} resource(s). ${data.node.remainingCapacity} remaining.`,
+        });
+      }
 
       setGatheringLog((prev) => [...newLogs, ...prev]);
       await loadAll();
@@ -803,8 +816,13 @@ export default function GamePage() {
               imageSrc: resourceImageSrc(n.resourceType),
               levelRequired: n.levelRequired,
               baseYield: n.baseYield,
-              description: `Zone: ${n.zoneName}`,
+              zoneId: n.zoneId,
+              zoneName: n.zoneName,
+              remainingCapacity: n.remainingCapacity,
+              maxCapacity: n.maxCapacity,
+              sizeName: n.sizeName,
             }))}
+            currentZoneId={activeZoneId}
             availableTurns={turns}
             gatheringLog={gatheringLog}
             onStartGathering={handleMine}

@@ -472,16 +472,25 @@ export async function unequip(slot: string) {
 }
 
 // Gathering & Crafting
-export async function mine(resourceNodeId: string, turns: number) {
+export async function mine(playerNodeId: string, turns: number, currentZoneId: string) {
   return fetchApi<{
     logId: string;
     turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
-    node: { id: string; zoneId: string; zoneName: string; resourceType: string; levelRequired: number };
-    results: { actions: number; yieldPerAction: number; totalYield: number; itemTemplateId: string; itemId: string };
+    node: {
+      id: string;
+      templateId: string;
+      zoneId: string;
+      zoneName: string;
+      resourceType: string;
+      levelRequired: number;
+      remainingCapacity: number;
+      nodeDepleted: boolean;
+    };
+    results: { actions: number; baseYield: number; yieldMultiplier: number; totalYield: number; itemTemplateId: string; itemId: string };
     xp: { skillType: string; xpAfterEfficiency: number; efficiency: number; leveledUp: boolean; newLevel: number; atDailyCap: boolean; newTotalXp: number; newDailyXpGained: number };
   }>('/api/v1/gathering/mine', {
     method: 'POST',
-    body: JSON.stringify({ resourceNodeId, turns }),
+    body: JSON.stringify({ playerNodeId, turns, currentZoneId }),
   });
 }
 
@@ -528,13 +537,17 @@ export async function getGatheringNodes(zoneId?: string) {
   return fetchApi<{
     nodes: Array<{
       id: string;
+      templateId: string;
       zoneId: string;
       zoneName: string;
       resourceType: string;
       skillRequired: string;
       levelRequired: number;
       baseYield: number;
-      discoveryChance: number;
+      remainingCapacity: number;
+      maxCapacity: number;
+      sizeName: string;
+      discoveredAt: string;
     }>;
   }>(`/api/v1/gathering/nodes${q}`);
 }

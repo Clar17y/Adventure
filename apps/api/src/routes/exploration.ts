@@ -45,16 +45,32 @@ const startSchema = z.object({
   turns: z.number().int(),
 });
 
-function pickWeighted<T extends { encounterWeight: number }>(items: T[]): T | null {
-  const totalWeight = items.reduce((sum, item) => sum + item.encounterWeight, 0);
+function pickWeighted<T extends { encounterWeight?: number; discoveryWeight?: number }>(
+  items: T[],
+  weightKey: 'encounterWeight' | 'discoveryWeight' = 'encounterWeight'
+): T | null {
+  const totalWeight = items.reduce((sum, item) => sum + ((item as any)[weightKey] ?? 100), 0);
   if (totalWeight <= 0) return null;
 
   let roll = Math.random() * totalWeight;
   for (const item of items) {
-    roll -= item.encounterWeight;
+    roll -= (item as any)[weightKey] ?? 100;
     if (roll <= 0) return item;
   }
   return items[items.length - 1] ?? null;
+}
+
+function randomCapacity(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function getNodeSizeName(capacity: number, maxCapacity: number): string {
+  const ratio = capacity / maxCapacity;
+  if (ratio <= 0.25) return 'Tiny';
+  if (ratio <= 0.5) return 'Small';
+  if (ratio <= 0.75) return 'Medium';
+  if (ratio <= 0.9) return 'Large';
+  return 'Huge';
 }
 
 /**
@@ -95,13 +111,16 @@ explorationRouter.post('/start', async (req, res, next) => {
 
     const resourceDiscoveries: Array<{
       turnOccurred: number;
+      playerNodeId: string;
       resourceNodeId: string;
       resourceType: string;
+      capacity: number;
+      sizeName: string;
     }> = [];
 
     for (const outcome of outcomes) {
       if (outcome.type === 'mob_encounter' && mobTemplates.length > 0) {
-        const mob = pickWeighted(mobTemplates);
+        const mob = pickWeighted(mobTemplates, 'encounterWeight');
         if (mob) {
           mobEncounters.push({
             turnOccurred: outcome.turnOccurred,
@@ -112,12 +131,27 @@ explorationRouter.post('/start', async (req, res, next) => {
       }
 
       if (outcome.type === 'resource_node' && resourceNodes.length > 0) {
-        const node = resourceNodes[Math.floor(Math.random() * resourceNodes.length)];
-        if (node) {
+        const nodeTemplate = pickWeighted(resourceNodes, 'discoveryWeight');
+        if (nodeTemplate) {
+          // Create a player-specific node instance with random capacity
+          const capacity = randomCapacity(nodeTemplate.minCapacity, nodeTemplate.maxCapacity);
+          const sizeName = getNodeSizeName(capacity, nodeTemplate.maxCapacity);
+
+          const playerNode = await prisma.playerResourceNode.create({
+            data: {
+              playerId,
+              resourceNodeId: nodeTemplate.id,
+              remainingCapacity: capacity,
+            },
+          });
+
           resourceDiscoveries.push({
             turnOccurred: outcome.turnOccurred,
-            resourceNodeId: node.id,
-            resourceType: node.resourceType,
+            playerNodeId: playerNode.id,
+            resourceNodeId: nodeTemplate.id,
+            resourceType: nodeTemplate.resourceType,
+            capacity,
+            sizeName,
           });
         }
       }

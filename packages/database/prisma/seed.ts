@@ -20,6 +20,10 @@ const IDS = {
   },
   resourceNodes: {
     copperNodeForestEdge: '99999999-9999-9999-9999-999999999999',
+    ironNodeDeepForest: '99999999-8888-8888-8888-888888888888',
+  },
+  items2: {
+    ironOre: '11111111-dddd-dddd-dddd-dddddddddddd',
   },
   dropTables: {
     ratCopper: '12345678-1111-1111-1111-111111111111',
@@ -251,6 +255,7 @@ async function seedMobs() {
 }
 
 async function seedResourceNodes() {
+  // Copper in Forest Edge - common, small to medium veins
   await prisma.resourceNode.upsert({
     where: { id: IDS.resourceNodes.copperNodeForestEdge },
     create: {
@@ -261,6 +266,9 @@ async function seedResourceNodes() {
       levelRequired: 1,
       baseYield: 1,
       discoveryChance: new Prisma.Decimal('0.25'),
+      minCapacity: 15,
+      maxCapacity: 80,
+      discoveryWeight: 100,
     },
     update: {
       zoneId: IDS.zones.forestEdge,
@@ -269,6 +277,67 @@ async function seedResourceNodes() {
       levelRequired: 1,
       baseYield: 1,
       discoveryChance: new Prisma.Decimal('0.25'),
+      minCapacity: 15,
+      maxCapacity: 80,
+      discoveryWeight: 100,
+    },
+  });
+
+  // Iron in Deep Forest - rarer, requires higher level, larger veins
+  await prisma.resourceNode.upsert({
+    where: { id: IDS.resourceNodes.ironNodeDeepForest },
+    create: {
+      id: IDS.resourceNodes.ironNodeDeepForest,
+      zoneId: IDS.zones.deepForest,
+      resourceType: 'iron_ore',
+      skillRequired: 'mining',
+      levelRequired: 10,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.15'),
+      minCapacity: 30,
+      maxCapacity: 150,
+      discoveryWeight: 100,
+    },
+    update: {
+      zoneId: IDS.zones.deepForest,
+      resourceType: 'iron_ore',
+      skillRequired: 'mining',
+      levelRequired: 10,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.15'),
+      minCapacity: 30,
+      maxCapacity: 150,
+      discoveryWeight: 100,
+    },
+  });
+}
+
+async function seedItemTemplates2() {
+  // Iron Ore resource
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items2.ironOre },
+    create: {
+      id: IDS.items2.ironOre,
+      name: 'Iron Ore',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    update: {
+      name: 'Iron Ore',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
     },
   });
 }
@@ -383,6 +452,7 @@ async function main() {
 
   await seedZones();
   await seedItemTemplates();
+  await seedItemTemplates2();
   await seedMobs();
   await seedResourceNodes();
   await seedDropTables();

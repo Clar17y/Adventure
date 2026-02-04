@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
-import { Pickaxe, TrendingUp, Clock } from 'lucide-react';
+import { Pickaxe, Clock, MapPin } from 'lucide-react';
 import { GATHERING_CONSTANTS } from '@adventure/shared';
 
 interface ResourceNode {
@@ -14,7 +14,11 @@ interface ResourceNode {
   imageSrc?: string;
   levelRequired: number;
   baseYield: number;
-  description: string;
+  zoneId: string;
+  zoneName: string;
+  remainingCapacity: number;
+  maxCapacity: number;
+  sizeName: string;
 }
 
 interface GatheringLog {
@@ -28,6 +32,7 @@ interface GatheringProps {
   skillLevel: number;
   efficiency: number;
   nodes: ResourceNode[];
+  currentZoneId: string | null;
   availableTurns: number;
   gatheringLog: GatheringLog[];
   onStartGathering: (nodeId: string, turns: number) => void;
@@ -38,6 +43,7 @@ export function Gathering({
   skillLevel,
   efficiency,
   nodes,
+  currentZoneId,
   availableTurns,
   gatheringLog,
   onStartGathering,
@@ -45,14 +51,29 @@ export function Gathering({
   const [selectedNode, setSelectedNode] = useState<ResourceNode | null>(nodes[0] || null);
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
 
+  // Reset selection when the selected node is no longer in the list (e.g., depleted)
+  useEffect(() => {
+    if (selectedNode && !nodes.find((n) => n.id === selectedNode.id)) {
+      // Selected node was depleted or removed - select first available node or null
+      setSelectedNode(nodes[0] || null);
+    }
+  }, [nodes, selectedNode]);
+
   const calculateYield = (node: ResourceNode, turns: number) => {
     // Match backend formula exactly: linear +10% per level above requirement
-    const actions = Math.floor(turns / GATHERING_CONSTANTS.BASE_TURN_COST);
+    const maxActionsByTurns = Math.floor(turns / GATHERING_CONSTANTS.BASE_TURN_COST);
     const levelsAbove = Math.max(0, skillLevel - node.levelRequired);
     const yieldMultiplier = 1 + levelsAbove * GATHERING_CONSTANTS.YIELD_MULTIPLIER_PER_LEVEL;
     const baseYield = Math.max(node.baseYield, GATHERING_CONSTANTS.BASE_YIELD);
-    const totalYield = Math.floor(actions * baseYield * yieldMultiplier);
-    return { actions, baseYield, yieldMultiplier, totalYield };
+    const yieldPerAction = Math.floor(baseYield * yieldMultiplier);
+
+    // Cap by remaining capacity
+    const maxActionsByCapacity = Math.ceil(node.remainingCapacity / yieldPerAction);
+    const actions = Math.min(maxActionsByTurns, maxActionsByCapacity);
+    const totalYield = Math.min(actions * yieldPerAction, node.remainingCapacity);
+    const willDeplete = totalYield >= node.remainingCapacity;
+
+    return { actions, baseYield, yieldMultiplier, totalYield, willDeplete };
   };
 
   const yieldInfo = selectedNode ? calculateYield(selectedNode, turnInvestment[0]) : null;
@@ -75,17 +96,24 @@ export function Gathering({
 
       {/* Resource Nodes */}
       <div className="space-y-2">
-        <h3 className="font-semibold text-[var(--rpg-text-primary)] text-sm">Available Resources</h3>
-        {nodes.map((node) => {
+        <h3 className="font-semibold text-[var(--rpg-text-primary)] text-sm">Discovered Veins</h3>
+        {nodes.length === 0 ? (
+          <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">
+            No resource veins discovered. Explore to find some!
+          </div>
+        ) : nodes.map((node) => {
           const isSelected = selectedNode?.id === node.id;
           const canGather = skillLevel >= node.levelRequired;
+          const isInZone = currentZoneId === node.zoneId;
+          const canSelect = canGather && isInZone;
+          const capacityPct = Math.round((node.remainingCapacity / node.maxCapacity) * 100);
 
           return (
             <button
               key={node.id}
-              onClick={() => canGather && setSelectedNode(node)}
-              disabled={!canGather}
-              className={`w-full text-left transition-all ${!canGather ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => canSelect && setSelectedNode(node)}
+              disabled={!canSelect}
+              className={`w-full text-left transition-all ${!canSelect ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <PixelCard padding="sm" className={isSelected ? 'border-[var(--rpg-gold)]' : ''}>
                 <div className="flex items-center gap-3">
@@ -102,14 +130,32 @@ export function Gathering({
                   </div>
                   <div className="flex-1">
                     <div className="flex items-baseline justify-between">
-                      <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm">{node.name}</h4>
+                      <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm">
+                        {node.sizeName} {node.name}
+                      </h4>
                       <span className="text-xs text-[var(--rpg-text-secondary)]">Lv. {node.levelRequired}</span>
                     </div>
-                    <p className="text-xs text-[var(--rpg-text-secondary)] mt-1">{node.description}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <TrendingUp size={12} color="var(--rpg-gold)" />
+                    {/* Zone indicator */}
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <MapPin size={10} className={isInZone ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-text-secondary)]'} />
+                      <span className={`text-xs ${isInZone ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-text-secondary)]'}`}>
+                        {node.zoneName}
+                        {!isInZone && ' (travel here to mine)'}
+                      </span>
+                    </div>
+                    {/* Capacity bar */}
+                    <div className="mt-1.5 h-2 bg-[var(--rpg-background)] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[var(--rpg-gold)] transition-all"
+                        style={{ width: `${capacityPct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs text-[var(--rpg-text-secondary)]">
+                        {node.remainingCapacity} / {node.maxCapacity} remaining
+                      </span>
                       <span className="text-xs text-[var(--rpg-gold)]">
-                        {Math.max(node.baseYield, GATHERING_CONSTANTS.BASE_YIELD)} per {GATHERING_CONSTANTS.BASE_TURN_COST} turns
+                        {Math.max(node.baseYield, GATHERING_CONSTANTS.BASE_YIELD)}/action
                       </span>
                     </div>
                   </div>
@@ -196,6 +242,11 @@ export function Gathering({
                   <span className="text-[var(--rpg-green-light)]"> × {yieldInfo.yieldMultiplier.toFixed(1)}</span>
                 )}
               </div>
+              {yieldInfo.willDeplete && (
+                <div className="text-xs text-[var(--rpg-red)] mt-1 font-semibold">
+                  ⚠️ Will exhaust vein completely
+                </div>
+              )}
             </div>
           </div>
         </PixelCard>

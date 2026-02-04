@@ -10,6 +10,8 @@ export const explorationRouter = Router();
 
 explorationRouter.use(authenticate);
 
+const prismaAny = prisma as unknown as any;
+
 const estimateQuerySchema = z.object({
   turns: z.coerce.number().int(),
 });
@@ -133,6 +135,21 @@ explorationRouter.post('/start', async (req, res, next) => {
       },
     });
 
+    const pendingEncounters = await Promise.all(
+      mobEncounters.map((m) =>
+        prismaAny.pendingEncounter.create({
+          data: {
+            playerId,
+            zoneId: body.zoneId,
+            mobTemplateId: m.mobTemplateId,
+            turnOccurred: m.turnOccurred,
+            sourceLogId: explorationLog.id,
+          },
+          select: { id: true },
+        })
+      )
+    );
+
     res.json({
       logId: explorationLog.id,
       zone: {
@@ -142,7 +159,12 @@ explorationRouter.post('/start', async (req, res, next) => {
       },
       turns: turnSpend,
       outcomes,
-      mobEncounters,
+      mobEncounters: mobEncounters.map((m, idx) => ({
+        ...m,
+        encounterId: pendingEncounters[idx]!.id,
+        zoneId: body.zoneId,
+        zoneName: zone.name,
+      })),
       resourceDiscoveries,
       hiddenCaches: outcomes.filter(o => o.type === 'hidden_cache'),
       zoneExitDiscovered: outcomes.some(o => o.type === 'zone_exit'),

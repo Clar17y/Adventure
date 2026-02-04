@@ -16,6 +16,8 @@ import {
   getZones,
   mine,
   repairItem,
+  equip,
+  unequip,
   abandonPendingEncounters,
   startCombatFromPendingEncounter,
   startExploration,
@@ -197,7 +199,18 @@ export default function GamePage() {
     currentDurability: number | null;
     maxDurability: number | null;
     equippedSlot: string | null;
-    template: { id: string; name: string; itemType: string; slot: string | null; tier: number; baseStats: Record<string, unknown> };
+    template: {
+      id: string;
+      name: string;
+      itemType: string;
+      slot: string | null;
+      tier: number;
+      baseStats: Record<string, unknown>;
+      requiredSkill?: string | null;
+      requiredLevel?: number;
+      maxDurability?: number;
+      stackable?: boolean;
+    };
   }>>([]);
   const [equipment, setEquipment] = useState<Array<{
     slot: string;
@@ -206,7 +219,18 @@ export default function GamePage() {
       id: string;
       currentDurability: number | null;
       maxDurability: number | null;
-      template: { id: string; name: string; itemType: string; slot: string | null; tier: number; baseStats: Record<string, unknown> };
+      template: {
+        id: string;
+        name: string;
+        itemType: string;
+        slot: string | null;
+        tier: number;
+        baseStats: Record<string, unknown>;
+        requiredSkill?: string | null;
+        requiredLevel?: number;
+        maxDurability?: number;
+        stackable?: boolean;
+      };
     };
   }>>([]);
   const [gatheringNodes, setGatheringNodes] = useState<Array<{
@@ -595,6 +619,38 @@ export default function GamePage() {
     }
   };
 
+  const handleEquipItem = async (itemId: string, slot: string) => {
+    if (busyAction) return;
+    setBusyAction('equip');
+    setActionError(null);
+    try {
+      const res = await equip(itemId, slot);
+      if (!res.data) {
+        setActionError(res.error?.message ?? 'Equip failed');
+        return;
+      }
+      await loadAll();
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleUnequipSlot = async (slot: string) => {
+    if (busyAction) return;
+    setBusyAction('unequip');
+    setActionError(null);
+    try {
+      const res = await unequip(slot);
+      if (!res.data) {
+        setActionError(res.error?.message ?? 'Unequip failed');
+        return;
+      }
+      await loadAll();
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const renderScreen = () => {
     switch (activeScreen) {
       case 'home':
@@ -643,9 +699,23 @@ export default function GamePage() {
               rarity: rarityFromTier(item.template.tier),
               description: item.template.itemType,
               type: item.template.itemType,
+              slot: item.template.slot,
+              equippedSlot: item.equippedSlot,
+              durability: (() => {
+                const templateMax = item.template.maxDurability ?? 0;
+                const max = item.maxDurability ?? templateMax;
+                if (!['weapon', 'armor'].includes(item.template.itemType) || max <= 0) return null;
+                const cur = item.currentDurability ?? max;
+                return { current: cur, max };
+              })(),
+              baseStats: item.template.baseStats,
+              requiredSkill: item.template.requiredSkill ?? null,
+              requiredLevel: item.template.requiredLevel ?? 1,
             }))}
             onDrop={handleDestroyItem}
             onRepair={handleRepairItem}
+            onEquip={handleEquipItem}
+            onUnequip={handleUnequipSlot}
           />
         );
       case 'equipment':
@@ -654,22 +724,45 @@ export default function GamePage() {
             slots={equipment.map((e) => {
               const label = e.slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
               const template = e.item?.template;
-              const max = e.item?.maxDurability ?? e.item?.currentDurability ?? 0;
-              const cur = e.item?.currentDurability ?? max;
+              const templateMax = template?.maxDurability ?? 0;
+              const max = template ? (e.item?.maxDurability ?? templateMax) : 0;
+              const cur = template ? (e.item?.currentDurability ?? max) : 0;
               return {
                 id: e.slot,
                 name: label,
                 item: template
                   ? {
+                      id: e.item!.id,
                       name: template.name,
                       imageSrc: itemImageSrc(template.name, template.itemType),
                       rarity: rarityFromTier(template.tier),
                       durability: cur,
                       maxDurability: max,
+                      baseStats: template.baseStats,
                     }
                   : null,
               };
             })}
+            inventoryItems={inventory
+              .filter((item) => Boolean(item.template.slot) && ['weapon', 'armor'].includes(item.template.itemType) && item.quantity === 1)
+              .map((item) => {
+                const templateMax = item.template.maxDurability ?? 0;
+                const max = item.maxDurability ?? templateMax;
+                const durability =
+                  max > 0 ? { current: item.currentDurability ?? max, max } : null;
+                return {
+                  id: item.id,
+                  name: item.template.name,
+                  imageSrc: itemImageSrc(item.template.name, item.template.itemType),
+                  rarity: rarityFromTier(item.template.tier),
+                  slot: item.template.slot as string,
+                  equippedSlot: item.equippedSlot,
+                  durability,
+                  baseStats: item.template.baseStats,
+                };
+              })}
+            onEquip={handleEquipItem}
+            onUnequip={handleUnequipSlot}
             stats={(() => {
               let attack = 0;
               let defence = 0;
@@ -831,12 +924,6 @@ export default function GamePage() {
       case 'combat':
         return (
           <div className="space-y-4">
-            {actionError && (
-              <div className="p-3 rounded bg-[var(--rpg-background)] border border-[var(--rpg-red)] text-[var(--rpg-red)]">
-                {actionError}
-              </div>
-            )}
-
             {pendingEncounters.length > 0 ? (
               <div className="space-y-2">
                 <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Pending Encounters</h2>
@@ -967,6 +1054,12 @@ export default function GamePage() {
                 {tab.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {actionError && (
+          <div className="mb-4 p-3 rounded bg-[var(--rpg-background)] border border-[var(--rpg-red)] text-[var(--rpg-red)]">
+            {actionError}
           </div>
         )}
 

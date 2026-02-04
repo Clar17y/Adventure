@@ -1,16 +1,20 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
+import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
-import { Shield, Sword, Heart, Zap } from 'lucide-react';
+import { Heart, Shield, Sword, X, Zap } from 'lucide-react';
 
 interface EquippedItem {
+  id: string;
   name: string;
   icon?: string;
   imageSrc?: string;
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
   durability: number;
   maxDurability: number;
+  baseStats?: Record<string, unknown>;
 }
 
 interface EquipmentSlot {
@@ -21,6 +25,19 @@ interface EquipmentSlot {
 
 interface EquipmentProps {
   slots: EquipmentSlot[];
+  inventoryItems: Array<{
+    id: string;
+    name: string;
+    icon?: string;
+    imageSrc?: string;
+    rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+    slot: string;
+    equippedSlot: string | null;
+    durability: { current: number; max: number } | null;
+    baseStats?: Record<string, unknown>;
+  }>;
+  onEquip?: (itemId: string, slot: string) => void | Promise<void>;
+  onUnequip?: (slot: string) => void | Promise<void>;
   stats: {
     attack: number;
     defence: number;
@@ -29,7 +46,20 @@ interface EquipmentProps {
   };
 }
 
-export function Equipment({ slots, stats }: EquipmentProps) {
+function numStat(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function statValue(stats: Record<string, unknown> | undefined, key: string): number {
+  const v = stats ? numStat((stats as any)[key]) : null;
+  return typeof v === 'number' ? v : 0;
+}
+
+function prettySlot(slot: string) {
+  return slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: EquipmentProps) {
   const rarityColors = {
     common: '#5a5a6a',
     uncommon: '#6aaa5a',
@@ -52,6 +82,26 @@ export function Equipment({ slots, stats }: EquipmentProps) {
     charm: { gridColumn: '3', gridRow: '6', label: 'Charm' },
   };
 
+  const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const activeSlot = activeSlotId ? slots.find((s) => s.id === activeSlotId) ?? null : null;
+  const currentItem = activeSlot?.item ?? null;
+
+  const candidates = useMemo(() => {
+    if (!activeSlotId) return [];
+    return inventoryItems
+      .filter((i) => i.slot === activeSlotId)
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [inventoryItems, activeSlotId]);
+
+  const closeModal = () => {
+    setActiveSlotId(null);
+    setError(null);
+  };
+
   const getSlotInfo = (slotId: string) => {
     return slots.find((s) => s.id === slotId)?.item || null;
   };
@@ -64,6 +114,10 @@ export function Equipment({ slots, stats }: EquipmentProps) {
     return (
       <div key={slotId} style={{ gridColumn: position.gridColumn, gridRow: position.gridRow }}>
         <button
+          onClick={() => {
+            setActiveSlotId(slotId);
+            setError(null);
+          }}
           className={`w-16 h-16 rounded-lg flex flex-col items-center justify-center transition-all relative ${
             item
               ? 'bg-[var(--rpg-surface)] border-2 hover:border-[var(--rpg-gold)]'
@@ -110,6 +164,258 @@ export function Equipment({ slots, stats }: EquipmentProps) {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Equipment</h2>
+
+      {/* Slot Selection Modal */}
+      {activeSlotId && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
+          onClick={closeModal}
+        >
+          <PixelCard className="max-w-md w-full" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-[var(--rpg-text-primary)]">
+                  {slotPositions[activeSlotId]?.label ?? prettySlot(activeSlotId)}
+                </h3>
+                <div className="text-xs text-[var(--rpg-text-secondary)]">Select an item to equip</div>
+              </div>
+              <button
+                onClick={closeModal}
+                className="text-[var(--rpg-text-secondary)] hover:text-[var(--rpg-text-primary)]"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-3 p-2 rounded bg-[var(--rpg-background)] border border-[var(--rpg-red)] text-[var(--rpg-red)] text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="bg-[var(--rpg-background)] border border-[var(--rpg-border)] rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-[var(--rpg-text-primary)]">Currently Equipped</div>
+                  {currentItem && onUnequip && (
+                    <PixelButton
+                      variant="secondary"
+                      size="sm"
+                      disabled={busy}
+                      onClick={async () => {
+                        if (!activeSlotId) return;
+                        setBusy(true);
+                        setError(null);
+                        try {
+                          await onUnequip(activeSlotId);
+                          closeModal();
+                        } catch {
+                          setError('Failed to unequip item.');
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Unequip
+                    </PixelButton>
+                  )}
+                </div>
+
+                {currentItem ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded border-2 flex items-center justify-center text-xl flex-shrink-0"
+                        style={{ borderColor: rarityColors[currentItem.rarity] }}
+                      >
+                        {currentItem.imageSrc ? (
+                          <img
+                            src={currentItem.imageSrc}
+                            alt={currentItem.name}
+                            className="w-8 h-8 object-contain image-rendering-pixelated"
+                          />
+                        ) : (
+                          currentItem.icon
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-[var(--rpg-text-primary)] text-sm">{currentItem.name}</div>
+                        <div className="text-xs text-[var(--rpg-text-secondary)] font-mono">
+                          {currentItem.durability}/{currentItem.maxDurability}
+                        </div>
+                      </div>
+                    </div>
+
+                    <StatBar
+                      current={currentItem.durability}
+                      max={currentItem.maxDurability}
+                      color="durability"
+                      size="sm"
+                      showNumbers={false}
+                    />
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {statValue(currentItem.baseStats, 'attack') !== 0 && (
+                        <div className="flex items-center gap-2">
+                          <Sword size={16} className="text-[var(--rpg-red)]" />
+                          <span className="text-[var(--rpg-text-secondary)]">Attack</span>
+                          <span className="ml-auto font-mono text-[var(--rpg-red)]">
+                            +{statValue(currentItem.baseStats, 'attack')}
+                          </span>
+                        </div>
+                      )}
+                      {statValue(currentItem.baseStats, 'armor') !== 0 && (
+                        <div className="flex items-center gap-2">
+                          <Shield size={16} className="text-[var(--rpg-blue-light)]" />
+                          <span className="text-[var(--rpg-text-secondary)]">Armor</span>
+                          <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">
+                            +{statValue(currentItem.baseStats, 'armor')}
+                          </span>
+                        </div>
+                      )}
+                      {statValue(currentItem.baseStats, 'health') !== 0 && (
+                        <div className="flex items-center gap-2">
+                          <Heart size={16} className="text-[var(--rpg-green-light)]" />
+                          <span className="text-[var(--rpg-text-secondary)]">HP</span>
+                          <span className="ml-auto font-mono text-[var(--rpg-green-light)]">
+                            +{statValue(currentItem.baseStats, 'health')}
+                          </span>
+                        </div>
+                      )}
+                      {statValue(currentItem.baseStats, 'evasion') !== 0 && (
+                        <div className="flex items-center gap-2">
+                          <Zap size={16} className="text-[var(--rpg-gold)]" />
+                          <span className="text-[var(--rpg-text-secondary)]">Evasion</span>
+                          <span className="ml-auto font-mono text-[var(--rpg-gold)]">
+                            +{statValue(currentItem.baseStats, 'evasion')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-[var(--rpg-text-secondary)]">Empty</div>
+                )}
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-[var(--rpg-text-primary)] mb-2">Inventory</div>
+                {candidates.length === 0 ? (
+                  <div className="text-sm text-[var(--rpg-text-secondary)]">
+                    No items available for this slot.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {candidates.map((item) => {
+                      const currentAttack = statValue(currentItem?.baseStats, 'attack');
+                      const currentArmor = statValue(currentItem?.baseStats, 'armor');
+                      const currentHealth = statValue(currentItem?.baseStats, 'health');
+                      const currentEvasion = statValue(currentItem?.baseStats, 'evasion');
+
+                      const nextAttack = statValue(item.baseStats, 'attack');
+                      const nextArmor = statValue(item.baseStats, 'armor');
+                      const nextHealth = statValue(item.baseStats, 'health');
+                      const nextEvasion = statValue(item.baseStats, 'evasion');
+
+                      const diffs = [
+                        { key: 'Attack', diff: nextAttack - currentAttack },
+                        { key: 'Armor', diff: nextArmor - currentArmor },
+                        { key: 'HP', diff: nextHealth - currentHealth },
+                        { key: 'Evasion', diff: nextEvasion - currentEvasion },
+                      ].filter((d) => d.diff !== 0);
+
+                      const isEquippedHere = item.equippedSlot === activeSlotId;
+                      const durability = item.durability;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="w-10 h-10 rounded border-2 flex items-center justify-center text-xl flex-shrink-0"
+                              style={{ borderColor: rarityColors[item.rarity] }}
+                            >
+                              {item.imageSrc ? (
+                                <img
+                                  src={item.imageSrc}
+                                  alt={item.name}
+                                  className="w-8 h-8 object-contain image-rendering-pixelated"
+                                />
+                              ) : (
+                                item.icon
+                              )}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline justify-between gap-2">
+                                <div className="font-semibold text-[var(--rpg-text-primary)] text-sm truncate">
+                                  {item.name}
+                                </div>
+                                <PixelButton
+                                  variant={isEquippedHere ? 'secondary' : 'primary'}
+                                  size="sm"
+                                  disabled={busy || !onEquip || isEquippedHere}
+                                  onClick={async () => {
+                                    if (!activeSlotId || !onEquip) return;
+                                    setBusy(true);
+                                    setError(null);
+                                    try {
+                                      await onEquip(item.id, activeSlotId);
+                                      closeModal();
+                                    } catch {
+                                      setError('Failed to equip item.');
+                                    } finally {
+                                      setBusy(false);
+                                    }
+                                  }}
+                                >
+                                  {isEquippedHere ? 'Equipped' : 'Equip'}
+                                </PixelButton>
+                              </div>
+
+                              {durability && durability.max > 0 && (
+                                <div className="mt-2">
+                                  <StatBar
+                                    current={durability.current}
+                                    max={durability.max}
+                                    color="durability"
+                                    size="sm"
+                                    showNumbers={false}
+                                  />
+                                </div>
+                              )}
+
+                              {diffs.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono">
+                                  {diffs.map((d) => (
+                                    <span
+                                      key={d.key}
+                                      className={
+                                        d.diff > 0
+                                          ? 'text-[var(--rpg-green-light)]'
+                                          : 'text-[var(--rpg-red)]'
+                                      }
+                                    >
+                                      {d.diff > 0 ? '+' : ''}
+                                      {d.diff} {d.key}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </PixelCard>
+        </div>
+      )}
 
       {/* Character Equipment Grid */}
       <PixelCard className="flex justify-center">

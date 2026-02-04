@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { ItemCard } from '@/components/ItemCard';
 import { PixelButton } from '@/components/PixelButton';
-import { X } from 'lucide-react';
+import { StatBar } from '@/components/StatBar';
+import { Heart, Shield, Sword, X, Zap } from 'lucide-react';
 
 interface Item {
   id: string;
@@ -15,17 +16,49 @@ interface Item {
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
   description: string;
   type: string;
+  slot?: string | null;
+  equippedSlot?: string | null;
+  durability?: { current: number; max: number } | null;
+  baseStats?: Record<string, unknown>;
+  requiredSkill?: string | null;
+  requiredLevel?: number | null;
 }
 
 interface InventoryProps {
   items: Item[];
-  onDrop?: (itemId: string) => void;
-  onRepair?: (itemId: string) => void;
+  onDrop?: (itemId: string) => void | Promise<void>;
+  onRepair?: (itemId: string) => void | Promise<void>;
+  onEquip?: (itemId: string, slot: string) => void | Promise<void>;
+  onUnequip?: (slot: string) => void | Promise<void>;
 }
 
-export function Inventory({ items, onDrop, onRepair }: InventoryProps) {
+function numStat(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function prettySlot(slot: string) {
+  return slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: InventoryProps) {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const stats = selectedItem?.baseStats ?? {};
+  const attack = numStat(stats.attack);
+  const armor = numStat(stats.armor);
+  const health = numStat(stats.health);
+  const evasion = numStat(stats.evasion);
+
+  const hasAnyStats = [attack, armor, health, evasion].some((v) => typeof v === 'number' && v !== 0);
+  const isRepairable = Boolean(selectedItem && ['weapon', 'armor'].includes(selectedItem.type));
+  const isEquippable = Boolean(selectedItem?.slot && ['weapon', 'armor'].includes(selectedItem?.type ?? ''));
+  const isEquipped = Boolean(selectedItem?.equippedSlot);
+
+  const canRepair = Boolean(onRepair && isRepairable);
+  const canEquip = Boolean(onEquip && isEquippable && !isEquipped);
+  const canUnequip = Boolean(onUnequip && isEquippable && isEquipped);
+  const canDrop = Boolean(onDrop && !isEquipped);
 
   return (
     <div className="space-y-4">
@@ -92,6 +125,11 @@ export function Inventory({ items, onDrop, onRepair }: InventoryProps) {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-[var(--rpg-text-primary)]">{selectedItem.name}</h3>
+                  {selectedItem.equippedSlot && (
+                    <div className="text-xs text-[var(--rpg-gold)] mt-0.5">
+                      Equipped: {prettySlot(selectedItem.equippedSlot)}
+                    </div>
+                  )}
                   <div className="text-xs text-[var(--rpg-text-secondary)] capitalize">
                     {selectedItem.rarity} • {selectedItem.type}
                   </div>
@@ -107,12 +145,73 @@ export function Inventory({ items, onDrop, onRepair }: InventoryProps) {
 
             <p className="text-sm text-[var(--rpg-text-secondary)] mb-4">{selectedItem.description}</p>
 
-            <div className="flex gap-2">
+            {(selectedItem.durability || hasAnyStats || selectedItem.requiredSkill) && (
+              <div className="space-y-3 mb-4">
+                {selectedItem.durability && selectedItem.durability.max > 0 && (
+                  <div>
+                    <div className="flex items-baseline justify-between text-xs mb-1">
+                      <span className="text-[var(--rpg-text-secondary)]">Durability</span>
+                      <span className="text-[var(--rpg-text-primary)] font-mono">
+                        {selectedItem.durability.current}/{selectedItem.durability.max}
+                      </span>
+                    </div>
+                    <StatBar
+                      current={selectedItem.durability.current}
+                      max={selectedItem.durability.max}
+                      color="durability"
+                      size="sm"
+                      showNumbers={false}
+                    />
+                  </div>
+                )}
+
+                {hasAnyStats && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {typeof attack === 'number' && attack !== 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Sword size={16} className="text-[var(--rpg-red)]" />
+                        <span className="text-[var(--rpg-text-secondary)]">Attack</span>
+                        <span className="ml-auto font-mono text-[var(--rpg-red)]">+{attack}</span>
+                      </div>
+                    )}
+                    {typeof armor === 'number' && armor !== 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Shield size={16} className="text-[var(--rpg-blue-light)]" />
+                        <span className="text-[var(--rpg-text-secondary)]">Armor</span>
+                        <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">+{armor}</span>
+                      </div>
+                    )}
+                    {typeof health === 'number' && health !== 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Heart size={16} className="text-[var(--rpg-green-light)]" />
+                        <span className="text-[var(--rpg-text-secondary)]">HP</span>
+                        <span className="ml-auto font-mono text-[var(--rpg-green-light)]">+{health}</span>
+                      </div>
+                    )}
+                    {typeof evasion === 'number' && evasion !== 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap size={16} className="text-[var(--rpg-gold)]" />
+                        <span className="text-[var(--rpg-text-secondary)]">Evasion</span>
+                        <span className="ml-auto font-mono text-[var(--rpg-gold)]">+{evasion}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedItem.requiredSkill && (
+                  <div className="text-xs text-[var(--rpg-text-secondary)]">
+                    Requires {selectedItem.requiredSkill} level {selectedItem.requiredLevel ?? 1}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2">
               <PixelButton
                 variant="primary"
                 size="sm"
                 className="flex-1"
-                disabled={busy || !onRepair || !['weapon', 'armor'].includes(selectedItem.type)}
+                disabled={busy || !canRepair}
                 onClick={async () => {
                   if (!onRepair) return;
                   setBusy(true);
@@ -126,11 +225,36 @@ export function Inventory({ items, onDrop, onRepair }: InventoryProps) {
               >
                 Repair
               </PixelButton>
+
+              <PixelButton
+                variant="gold"
+                size="sm"
+                className="flex-1"
+                disabled={busy || (!canEquip && !canUnequip)}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    if (selectedItem.equippedSlot) {
+                      if (!onUnequip) return;
+                      await onUnequip(selectedItem.equippedSlot);
+                    } else {
+                      if (!onEquip || !selectedItem.slot) return;
+                      await onEquip(selectedItem.id, selectedItem.slot);
+                    }
+                    setSelectedItem(null);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {selectedItem.equippedSlot ? 'Unequip' : 'Equip'}
+              </PixelButton>
+
               <PixelButton
                 variant="secondary"
                 size="sm"
                 className="flex-1"
-                disabled={busy || !onDrop}
+                disabled={busy || !canDrop}
                 onClick={async () => {
                   if (!onDrop) return;
                   setBusy(true);

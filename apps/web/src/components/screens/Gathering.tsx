@@ -51,11 +51,17 @@ export function Gathering({
   const [selectedNode, setSelectedNode] = useState<ResourceNode | null>(nodes[0] || null);
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
 
-  // Reset selection when the selected node is no longer in the list (e.g., depleted)
+  // Sync selected node with updated data from props (e.g., after mining reduces capacity)
   useEffect(() => {
-    if (selectedNode && !nodes.find((n) => n.id === selectedNode.id)) {
-      // Selected node was depleted or removed - select first available node or null
+    if (!selectedNode) return;
+
+    const updatedNode = nodes.find((n) => n.id === selectedNode.id);
+    if (!updatedNode) {
+      // Node was depleted/removed - select first available or null
       setSelectedNode(nodes[0] || null);
+    } else if (updatedNode.remainingCapacity !== selectedNode.remainingCapacity) {
+      // Node still exists but capacity changed - update with fresh data
+      setSelectedNode(updatedNode);
     }
   }, [nodes, selectedNode]);
 

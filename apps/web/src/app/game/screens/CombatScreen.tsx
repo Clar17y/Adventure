@@ -15,10 +15,9 @@ interface CombatScreenProps {
 }
 
 export function CombatScreen({ hpState, pendingEncounters, pendingClockMs, busyAction, lastCombat, onStartCombat }: CombatScreenProps) {
-  // Derive max HP values from the first log entry (initiative roll, before any damage)
-  const firstEntry = lastCombat?.log[0];
-  const playerMaxHp = firstEntry?.playerHpAfter;
-  const mobMaxHp = firstEntry?.mobHpAfter;
+  // Player max HP comes from hpState (accurate even if combat started injured).
+  // Mob max HP is the first log entry's mobHpAfter (mobs always start at full).
+  const mobMaxHp = lastCombat?.log[0]?.mobHpAfter;
 
   const outcomeLabel = lastCombat?.outcome === 'victory'
     ? 'Victory'
@@ -89,7 +88,7 @@ export function CombatScreen({ hpState, pendingEncounters, pendingClockMs, busyA
               <CombatLogEntry
                 key={idx}
                 entry={entry}
-                playerMaxHp={playerMaxHp}
+                playerMaxHp={hpState.maxHp}
                 mobMaxHp={mobMaxHp}
               />
             ))}

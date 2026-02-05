@@ -44,7 +44,7 @@ bestiaryRouter.get('/', async (req, res, next) => {
     for (const p of progress) killsByMobId.set(p.mobTemplateId, p.kills);
 
     res.json({
-      mobs: mobTemplates.map((mob) => {
+      mobs: mobTemplates.map((mob: typeof mobTemplates[number]) => {
         const kills = killsByMobId.get(mob.id) ?? 0;
         return {
           id: mob.id,
@@ -59,7 +59,7 @@ bestiaryRouter.get('/', async (req, res, next) => {
           },
           zones: [mob.zone.name],
           description: `A creature found in ${mob.zone.name}.`,
-          drops: mob.dropTables.map((dt) => ({
+          drops: mob.dropTables.map((dt: typeof mob.dropTables[number]) => ({
             item: dt.itemTemplate,
             rarity: rarityFromTier(dt.itemTemplate.tier),
             dropRate: Math.round(Number(dt.dropChance) * 10000) / 100,

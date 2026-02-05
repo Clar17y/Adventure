@@ -258,6 +258,59 @@ export async function spendTurns(amount: number, reason?: string) {
   });
 }
 
+// HP & Rest
+export async function getHpState() {
+  return fetchApi<{
+    currentHp: number;
+    maxHp: number;
+    regenPerSecond: number;
+    lastHpRegenAt: string;
+    isRecovering: boolean;
+    recoveryCost: number | null;
+  }>('/api/v1/hp');
+}
+
+export async function restEstimate(turns: number) {
+  return fetchApi<{
+    isRecovering: boolean;
+    recoveryCost?: number;
+    recoveryExitHp?: number;
+    currentHp?: number;
+    maxHp?: number;
+    healPerTurn?: number;
+    turnsRequested?: number;
+    turnsNeeded?: number;
+    healAmount?: number;
+    resultingHp?: number;
+  }>(`/api/v1/hp/rest/estimate?turns=${turns}`);
+}
+
+export async function rest(turns: number) {
+  return fetchApi<{
+    previousHp: number;
+    healedAmount: number;
+    currentHp: number;
+    maxHp: number;
+    turnsSpent: number;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+  }>('/api/v1/hp/rest', {
+    method: 'POST',
+    body: JSON.stringify({ turns }),
+  });
+}
+
+export async function recoverFromKnockout() {
+  return fetchApi<{
+    previousState: 'recovering';
+    currentHp: number;
+    maxHp: number;
+    turnsSpent: number;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+  }>('/api/v1/hp/recover', {
+    method: 'POST',
+  });
+}
+
 // Zones
 export async function getZones() {
   return fetchApi<{

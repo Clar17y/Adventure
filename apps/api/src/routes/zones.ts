@@ -40,7 +40,7 @@ zonesRouter.get('/', async (req, res, next) => {
     }
 
     res.json({
-      zones: zones.map(z => ({
+      zones: zones.map((z: typeof zones[number]) => ({
         id: z.id,
         name: discoveredZoneIds.has(z.id) ? z.name : '???',
         description: discoveredZoneIds.has(z.id) ? z.description : null,

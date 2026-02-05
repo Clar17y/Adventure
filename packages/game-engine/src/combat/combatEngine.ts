@@ -94,6 +94,7 @@ export function runCombat(
     loot: [], // Loot is rolled separately by the service layer
     durabilityLost: [], // Durability is handled by the service layer
     turnsSpent: 0, // Set by the service layer
+    playerHpRemaining: Math.max(0, state.playerHp),
   };
 }
 
@@ -221,7 +222,7 @@ function executeMobAttack(
       round: state.round,
       actor: 'mob',
       action: 'attack',
-      message: `You have been defeated by the ${mob.name}!`,
+      message: `You have been knocked out by the ${mob.name}!`,
     });
   }
 }
@@ -247,7 +248,7 @@ function executeMobSpell(
         round: state.round,
         actor: 'mob',
         action: 'spell',
-        message: `You have been defeated by the ${mobName}!`,
+        message: `You have been knocked out by the ${mobName}!`,
       });
     }
   }

@@ -14,6 +14,7 @@ import {
   getPendingEncounters,
   getTurns,
   getZones,
+  getHpState,
   mine,
   repairItem,
   equip,
@@ -35,8 +36,9 @@ import { ZoneMap } from '@/components/screens/ZoneMap';
 import { Bestiary } from '@/components/screens/Bestiary';
 import { Crafting } from '@/components/screens/Crafting';
 import { Gathering } from '@/components/screens/Gathering';
+import { Rest } from '@/components/screens/Rest';
 import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
-import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
+import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer, AlertTriangle } from 'lucide-react';
 
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -175,7 +177,7 @@ const mockGatheringNodes = [
 
 */
 
-type Screen = 'home' | 'explore' | 'inventory' | 'combat' | 'profile' | 'skills' | 'equipment' | 'zones' | 'bestiary' | 'crafting' | 'gathering';
+type Screen = 'home' | 'explore' | 'inventory' | 'combat' | 'profile' | 'skills' | 'equipment' | 'zones' | 'bestiary' | 'crafting' | 'gathering' | 'rest';
 
 export default function GamePage() {
   const router = useRouter();
@@ -291,6 +293,13 @@ export default function GamePage() {
   }>>([]);
   const [bestiaryLoading, setBestiaryLoading] = useState(false);
   const [bestiaryError, setBestiaryError] = useState<string | null>(null);
+  const [hpState, setHpState] = useState<{
+    currentHp: number;
+    maxHp: number;
+    regenPerSecond: number;
+    isRecovering: boolean;
+    recoveryCost: number | null;
+  }>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -301,22 +310,21 @@ export default function GamePage() {
   useEffect(() => {
     if (isAuthenticated) {
       void loadAll();
-      const interval = setInterval(() => void loadTurns(), 10000);
+      const interval = setInterval(() => void loadTurnsAndHp(), 10000);
       return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
 
-  const loadTurns = async () => {
-    const { data } = await getTurns();
-    if (data) {
-      setTurns(data.currentTurns);
-    }
+  const loadTurnsAndHp = async () => {
+    const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
+    if (turnRes.data) setTurns(turnRes.data.currentTurns);
+    if (hpRes.data) setHpState(hpRes.data);
   };
 
   const loadAll = async () => {
     setActionError(null);
 
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, nodesRes] = await Promise.all([
+    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, nodesRes, hpRes] = await Promise.all([
       getTurns(),
       getSkills(),
       getZones(),
@@ -325,10 +333,12 @@ export default function GamePage() {
       getCraftingRecipes(),
       getPendingEncounters(),
       getGatheringNodes(),
+      getHpState(),
     ]);
 
     if (turnRes.data) setTurns(turnRes.data.currentTurns);
     if (skillsRes.data) setSkills(skillsRes.data.skills);
+    if (hpRes.data) setHpState(hpRes.data);
     if (zonesRes.data) {
       setZones(zonesRes.data.zones);
       if (!activeZoneId) {
@@ -371,7 +381,7 @@ export default function GamePage() {
   };
 
   const getActiveTab = () => {
-    if (['home', 'skills', 'zones', 'bestiary'].includes(activeScreen)) return 'home';
+    if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
     if (['combat'].includes(activeScreen)) return 'combat';
@@ -492,7 +502,7 @@ export default function GamePage() {
       }
 
       // Refresh inventory/equipment/skills after loot/durability/XP changes
-      await Promise.all([loadAll(), loadTurns()]);
+      await Promise.all([loadAll(), loadTurnsAndHp()]);
       setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
     } finally {
       setBusyAction(null);
@@ -664,6 +674,11 @@ export default function GamePage() {
               currentXP: skills.reduce((sum, s) => sum + (s.xp ?? 0), 0),
               nextLevelXP: 0,
               currentZone: currentZone?.name ?? 'Unknown',
+              currentHp: hpState.currentHp,
+              maxHp: hpState.maxHp,
+              hpRegenRate: hpState.regenPerSecond,
+              isRecovering: hpState.isRecovering,
+              recoveryCost: hpState.recoveryCost,
             }}
             skills={skills
               .map((s) => {
@@ -686,6 +701,8 @@ export default function GamePage() {
             availableTurns={turns}
             onStartExploration={handleStartExploration}
             activityLog={explorationLog}
+            isRecovering={hpState.isRecovering}
+            recoveryCost={hpState.recoveryCost}
           />
         );
       case 'inventory':
@@ -895,6 +912,8 @@ export default function GamePage() {
               rarity: rarityFromTier(r.resultTemplate.tier),
             }))}
             onCraft={handleCraft}
+            isRecovering={hpState.isRecovering}
+            recoveryCost={hpState.recoveryCost}
           />
         );
       case 'gathering':
@@ -919,11 +938,28 @@ export default function GamePage() {
             availableTurns={turns}
             gatheringLog={gatheringLog}
             onStartGathering={handleMine}
+            isRecovering={hpState.isRecovering}
+            recoveryCost={hpState.recoveryCost}
           />
         );
       case 'combat':
         return (
           <div className="space-y-4">
+            {/* Knockout Banner */}
+            {hpState.isRecovering && (
+              <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
+                  <div>
+                    <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
+                    <div className="text-sm text-[var(--rpg-text-secondary)]">
+                      You must recover before fighting. Cost: {hpState.recoveryCost?.toLocaleString()} turns
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {pendingEncounters.length > 0 ? (
               <div className="space-y-2">
                 <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Pending Encounters</h2>
@@ -937,10 +973,14 @@ export default function GamePage() {
                     </div>
                     <button
                       onClick={() => void handleStartCombat(e.encounterId)}
-                      disabled={busyAction === 'combat'}
-                      className="px-3 py-2 rounded bg-[var(--rpg-gold)] text-[var(--rpg-background)] font-semibold"
+                      disabled={hpState.isRecovering || busyAction === 'combat'}
+                      className={`px-3 py-2 rounded font-semibold ${
+                        hpState.isRecovering
+                          ? 'bg-[var(--rpg-border)] text-[var(--rpg-text-secondary)] cursor-not-allowed'
+                          : 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                      }`}
                     >
-                      Fight
+                      {hpState.isRecovering ? 'Recover First' : 'Fight'}
                     </button>
                   </div>
                 ))}
@@ -968,6 +1008,14 @@ export default function GamePage() {
               </div>
             )}
           </div>
+        );
+      case 'rest':
+        return (
+          <Rest
+            onComplete={() => setActiveScreen('home')}
+            onTurnsUpdate={(newTurns) => setTurns(newTurns)}
+            onHpUpdate={(hp) => setHpState(hp)}
+          />
         );
       case 'profile':
         return (

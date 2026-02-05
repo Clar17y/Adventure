@@ -2,6 +2,7 @@ export interface MobTemplate {
   id: string;
   name: string;
   zoneId: string;
+  level: number;
   hp: number;
   attack: number;
   defence: number;
@@ -52,6 +53,7 @@ export interface CombatResult {
   loot: LootDrop[];
   durabilityLost: DurabilityLoss[];
   turnsSpent: number;
+  playerHpRemaining: number;
 }
 
 export interface LootDrop {

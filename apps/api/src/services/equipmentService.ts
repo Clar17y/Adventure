@@ -29,7 +29,7 @@ export async function ensureEquipmentSlots(playerId: string): Promise<void> {
     select: { slot: true },
   });
 
-  const existingSlots = new Set(existing.map((e) => e.slot));
+  const existingSlots = new Set(existing.map((e: typeof existing[number]) => e.slot));
   const missing = ALL_EQUIPMENT_SLOTS.filter((slot) => !existingSlots.has(slot));
   if (missing.length === 0) return;
 

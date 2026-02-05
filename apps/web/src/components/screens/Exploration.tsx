@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
-import { Mountain, Play, Clock } from 'lucide-react';
+import { Mountain, Play, Clock, AlertTriangle } from 'lucide-react';
 import { EXPLORATION_CONSTANTS } from '@adventure/shared';
 
 interface ExplorationProps {
@@ -16,9 +16,11 @@ interface ExplorationProps {
   availableTurns: number;
   onStartExploration: (turns: number) => void;
   activityLog: Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>;
+  isRecovering?: boolean;
+  recoveryCost?: number | null;
 }
 
-export function Exploration({ currentZone, availableTurns, onStartExploration, activityLog }: ExplorationProps) {
+export function Exploration({ currentZone, availableTurns, onStartExploration, activityLog, isRecovering = false, recoveryCost }: ExplorationProps) {
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
 
   const calculateProbabilities = (turns: number) => {
@@ -36,6 +38,21 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
 
   return (
     <div className="space-y-4">
+      {/* Knockout Banner */}
+      {isRecovering && (
+        <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
+            <div>
+              <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
+              <div className="text-sm text-[var(--rpg-text-secondary)]">
+                You must recover before exploring. Cost: {recoveryCost?.toLocaleString()} turns
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Zone Header */}
       <PixelCard className="relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
@@ -142,11 +159,11 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
         size="lg"
         className="w-full"
         onClick={() => onStartExploration(turnInvestment[0])}
-        disabled={turnInvestment[0] > availableTurns}
+        disabled={isRecovering || turnInvestment[0] > availableTurns}
       >
         <div className="flex items-center justify-center gap-2">
           <Play size={20} />
-          Start Exploration
+          {isRecovering ? 'Recover First' : 'Start Exploration'}
         </div>
       </PixelButton>
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
-import { buildPlayerCombatStats, runCombat } from '@adventure/game-engine';
+import { buildPlayerCombatStats, runCombat, calculateFleeResult } from '@adventure/game-engine';
 import { COMBAT_CONSTANTS, type LootDrop, type MobTemplate, type SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -9,6 +9,7 @@ import { rollAndGrantLoot } from '../services/lootService';
 import { spendPlayerTurns } from '../services/turnBankService';
 import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
+import { getHpState, setHp, enterRecoveringState } from '../services/hpService';
 
 export const combatRouter = Router();
 
@@ -172,6 +173,15 @@ combatRouter.post('/start', async (req, res, next) => {
     const playerId = req.player!.playerId;
     const body = startSchema.parse(req.body);
 
+    // Check if player can fight
+    const hpState = await getHpState(playerId);
+    if (hpState.isRecovering) {
+      throw new AppError(400, 'Cannot fight while recovering. Spend recovery turns first.', 'IS_RECOVERING');
+    }
+    if (hpState.currentHp <= 0) {
+      throw new AppError(400, 'Cannot fight with 0 HP. Rest to recover health.', 'NO_HP');
+    }
+
     let zoneId = body.zoneId ?? null;
     let mobTemplateId = body.mobTemplateId ?? null;
     let consumedPendingEncounterId = null as null | string;
@@ -236,7 +246,7 @@ combatRouter.post('/start', async (req, res, next) => {
 
     const equipmentStats = await getEquipmentStats(playerId);
     const playerStats = buildPlayerCombatStats(
-      100,
+      hpState.currentHp,
       {
         attack: attackLevel,
         defence: defenceLevel,
@@ -254,10 +264,27 @@ combatRouter.post('/start', async (req, res, next) => {
     let loot: LootDrop[] = [];
     let xpGrant = null as null | Awaited<ReturnType<typeof grantSkillXp>>;
     const durabilityLost = await degradeEquippedDurability(playerId);
+    let fleeResult = null as null | ReturnType<typeof calculateFleeResult>;
 
     if (combatResult.outcome === 'victory') {
+      // Update HP to remaining amount after combat
+      await setHp(playerId, combatResult.playerHpRemaining);
       loot = await rollAndGrantLoot(playerId, mob.id);
       xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
+    } else if (combatResult.outcome === 'defeat') {
+      // Player lost - calculate flee outcome based on evasion vs mob level
+      fleeResult = calculateFleeResult({
+        evasionLevel: evasionLevel,
+        mobLevel: mob.level,
+        maxHp: hpState.maxHp,
+        currentGold: 0, // TODO: implement gold system
+      });
+
+      if (fleeResult.outcome === 'knockout') {
+        await enterRecoveringState(playerId, hpState.maxHp);
+      } else {
+        await setHp(playerId, fleeResult.remainingHp);
+      }
     }
 
     await prisma.playerBestiary.upsert({
@@ -317,6 +344,16 @@ combatRouter.post('/start', async (req, res, next) => {
         attackSkill,
         outcome: combatResult.outcome,
         log: combatResult.log,
+        playerHpRemaining: combatResult.playerHpRemaining,
+        fleeResult: fleeResult
+          ? {
+              outcome: fleeResult.outcome,
+              remainingHp: fleeResult.remainingHp,
+              goldLost: fleeResult.goldLost,
+              isRecovering: fleeResult.outcome === 'knockout',
+              recoveryCost: fleeResult.recoveryCost,
+            }
+          : null,
       },
       rewards: {
         xp: combatResult.xpGained,

@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns } from '../services/turnBankService';
 import { addStackableItem } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
+import { getHpState } from '../services/hpService';
 
 export const gatheringRouter = Router();
 
@@ -48,7 +49,7 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
     });
 
     res.json({
-      nodes: playerNodes.map((pn) => {
+      nodes: playerNodes.map((pn: typeof playerNodes[number]) => {
         const template = pn.resourceNode;
         return {
           id: pn.id, // PlayerResourceNode ID (what frontend uses to mine)
@@ -87,7 +88,7 @@ async function getResourceTemplateId(resourceType: string): Promise<string> {
     select: { id: true, name: true },
   });
 
-  const match = templates.find(t => toResourceTemplateKey(t.name) === resourceType);
+  const match = templates.find((t: typeof templates[number]) => toResourceTemplateKey(t.name) === resourceType);
   if (!match) {
     throw new AppError(400, `No resource item template found for resourceType=${resourceType}`, 'MISSING_TEMPLATE');
   }
@@ -111,6 +112,12 @@ gatheringRouter.post('/mine', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = mineSchema.parse(req.body);
+
+    // Check if player is recovering
+    const hpState = await getHpState(playerId);
+    if (hpState.isRecovering) {
+      throw new AppError(400, 'Cannot gather while recovering', 'IS_RECOVERING');
+    }
 
     // Find the player's discovered node
     const playerNode = await prisma.playerResourceNode.findUnique({

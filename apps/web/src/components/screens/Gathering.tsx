@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
-import { Pickaxe, Clock, MapPin } from 'lucide-react';
+import { Pickaxe, Clock, MapPin, AlertTriangle } from 'lucide-react';
 import { GATHERING_CONSTANTS } from '@adventure/shared';
 
 interface ResourceNode {
@@ -36,6 +36,8 @@ interface GatheringProps {
   availableTurns: number;
   gatheringLog: GatheringLog[];
   onStartGathering: (nodeId: string, turns: number) => void;
+  isRecovering?: boolean;
+  recoveryCost?: number | null;
 }
 
 export function Gathering({
@@ -47,6 +49,8 @@ export function Gathering({
   availableTurns,
   gatheringLog,
   onStartGathering,
+  isRecovering = false,
+  recoveryCost,
 }: GatheringProps) {
   const [selectedNode, setSelectedNode] = useState<ResourceNode | null>(nodes[0] || null);
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
@@ -86,6 +90,21 @@ export function Gathering({
 
   return (
     <div className="space-y-4">
+      {/* Knockout Banner */}
+      {isRecovering && (
+        <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
+            <div>
+              <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
+              <div className="text-sm text-[var(--rpg-text-secondary)]">
+                You must recover before gathering. Cost: {recoveryCost?.toLocaleString()} turns
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -265,11 +284,11 @@ export function Gathering({
           size="lg"
           className="w-full"
           onClick={() => onStartGathering(selectedNode.id, turnInvestment[0])}
-          disabled={turnInvestment[0] > availableTurns}
+          disabled={isRecovering || turnInvestment[0] > availableTurns}
         >
           <div className="flex items-center justify-center gap-2">
             <Pickaxe size={20} />
-            Start {skillName}
+            {isRecovering ? 'Recover First' : `Start ${skillName}`}
           </div>
         </PixelButton>
       )}

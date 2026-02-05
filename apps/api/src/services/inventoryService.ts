@@ -54,7 +54,7 @@ export async function getTotalQuantityByTemplate(
     where: { ownerId: playerId, templateId: itemTemplateId },
     select: { quantity: true },
   });
-  return items.reduce((sum, item) => sum + item.quantity, 0);
+  return items.reduce((sum: number, item: typeof items[number]) => sum + item.quantity, 0);
 }
 
 export async function consumeItemsByTemplate(

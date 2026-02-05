@@ -83,17 +83,17 @@ export function rollInitiative(speed: number): number {
  */
 export function buildPlayerCombatStats(
   baseHp: number,
-  skillLevels: { melee: number; defence: number; vitality: number; evasion: number },
+  skillLevels: { attack: number; defence: number; vitality: number; evasion: number },
   equipmentStats: { attack: number; armor: number; health: number; evasion: number }
 ): CombatantStats {
   return {
     hp: baseHp + equipmentStats.health + skillLevels.vitality * 5,
     maxHp: baseHp + equipmentStats.health + skillLevels.vitality * 5,
-    attack: skillLevels.melee + equipmentStats.attack,
+    attack: skillLevels.attack + equipmentStats.attack,
     defence: skillLevels.defence + equipmentStats.armor,
     evasion: skillLevels.evasion + equipmentStats.evasion,
-    damageMin: 1 + Math.floor(skillLevels.melee / 5),
-    damageMax: 5 + Math.floor(skillLevels.melee / 2),
+    damageMin: 1 + Math.floor(skillLevels.attack / 5),
+    damageMax: 5 + Math.floor(skillLevels.attack / 2),
     speed: Math.floor(skillLevels.evasion / 10),
   };
 }

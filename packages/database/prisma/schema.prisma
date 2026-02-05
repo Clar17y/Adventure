@@ -165,6 +165,7 @@ model MobTemplate {
   id              String @id @default(uuid())
   name            String @db.VarChar(64)
   zoneId          String @map("zone_id")
+  level           Int    @default(1)
   hp              Int
   attack          Int
   defence         Int

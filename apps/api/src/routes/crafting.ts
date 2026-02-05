@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns } from '../services/turnBankService';
 import { consumeItemsByTemplate, getTotalQuantityByTemplate } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
+import { getHpState } from '../services/hpService';
 
 export const craftingRouter = Router();
 
@@ -114,6 +115,12 @@ craftingRouter.post('/craft', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = craftSchema.parse(req.body);
+
+    // Check if player is recovering
+    const hpState = await getHpState(playerId);
+    if (hpState.isRecovering) {
+      throw new AppError(400, 'Cannot craft while recovering', 'IS_RECOVERING');
+    }
 
     const recipe = await prisma.craftingRecipe.findUnique({
       where: { id: body.recipeId },

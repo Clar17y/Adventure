@@ -272,10 +272,10 @@ combatRouter.post('/start', async (req, res, next) => {
       loot = await rollAndGrantLoot(playerId, mob.id);
       xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
     } else if (combatResult.outcome === 'defeat') {
-      // Player lost - calculate flee outcome based on evasion vs zone difficulty
+      // Player lost - calculate flee outcome based on evasion vs mob level
       fleeResult = calculateFleeResult({
         evasionLevel: evasionLevel,
-        mobLevel: zone.difficulty,
+        mobLevel: mob.level,
         maxHp: hpState.maxHp,
         currentGold: 0, // TODO: implement gold system
       });

@@ -139,6 +139,85 @@ export const CRAFTING_CONSTANTS = {
 } as const;
 
 // =============================================================================
+// HP & HEALTH
+// =============================================================================
+
+export const HP_CONSTANTS = {
+  /** Base HP for all players */
+  BASE_HP: 100,
+
+  /** Additional HP per Vitality level */
+  HP_PER_VITALITY: 5,
+
+  /** Base passive HP regeneration per second */
+  BASE_PASSIVE_REGEN: 0.4,
+
+  /** Additional passive regen per Vitality level (per second) */
+  PASSIVE_REGEN_PER_VITALITY: 0.04,
+
+  /** Base HP healed per turn when resting */
+  BASE_REST_HEAL: 2,
+
+  /** Additional HP healed per turn per Vitality level */
+  REST_HEAL_PER_VITALITY: 0.2,
+
+  /** Turns required to recover from knockout (per max HP) */
+  RECOVERY_TURNS_PER_MAX_HP: 1,
+
+  /** HP percentage restored after recovery */
+  RECOVERY_EXIT_HP_PERCENT: 0.25,
+} as const;
+
+export const FLEE_CONSTANTS = {
+  /** Base chance to flee successfully */
+  BASE_FLEE_CHANCE: 0.3,
+
+  /** Additional flee chance per Evasion level */
+  FLEE_CHANCE_PER_EVASION: 0.02,
+
+  /** Roll threshold for clean escape */
+  HIGH_SUCCESS_THRESHOLD: 0.8,
+
+  /** Roll threshold for wounded escape */
+  PARTIAL_SUCCESS_THRESHOLD: 0.4,
+
+  /** HP percentage remaining on clean escape */
+  HIGH_SUCCESS_HP_PERCENT: 0.15,
+
+  /** HP remaining on wounded escape */
+  PARTIAL_SUCCESS_HP: 1,
+
+  /** Gold loss percentage on clean escape */
+  GOLD_LOSS_MINOR: 0.05,
+
+  /** Gold loss percentage on wounded escape */
+  GOLD_LOSS_MODERATE: 0.15,
+
+  /** Gold loss percentage on knockout */
+  GOLD_LOSS_SEVERE: 0.3,
+} as const;
+
+export const POTION_CONSTANTS = {
+  /** HP restored by Minor Health Potion */
+  MINOR_HEALTH_HEAL: 50,
+
+  /** HP restored by Health Potion */
+  HEALTH_HEAL: 150,
+
+  /** HP restored by Greater Health Potion */
+  GREATER_HEALTH_HEAL: 400,
+
+  /** HP percentage restored by Minor Recovery Potion */
+  MINOR_RECOVERY_PERCENT: 0.25,
+
+  /** HP percentage restored by Recovery Potion */
+  RECOVERY_PERCENT: 0.5,
+
+  /** HP percentage restored by Greater Recovery Potion */
+  GREATER_RECOVERY_PERCENT: 1.0,
+} as const;
+
+// =============================================================================
 // ZONES
 // =============================================================================
 

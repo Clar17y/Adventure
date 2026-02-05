@@ -6,6 +6,7 @@ import {
   CombatantStats,
   MobTemplate,
   LootDrop,
+  COMBAT_XP_CONSTANTS,
 } from '@adventure/shared';
 import {
   rollD20,
@@ -18,6 +19,18 @@ import {
 } from './damageCalculator';
 
 const MAX_ROUNDS = 100;
+
+interface CombatCounters {
+  defenceEvents: number;
+  evasionEvents: number;
+}
+
+function hpSnapshot(state: CombatState): Pick<CombatLogEntry, 'playerHpAfter' | 'mobHpAfter'> {
+  return {
+    playerHpAfter: Math.max(0, state.playerHp),
+    mobHpAfter: Math.max(0, state.mobHp),
+  };
+}
 
 /**
  * Run a complete combat encounter.
@@ -48,6 +61,8 @@ export function runCombat(
     outcome: null,
   };
 
+  const counters: CombatCounters = { defenceEvents: 0, evasionEvents: 0 };
+
   // Determine turn order
   const playerInit = rollInitiative(playerStats.speed);
   const mobInit = rollInitiative(mobStats.speed);
@@ -59,6 +74,7 @@ export function runCombat(
     action: 'attack',
     roll: playerInit,
     message: `Combat begins! Initiative: Player ${playerInit}, ${mob.name} ${mobInit}`,
+    ...hpSnapshot(state),
   });
 
   // Combat loop
@@ -68,9 +84,9 @@ export function runCombat(
     if (playerGoesFirst) {
       executePlayerAttack(state, playerStats, mobStats, mob.name);
       if (state.outcome) break;
-      executeMobAttack(state, mobStats, playerStats, mob);
+      executeMobAttack(state, mobStats, playerStats, mob, counters);
     } else {
-      executeMobAttack(state, mobStats, playerStats, mob);
+      executeMobAttack(state, mobStats, playerStats, mob, counters);
       if (state.outcome) break;
       executePlayerAttack(state, playerStats, mobStats, mob.name);
     }
@@ -84,6 +100,7 @@ export function runCombat(
       actor: 'mob',
       action: 'attack',
       message: 'Combat timed out. You retreat in exhaustion.',
+      ...hpSnapshot(state),
     });
   }
 
@@ -91,11 +108,25 @@ export function runCombat(
     outcome: state.outcome,
     log: state.log,
     xpGained: state.outcome === 'victory' ? mob.xpReward : 0,
-    loot: [], // Loot is rolled separately by the service layer
-    durabilityLost: [], // Durability is handled by the service layer
-    turnsSpent: 0, // Set by the service layer
+    loot: [],
+    durabilityLost: [],
+    turnsSpent: 0,
     playerHpRemaining: Math.max(0, state.playerHp),
+    secondarySkillXp: {
+      defence: {
+        events: counters.defenceEvents,
+        xpGained: counters.defenceEvents * COMBAT_XP_CONSTANTS.DEFENCE_XP_PER_HIT_TAKEN,
+      },
+      evasion: {
+        events: counters.evasionEvents,
+        xpGained: counters.evasionEvents * COMBAT_XP_CONSTANTS.EVASION_XP_PER_DODGE,
+      },
+    },
   };
+}
+
+function computeArmorReduction(armor: number): number {
+  return armor / (armor + 100);
 }
 
 function executePlayerAttack(
@@ -113,7 +144,10 @@ function executePlayerAttack(
       actor: 'player',
       action: 'attack',
       roll: attackRoll,
+      attackModifier: playerStats.attack,
+      targetDefence: mobStats.defence,
       message: `You swing at the ${mobName} but miss!`,
+      ...hpSnapshot(state),
     });
     return;
   }
@@ -126,7 +160,10 @@ function executePlayerAttack(
       action: 'attack',
       roll: attackRoll,
       evaded: true,
+      attackModifier: playerStats.attack,
+      targetDefence: mobStats.defence,
       message: `The ${mobName} dodges your attack!`,
+      ...hpSnapshot(state),
     });
     return;
   }
@@ -135,6 +172,7 @@ function executePlayerAttack(
   const rawDamage = rollDamage(playerStats.damageMin, playerStats.damageMax);
   const crit = isCriticalHit();
   const finalDamage = calculateFinalDamage(rawDamage, mobStats.defence, crit);
+  const armorReduction = Math.floor(rawDamage * (crit ? 1.5 : 1) * computeArmorReduction(mobStats.defence));
 
   state.mobHp -= finalDamage;
 
@@ -145,7 +183,13 @@ function executePlayerAttack(
     action: 'attack',
     roll: attackRoll,
     damage: finalDamage,
+    attackModifier: playerStats.attack,
+    targetDefence: mobStats.defence,
+    rawDamage,
+    armorReduction,
+    isCritical: crit,
     message: `You strike the ${mobName} for ${finalDamage} damage!${critText}`,
+    ...hpSnapshot(state),
   });
 
   if (state.mobHp <= 0) {
@@ -155,6 +199,7 @@ function executePlayerAttack(
       actor: 'player',
       action: 'attack',
       message: `The ${mobName} falls defeated!`,
+      ...hpSnapshot(state),
     });
   }
 }
@@ -163,12 +208,13 @@ function executeMobAttack(
   state: CombatState,
   mobStats: CombatantStats,
   playerStats: CombatantStats,
-  mob: MobTemplate
+  mob: MobTemplate,
+  counters: CombatCounters
 ): void {
   // Check for spell pattern
   const spellAction = mob.spellPattern.find(s => s.round === state.round);
   if (spellAction) {
-    executeMobSpell(state, spellAction, mob.name);
+    executeMobSpell(state, spellAction, mob.name, counters);
     return;
   }
 
@@ -181,28 +227,39 @@ function executeMobAttack(
       actor: 'mob',
       action: 'attack',
       roll: attackRoll,
+      attackModifier: mobStats.attack,
+      targetDefence: playerStats.defence,
       message: `The ${mob.name} attacks but misses!`,
+      ...hpSnapshot(state),
     });
     return;
   }
 
-  // Check evasion
+  // Check evasion - player dodges mob attack
   if (doesTargetEvade(playerStats.evasion)) {
+    counters.evasionEvents++;
     state.log.push({
       round: state.round,
       actor: 'mob',
       action: 'attack',
       roll: attackRoll,
       evaded: true,
+      attackModifier: mobStats.attack,
+      targetDefence: playerStats.defence,
       message: `You dodge the ${mob.name}'s attack!`,
+      ...hpSnapshot(state),
     });
     return;
   }
+
+  // Mob hits player - defence event
+  counters.defenceEvents++;
 
   // Calculate damage
   const rawDamage = rollDamage(mobStats.damageMin, mobStats.damageMax);
   const crit = isCriticalHit();
   const finalDamage = calculateFinalDamage(rawDamage, playerStats.defence, crit);
+  const armorReduction = Math.floor(rawDamage * (crit ? 1.5 : 1) * computeArmorReduction(playerStats.defence));
 
   state.playerHp -= finalDamage;
 
@@ -213,7 +270,13 @@ function executeMobAttack(
     action: 'attack',
     roll: attackRoll,
     damage: finalDamage,
+    attackModifier: mobStats.attack,
+    targetDefence: playerStats.defence,
+    rawDamage,
+    armorReduction,
+    isCritical: crit,
     message: `The ${mob.name} hits you for ${finalDamage} damage!${critText}`,
+    ...hpSnapshot(state),
   });
 
   if (state.playerHp <= 0) {
@@ -223,6 +286,7 @@ function executeMobAttack(
       actor: 'mob',
       action: 'attack',
       message: `You have been knocked out by the ${mob.name}!`,
+      ...hpSnapshot(state),
     });
   }
 }
@@ -230,16 +294,20 @@ function executeMobAttack(
 function executeMobSpell(
   state: CombatState,
   spell: { action: string; damage?: number; effect?: string },
-  mobName: string
+  mobName: string,
+  counters: CombatCounters
 ): void {
   if (spell.damage) {
+    counters.defenceEvents++;
     state.playerHp -= spell.damage;
     state.log.push({
       round: state.round,
       actor: 'mob',
       action: 'spell',
       damage: spell.damage,
+      rawDamage: spell.damage,
       message: `The ${mobName} casts ${spell.action} for ${spell.damage} damage!`,
+      ...hpSnapshot(state),
     });
 
     if (state.playerHp <= 0) {
@@ -249,6 +317,7 @@ function executeMobSpell(
         actor: 'mob',
         action: 'spell',
         message: `You have been knocked out by the ${mobName}!`,
+        ...hpSnapshot(state),
       });
     }
   }

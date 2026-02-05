@@ -18,7 +18,7 @@ import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { rarityFromTier } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
-import { TURN_CONSTANTS } from '@adventure/shared';
+import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
 import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
 import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
 import { CombatScreen } from './screens/CombatScreen';
@@ -330,7 +330,7 @@ export default function GamePage() {
                   level: s.level,
                   currentXP: s.xp,
                   nextLevelXP: xpForLevel(s.level + 1),
-                  efficiency: Math.round(calculateEfficiency(s.dailyXpGained, s.skillType) * 100),
+                  efficiency: Math.round(calculateEfficiency(s.dailyXpGained, s.skillType as SkillType) * 100),
                   color: meta.color,
                 };
               })

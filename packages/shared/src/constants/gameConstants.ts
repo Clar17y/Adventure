@@ -39,6 +39,12 @@ export const COMBAT_CONSTANTS = {
   ENCOUNTER_TURN_COST: 50,
 } as const;
 
+export const COMBAT_XP_CONSTANTS = {
+  DEFENCE_XP_PER_HIT_TAKEN: 1,
+  EVASION_XP_PER_DODGE: 1,
+  VITALITY_XP_FROM_COMBAT: 0,
+} as const;
+
 // =============================================================================
 // SKILLS & XP
 // =============================================================================

@@ -1,6 +1,8 @@
 'use client';
 
 import { KnockoutBanner } from '@/components/KnockoutBanner';
+import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
+import { CombatRewardsSummary } from '@/components/combat/CombatRewardsSummary';
 import type { HpState, LastCombat, PendingEncounter } from '../useGameController';
 
 interface CombatScreenProps {
@@ -13,6 +15,25 @@ interface CombatScreenProps {
 }
 
 export function CombatScreen({ hpState, pendingEncounters, pendingClockMs, busyAction, lastCombat, onStartCombat }: CombatScreenProps) {
+  // Derive max HP values from the first log entry (initiative roll, before any damage)
+  const firstEntry = lastCombat?.log[0];
+  const playerMaxHp = firstEntry?.playerHpAfter;
+  const mobMaxHp = firstEntry?.mobHpAfter;
+
+  const outcomeLabel = lastCombat?.outcome === 'victory'
+    ? 'Victory'
+    : lastCombat?.outcome === 'defeat'
+      ? 'Defeat'
+      : lastCombat?.outcome === 'fled'
+        ? 'Fled'
+        : lastCombat?.outcome;
+
+  const outcomeColor = lastCombat?.outcome === 'victory'
+    ? 'text-[var(--rpg-green-light)]'
+    : lastCombat?.outcome === 'defeat'
+      ? 'text-[var(--rpg-red)]'
+      : 'text-[var(--rpg-gold)]';
+
   return (
     <div className="space-y-4">
       {/* Knockout Banner */}
@@ -56,22 +77,33 @@ export function CombatScreen({ hpState, pendingEncounters, pendingClockMs, busyA
       )}
 
       {lastCombat && (
-        <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
+        <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between">
             <div className="text-[var(--rpg-text-primary)] font-semibold">Last Combat</div>
-            <div className="text-xs text-[var(--rpg-text-secondary)]">{lastCombat.outcome}</div>
+            <div className={`text-sm font-semibold ${outcomeColor}`}>{outcomeLabel}</div>
           </div>
-          <div className="space-y-1 max-h-60 overflow-y-auto text-sm">
-            {lastCombat.log.map((l, idx) => (
-              <div key={idx} className="text-[var(--rpg-text-secondary)]">
-                <span className="text-[var(--rpg-gold)] font-mono mr-2">R{l.round}</span>
-                {l.message}
-              </div>
+
+          {/* Combat log entries */}
+          <div className="max-h-72 overflow-y-auto space-y-0.5 border-t border-[var(--rpg-border)] pt-2">
+            {lastCombat.log.map((entry, idx) => (
+              <CombatLogEntry
+                key={idx}
+                entry={entry}
+                playerMaxHp={playerMaxHp}
+                mobMaxHp={mobMaxHp}
+              />
             ))}
+          </div>
+
+          {/* Rewards summary */}
+          <div className="border-t border-[var(--rpg-border)] pt-2">
+            <CombatRewardsSummary
+              rewards={lastCombat.rewards}
+              outcome={lastCombat.outcome}
+            />
           </div>
         </div>
       )}
     </div>
   );
 }
-

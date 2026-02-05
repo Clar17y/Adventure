@@ -266,6 +266,16 @@ combatRouter.post('/start', async (req, res, next) => {
     const durabilityLost = await degradeEquippedDurability(playerId);
     let fleeResult = null as null | ReturnType<typeof calculateFleeResult>;
 
+    // Grant secondary skill XP (defence/evasion) regardless of outcome
+    const secondaryXpGrants: Array<Awaited<ReturnType<typeof grantSkillXp>>> = [];
+    const { secondarySkillXp } = combatResult;
+    if (secondarySkillXp.defence.xpGained > 0) {
+      secondaryXpGrants.push(await grantSkillXp(playerId, 'defence', secondarySkillXp.defence.xpGained));
+    }
+    if (secondarySkillXp.evasion.xpGained > 0) {
+      secondaryXpGrants.push(await grantSkillXp(playerId, 'evasion', secondarySkillXp.evasion.xpGained));
+    }
+
     if (combatResult.outcome === 'victory') {
       // Update HP to remaining amount after combat
       await setHp(playerId, combatResult.playerHpRemaining);
@@ -323,6 +333,16 @@ combatRouter.post('/start', async (req, res, next) => {
                   newDailyXpGained: xpGrant.newDailyXpGained,
                 }
               : null,
+            secondarySkillXp: {
+              defence: secondarySkillXp.defence,
+              evasion: secondarySkillXp.evasion,
+              grants: secondaryXpGrants.map((g) => ({
+                skillType: g.skillType,
+                ...g.xpResult,
+                newTotalXp: g.newTotalXp,
+                newDailyXpGained: g.newDailyXpGained,
+              })),
+            },
           },
         } as unknown as Prisma.InputJsonValue,
       },
@@ -367,6 +387,16 @@ combatRouter.post('/start', async (req, res, next) => {
               newDailyXpGained: xpGrant.newDailyXpGained,
             }
           : null,
+        secondarySkillXp: {
+          defence: secondarySkillXp.defence,
+          evasion: secondarySkillXp.evasion,
+          grants: secondaryXpGrants.map((g) => ({
+            skillType: g.skillType,
+            ...g.xpResult,
+            newTotalXp: g.newTotalXp,
+            newDailyXpGained: g.newDailyXpGained,
+          })),
+        },
       },
     });
   } catch (err) {

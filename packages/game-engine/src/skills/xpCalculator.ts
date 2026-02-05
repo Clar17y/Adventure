@@ -7,6 +7,8 @@ import {
   SkillXpResult,
 } from '@adventure/shared';
 
+const MS_PER_HOUR = 60 * 60 * 1000;
+
 /**
  * Calculate total XP required to reach a given level.
  */
@@ -71,7 +73,7 @@ export function getWindowsPerDay(): number {
 
 /**
  * Get per-window XP cap for a skill type.
- * Daily cap divided by number of windows (8 for 3-hour windows).
+ * Daily cap divided by number of windows (4 for 6-hour windows).
  */
 export function getWindowCap(skillType: SkillType): number {
   const windowsPerDay = getWindowsPerDay();
@@ -117,7 +119,8 @@ export function applyXpGain(
 }
 
 /**
- * Get the window index for a given time (0-7 for 3-hour windows).
+ * Get the window index for a given time (0-(windowsPerDay-1)).
+ * Note: window resets are rolling (based on last reset timestamp), so this is informational only.
  */
 export function getWindowIndex(date: Date): number {
   const hours = date.getHours();
@@ -125,23 +128,14 @@ export function getWindowIndex(date: Date): number {
 }
 
 /**
- * Check if window cap reset is needed (new 3-hour window).
+ * Check if window cap reset is needed (rolling window).
  */
 export function shouldResetWindowCap(lastResetDate: Date, now: Date = new Date()): boolean {
-  const lastReset = new Date(lastResetDate);
-  const current = new Date(now);
-
-  // Different day = definitely new window
-  const lastDay = lastReset.toDateString();
-  const currentDay = current.toDateString();
-  if (lastDay !== currentDay) {
-    return true;
-  }
-
-  // Same day - check if different window
-  const lastWindow = getWindowIndex(lastReset);
-  const currentWindow = getWindowIndex(current);
-  return currentWindow !== lastWindow;
+  const lastResetMs = lastResetDate.getTime();
+  const nowMs = now.getTime();
+  const elapsedMs = nowMs - lastResetMs;
+  if (elapsedMs < 0) return false;
+  return elapsedMs >= SKILL_CONSTANTS.XP_WINDOW_HOURS * MS_PER_HOUR;
 }
 
 // Keep old name as alias for backwards compatibility

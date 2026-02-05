@@ -54,15 +54,15 @@ export const SKILL_CONSTANTS = {
   MAX_LEVEL: 100,
 
   /** XP window duration in hours (efficiency resets each window) */
-  XP_WINDOW_HOURS: 3,
+  XP_WINDOW_HOURS: 6,
 
-  /** Daily XP cap for combat skills (divided by 8 windows = per-window cap) */
+  /** Daily XP cap for combat skills (divided by 4 windows = per-window cap) */
   DAILY_CAP_COMBAT: 20_000,
 
-  /** Daily XP cap for gathering skills (divided by 8 windows = per-window cap) */
+  /** Daily XP cap for gathering skills (divided by 4 windows = per-window cap) */
   DAILY_CAP_GATHERING: 30_000,
 
-  /** Daily XP cap for crafting skills (divided by 8 windows = per-window cap) */
+  /** Daily XP cap for crafting skills (divided by 4 windows = per-window cap) */
   DAILY_CAP_CRAFTING: 30_000,
 
   /** Power for diminishing returns curve: efficiency = max(0, 1 - (xp/cap)^power) */

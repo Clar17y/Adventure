@@ -28,19 +28,19 @@ export async function grantSkillXp(
   }
 
   const needsReset = shouldResetDailyCap(skill.lastXpResetAt, now);
-  const currentDailyXpGained = needsReset ? 0 : skill.dailyXpGained;
+  const currentWindowXpGained = needsReset ? 0 : skill.dailyXpGained;
 
   const currentXp = Number(skill.xp);
   const xpResult = applyXpGain(
     currentXp,
     skill.level,
-    currentDailyXpGained,
+    currentWindowXpGained,
     rawXpGain,
     skillType
   );
 
   const newTotalXp = currentXp + xpResult.xpAfterEfficiency;
-  const newDailyXpGained = currentDailyXpGained + xpResult.xpAfterEfficiency;
+  const newDailyXpGained = currentWindowXpGained + xpResult.xpAfterEfficiency;
 
   await prisma.playerSkill.update({
     where: {

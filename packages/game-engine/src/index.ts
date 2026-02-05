@@ -10,3 +10,6 @@ export * from './skills/xpCalculator';
 
 // Exploration
 export * from './exploration/probabilityModel';
+
+// HP
+export * from './hp/hpCalculator';

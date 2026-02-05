@@ -26,15 +26,20 @@ export function determineFleeOutcome(
   roll: number,
   fleeChance: number
 ): FleeOutcome {
+  // If roll >= fleeChance, you fail to escape entirely → knockout
+  if (roll >= fleeChance) {
+    return 'knockout';
+  }
+
+  // Successfully fled! Determine quality of escape
+  // Normalize roll within the success range [0, fleeChance) to [0, 1)
+  // Higher normalized roll = better escape quality
   const normalizedRoll = roll / fleeChance;
 
   if (normalizedRoll >= FLEE_CONSTANTS.HIGH_SUCCESS_THRESHOLD) {
-    return 'clean_escape';
+    return 'clean_escape'; // Top 20% of successful escapes
   }
-  if (normalizedRoll >= FLEE_CONSTANTS.PARTIAL_SUCCESS_THRESHOLD) {
-    return 'wounded_escape';
-  }
-  return 'knockout';
+  return 'wounded_escape'; // Bottom 80% of successful escapes
 }
 
 export function calculateFleeResult(

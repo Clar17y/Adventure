@@ -222,7 +222,7 @@ function executeMobAttack(
       round: state.round,
       actor: 'mob',
       action: 'attack',
-      message: `You have been defeated by the ${mob.name}!`,
+      message: `You have been knocked out by the ${mob.name}!`,
     });
   }
 }
@@ -248,7 +248,7 @@ function executeMobSpell(
         round: state.round,
         actor: 'mob',
         action: 'spell',
-        message: `You have been defeated by the ${mobName}!`,
+        message: `You have been knocked out by the ${mobName}!`,
       });
     }
   }

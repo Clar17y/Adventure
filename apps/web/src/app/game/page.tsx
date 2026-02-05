@@ -149,6 +149,7 @@ export default function GamePage() {
     craftingRecipes,
     explorationLog,
     gatheringLog,
+    craftingLog,
     pendingEncounters,
     pendingClockMs,
     lastCombat,
@@ -412,6 +413,7 @@ export default function GamePage() {
               rarity: rarityFromTier(r.resultTemplate.tier),
             }))}
             onCraft={handleCraft}
+            activityLog={craftingLog}
             isRecovering={hpState.isRecovering}
             recoveryCost={hpState.recoveryCost}
           />

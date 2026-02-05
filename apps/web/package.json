@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@adventure/game-engine": "*",
     "@adventure/shared": "*",
     "eslint": "9.39.2",
     "next": "^16.1.6",

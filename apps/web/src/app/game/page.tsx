@@ -40,37 +40,9 @@ import { Rest } from '@/components/screens/Rest';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { rarityFromTier, type Rarity } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
-import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
+import { TURN_CONSTANTS } from '@adventure/shared';
+import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
 import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
-
-function xpForLevel(level: number): number {
-  if (level <= 1) return 0;
-  return Math.floor(SKILL_CONSTANTS.XP_BASE * Math.pow(level, SKILL_CONSTANTS.XP_EXPONENT));
-}
-
-function calculateEfficiency(windowXpGained: number, skillType: string): number {
-  const skill = skillType as any;
-  const windowsPerDay = 24 / SKILL_CONSTANTS.XP_WINDOW_HOURS;
-
-  if (COMBAT_SKILLS.includes(skill)) {
-    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_COMBAT / windowsPerDay);
-    return windowXpGained >= windowCap ? 0 : 1;
-  }
-  if (GATHERING_SKILLS.includes(skill)) {
-    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_GATHERING / windowsPerDay);
-    if (windowXpGained >= windowCap) return 0;
-    const ratio = windowXpGained / windowCap;
-    return Math.max(0, 1 - Math.pow(ratio, SKILL_CONSTANTS.EFFICIENCY_DECAY_POWER));
-  }
-  if (CRAFTING_SKILLS.includes(skill)) {
-    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_CRAFTING / windowsPerDay);
-    if (windowXpGained >= windowCap) return 0;
-    const ratio = windowXpGained / windowCap;
-    return Math.max(0, 1 - Math.pow(ratio, SKILL_CONSTANTS.EFFICIENCY_DECAY_POWER));
-  }
-
-  return 1;
-}
 
 const SKILL_META: Record<string, { name: string; icon: typeof Sword; color: string }> = {
   melee: { name: 'Melee', icon: Sword, color: 'var(--rpg-red)' },

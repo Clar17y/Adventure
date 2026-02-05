@@ -140,6 +140,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }>>([]);
   const [explorationLog, setExplorationLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>>([]);
   const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
+  const [craftingLog, setCraftingLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
   const [pendingEncounters, setPendingEncounters] = useState<PendingEncounter[]>([]);
   const [pendingClockMs, setPendingClockMs] = useState(() => Date.now());
   const pendingRefreshInFlightRef = useRef(false);
@@ -467,6 +468,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
   const handleCraft = async (recipeId: string) => {
     await runAction('crafting', async () => {
+      const recipe = craftingRecipes.find((entry) => entry.id === recipeId);
       const res = await craft(recipeId, 1);
       const data = res.data;
       if (!data) {
@@ -477,22 +479,54 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setTurns(data.turns.currentTurns);
 
       const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
+      const timestamp = nowStamp();
+      const skillName = data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1);
 
-      if (data.xp?.leveledUp) {
+      if (recipe) {
+        const materialsUsed = recipe.materials
+          .map((material) => {
+            const meta = recipe.materialTemplates.find((template) => template.id === material.templateId);
+            const consumed = material.quantity * data.crafted.quantity;
+            return `${meta?.name ?? 'Unknown'} x${consumed}`;
+          })
+          .join(', ');
+
         newLogs.push({
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `🎉 ${data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1)} leveled up to ${data.xp.newLevel}!`,
+          timestamp,
+          type: 'info',
+          message: `Used materials: ${materialsUsed}.`,
         });
       }
 
       newLogs.push({
-        timestamp: nowStamp(),
-        type: 'info',
-        message: `Crafted x${data.crafted.quantity}.`,
+        timestamp,
+        type: 'success',
+        message: `Crafted ${recipe?.resultTemplate.name ?? 'item'} x${data.crafted.quantity}.`,
       });
 
-      setGatheringLog((prev) => [...newLogs, ...prev]);
+      newLogs.push({
+        timestamp,
+        type: 'success',
+        message: `Gained ${data.xp.xpAfterEfficiency.toLocaleString()} ${skillName} XP.`,
+      });
+
+      if (data.xp?.leveledUp) {
+        newLogs.push({
+          timestamp,
+          type: 'success',
+          message: `${skillName} leveled up to ${data.xp.newLevel}!`,
+        });
+      }
+
+      if (data.xp?.atDailyCap) {
+        newLogs.push({
+          timestamp,
+          type: 'info',
+          message: `${skillName} has reached the daily XP cap.`,
+        });
+      }
+
+      setCraftingLog((prev) => [...newLogs, ...prev]);
       await loadAll();
     });
   };
@@ -582,6 +616,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     craftingRecipes,
     explorationLog,
     gatheringLog,
+    craftingLog,
     pendingEncounters,
     pendingClockMs,
     lastCombat,
@@ -608,3 +643,4 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleUnequipSlot,
   };
 }
+

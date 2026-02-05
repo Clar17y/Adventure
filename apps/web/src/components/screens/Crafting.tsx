@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
-import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle } from 'lucide-react';
+import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 
 interface Material {
@@ -28,17 +28,36 @@ interface Recipe {
   rarity: Rarity;
 }
 
+interface CraftingLogEntry {
+  timestamp: string;
+  message: string;
+  type: 'info' | 'success';
+}
+
 interface CraftingProps {
   skillName: string;
   skillLevel: number;
   recipes: Recipe[];
   onCraft: (recipeId: string) => void;
+  activityLog: CraftingLogEntry[];
   isRecovering?: boolean;
   recoveryCost?: number | null;
 }
 
-export function Crafting({ skillName, skillLevel, recipes, onCraft, isRecovering = false, recoveryCost }: CraftingProps) {
-  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog, isRecovering = false, recoveryCost }: CraftingProps) {
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (recipes.length === 0) {
+      setSelectedRecipeId(null);
+      return;
+    }
+    if (!selectedRecipeId || !recipes.some((recipe) => recipe.id === selectedRecipeId)) {
+      setSelectedRecipeId(recipes[0].id);
+    }
+  }, [recipes, selectedRecipeId]);
+
+  const selectedRecipe = selectedRecipeId ? recipes.find((recipe) => recipe.id === selectedRecipeId) ?? null : null;
 
   const canCraft = (recipe: Recipe) => {
     if (recipe.requiredLevel > skillLevel) return false;
@@ -68,14 +87,14 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, isRecovering
         <h3 className="font-semibold text-[var(--rpg-text-primary)] text-sm">Recipes</h3>
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {recipes.map((recipe) => {
-            const isSelected = selectedRecipe?.id === recipe.id;
+            const isSelected = selectedRecipeId === recipe.id;
             const craftable = canCraft(recipe);
             const levelLocked = recipe.requiredLevel > skillLevel;
 
             return (
               <button
                 key={recipe.id}
-                onClick={() => setSelectedRecipe(recipe)}
+                onClick={() => setSelectedRecipeId(recipe.id)}
                 disabled={levelLocked}
                 className={`w-full text-left transition-all ${levelLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -228,6 +247,29 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, isRecovering
           </PixelButton>
         </PixelCard>
       )}
+
+      <PixelCard>
+        <h3 className="font-semibold text-[var(--rpg-text-primary)] mb-3">Recent Activity</h3>
+        <div className="space-y-2 max-h-48 overflow-y-auto">
+          {activityLog.length === 0 ? (
+            <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">No recent activity</div>
+          ) : (
+            activityLog.map((entry, index) => {
+              const typeColors = {
+                info: 'text-[var(--rpg-text-secondary)]',
+                success: 'text-[var(--rpg-green-light)]',
+              };
+              return (
+                <div key={index} className="flex gap-2 text-sm">
+                  <Clock size={14} className="text-[var(--rpg-text-secondary)] flex-shrink-0 mt-0.5" />
+                  <span className="text-[var(--rpg-text-secondary)] flex-shrink-0 font-mono">{entry.timestamp}</span>
+                  <span className={typeColors[entry.type]}>{entry.message}</span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </PixelCard>
     </div>
   );
 }

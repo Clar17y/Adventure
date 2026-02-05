@@ -1,29 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  craft,
-  getCraftingRecipes,
-  getBestiary,
-  getEquipment,
-  getGatheringNodes,
-  getInventory,
-  getSkills,
-  getPendingEncounters,
-  getTurns,
-  getZones,
-  getHpState,
-  mine,
-  repairItem,
-  equip,
-  unequip,
-  abandonPendingEncounters,
-  startCombatFromPendingEncounter,
-  startExploration,
-  destroyInventoryItem,
-} from '@/lib/api';
 import { itemImageSrc, monsterImageSrc, resourceImageSrc, skillIconSrc, zoneImageSrc } from '@/lib/assets';
 import { AppShell } from '@/components/AppShell';
 import { BottomNav } from '@/components/BottomNav';
@@ -37,47 +16,13 @@ import { Bestiary } from '@/components/screens/Bestiary';
 import { Crafting } from '@/components/screens/Crafting';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
-import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
-import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer, AlertTriangle } from 'lucide-react';
-
-type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-
-function rarityFromTier(tier: number): Rarity {
-  if (tier >= 5) return 'legendary';
-  if (tier === 4) return 'epic';
-  if (tier === 3) return 'rare';
-  if (tier === 2) return 'uncommon';
-  return 'common';
-}
-
-function xpForLevel(level: number): number {
-  if (level <= 1) return 0;
-  return Math.floor(SKILL_CONSTANTS.XP_BASE * Math.pow(level, SKILL_CONSTANTS.XP_EXPONENT));
-}
-
-function calculateEfficiency(windowXpGained: number, skillType: string): number {
-  const skill = skillType as any;
-  const windowsPerDay = 24 / SKILL_CONSTANTS.XP_WINDOW_HOURS;
-
-  if (COMBAT_SKILLS.includes(skill)) {
-    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_COMBAT / windowsPerDay);
-    return windowXpGained >= windowCap ? 0 : 1;
-  }
-  if (GATHERING_SKILLS.includes(skill)) {
-    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_GATHERING / windowsPerDay);
-    if (windowXpGained >= windowCap) return 0;
-    const ratio = windowXpGained / windowCap;
-    return Math.max(0, 1 - Math.pow(ratio, SKILL_CONSTANTS.EFFICIENCY_DECAY_POWER));
-  }
-  if (CRAFTING_SKILLS.includes(skill)) {
-    const windowCap = Math.floor(SKILL_CONSTANTS.DAILY_CAP_CRAFTING / windowsPerDay);
-    if (windowXpGained >= windowCap) return 0;
-    const ratio = windowXpGained / windowCap;
-    return Math.max(0, 1 - Math.pow(ratio, SKILL_CONSTANTS.EFFICIENCY_DECAY_POWER));
-  }
-
-  return 1;
-}
+import { rarityFromTier } from '@/lib/rarity';
+import { titleCaseFromSnake } from '@/lib/format';
+import { TURN_CONSTANTS } from '@adventure/shared';
+import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
+import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
+import { CombatScreen } from './screens/CombatScreen';
+import { useGameController, type Screen } from './useGameController';
 
 const SKILL_META: Record<string, { name: string; icon: typeof Sword; color: string }> = {
   melee: { name: 'Melee', icon: Sword, color: 'var(--rpg-red)' },
@@ -177,131 +122,9 @@ const mockGatheringNodes = [
 
 */
 
-type Screen = 'home' | 'explore' | 'inventory' | 'combat' | 'profile' | 'skills' | 'equipment' | 'zones' | 'bestiary' | 'crafting' | 'gathering' | 'rest';
-
 export default function GamePage() {
   const router = useRouter();
   const { player, isLoading, isAuthenticated, logout } = useAuth();
-  const [activeScreen, setActiveScreen] = useState<Screen>('home');
-  const [turns, setTurns] = useState(0);
-  const [zones, setZones] = useState<Array<{
-    id: string;
-    name: string;
-    description: string | null;
-    difficulty: number;
-    travelCost: number;
-    isStarter: boolean;
-    discovered: boolean;
-  }>>([]);
-  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
-  const [skills, setSkills] = useState<Array<{ skillType: string; level: number; xp: number; dailyXpGained: number }>>([]);
-  const [inventory, setInventory] = useState<Array<{
-    id: string;
-    quantity: number;
-    currentDurability: number | null;
-    maxDurability: number | null;
-    equippedSlot: string | null;
-    template: {
-      id: string;
-      name: string;
-      itemType: string;
-      slot: string | null;
-      tier: number;
-      baseStats: Record<string, unknown>;
-      requiredSkill?: string | null;
-      requiredLevel?: number;
-      maxDurability?: number;
-      stackable?: boolean;
-    };
-  }>>([]);
-  const [equipment, setEquipment] = useState<Array<{
-    slot: string;
-    itemId: string | null;
-    item: null | {
-      id: string;
-      currentDurability: number | null;
-      maxDurability: number | null;
-      template: {
-        id: string;
-        name: string;
-        itemType: string;
-        slot: string | null;
-        tier: number;
-        baseStats: Record<string, unknown>;
-        requiredSkill?: string | null;
-        requiredLevel?: number;
-        maxDurability?: number;
-        stackable?: boolean;
-      };
-    };
-  }>>([]);
-  const [gatheringNodes, setGatheringNodes] = useState<Array<{
-    id: string;
-    templateId: string;
-    zoneId: string;
-    zoneName: string;
-    resourceType: string;
-    skillRequired: string;
-    levelRequired: number;
-    baseYield: number;
-    remainingCapacity: number;
-    maxCapacity: number;
-    sizeName: string;
-    discoveredAt: string;
-  }>>([]);
-  const [craftingRecipes, setCraftingRecipes] = useState<Array<{
-    id: string;
-    skillType: string;
-    requiredLevel: number;
-    resultTemplate: { id: string; name: string; itemType: string; slot: string | null; tier: number; baseStats: Record<string, unknown>; stackable: boolean; maxDurability: number; requiredSkill: string | null; requiredLevel: number };
-    turnCost: number;
-    materials: Array<{ templateId: string; quantity: number }>;
-    materialTemplates: Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
-    xpReward: number;
-  }>>([]);
-  const [explorationLog, setExplorationLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>>([]);
-  const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
-  const [pendingEncounters, setPendingEncounters] = useState<Array<{
-    encounterId: string;
-    zoneId: string;
-    zoneName: string;
-    mobTemplateId: string;
-    mobName: string;
-    turnOccurred: number;
-    createdAt: string;
-    expiresAt: string;
-  }>>([]);
-  const [pendingClockMs, setPendingClockMs] = useState(() => Date.now());
-  const pendingRefreshInFlightRef = useRef(false);
-  const [lastCombat, setLastCombat] = useState<null | { outcome: string; log: Array<{ round: number; actor: string; message: string }>; rewards: { xp: number; loot: Array<{ itemTemplateId: string; quantity: number }> } }>(null);
-  const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [bestiaryMobs, setBestiaryMobs] = useState<Array<{
-    id: string;
-    name: string;
-    level: number;
-    isDiscovered: boolean;
-    killCount: number;
-    stats: { hp: number; attack: number; defence: number };
-    zones: string[];
-    description: string;
-    drops: Array<{
-      item: { id: string; name: string; itemType: string; tier: number };
-      rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-      dropRate: number;
-      minQuantity: number;
-      maxQuantity: number;
-    }>;
-  }>>([]);
-  const [bestiaryLoading, setBestiaryLoading] = useState(false);
-  const [bestiaryError, setBestiaryError] = useState<string | null>(null);
-  const [hpState, setHpState] = useState<{
-    currentHp: number;
-    maxHp: number;
-    regenPerSecond: number;
-    isRecovering: boolean;
-    recoveryCost: number | null;
-  }>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -309,140 +132,44 @@ export default function GamePage() {
     }
   }, [isLoading, isAuthenticated, router]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      void loadAll();
-      const interval = setInterval(() => void loadTurnsAndHp(), 10000);
-      return () => clearInterval(interval);
-    }
-  }, [isAuthenticated]);
-
-  const refreshPendingEncounters = useCallback(async () => {
-    if (!isAuthenticated) return;
-    if (pendingRefreshInFlightRef.current) return;
-    pendingRefreshInFlightRef.current = true;
-    try {
-      const res = await getPendingEncounters();
-      if (res.data) setPendingEncounters(res.data.pendingEncounters);
-    } finally {
-      pendingRefreshInFlightRef.current = false;
-    }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (activeScreen !== 'combat') return;
-    void refreshPendingEncounters();
-  }, [isAuthenticated, activeScreen, refreshPendingEncounters]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (activeScreen !== 'combat') return;
-    if (pendingEncounters.length === 0) return;
-
-    const tick = () => {
-      const now = Date.now();
-      setPendingClockMs(now);
-      setPendingEncounters((prev) => {
-        const next = prev.filter((e) => new Date(e.expiresAt).getTime() > now);
-        return next.length === prev.length ? prev : next;
-      });
-    };
-
-    tick();
-    const interval = setInterval(tick, 15000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated, activeScreen, pendingEncounters.length]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (activeScreen !== 'combat') return;
-    if (pendingEncounters.length === 0) return;
-
-    let nextExpiryMs = Number.POSITIVE_INFINITY;
-    for (const e of pendingEncounters) {
-      const ms = new Date(e.expiresAt).getTime();
-      if (Number.isFinite(ms) && ms < nextExpiryMs) nextExpiryMs = ms;
-    }
-    if (!Number.isFinite(nextExpiryMs)) return;
-
-    const delayMs = Math.max(0, nextExpiryMs - Date.now() + 250);
-    const timeout = setTimeout(() => void refreshPendingEncounters(), delayMs);
-    return () => clearTimeout(timeout);
-  }, [isAuthenticated, activeScreen, pendingEncounters, refreshPendingEncounters]);
-
-  const loadTurnsAndHp = async () => {
-    const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
-    if (turnRes.data) setTurns(turnRes.data.currentTurns);
-    if (hpRes.data) setHpState(hpRes.data);
-  };
-
-  const loadAll = async () => {
-    setActionError(null);
-
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, nodesRes, hpRes] = await Promise.all([
-      getTurns(),
-      getSkills(),
-      getZones(),
-      getInventory(),
-      getEquipment(),
-      getCraftingRecipes(),
-      getPendingEncounters(),
-      getGatheringNodes(),
-      getHpState(),
-    ]);
-
-    if (turnRes.data) setTurns(turnRes.data.currentTurns);
-    if (skillsRes.data) setSkills(skillsRes.data.skills);
-    if (hpRes.data) setHpState(hpRes.data);
-    if (zonesRes.data) {
-      setZones(zonesRes.data.zones);
-      if (!activeZoneId) {
-        const first = zonesRes.data.zones.find(z => z.discovered) ?? zonesRes.data.zones.find(z => z.isStarter) ?? zonesRes.data.zones[0];
-        if (first) setActiveZoneId(first.id);
-      }
-    }
-    if (invRes.data) setInventory(invRes.data.items);
-    if (equipRes.data) setEquipment(equipRes.data.equipment.map(e => ({ slot: e.slot, itemId: e.itemId, item: e.item ? { id: e.item.id, currentDurability: e.item.currentDurability, maxDurability: e.item.maxDurability, template: e.item.template } : null })));
-    if (recipesRes.data) setCraftingRecipes(recipesRes.data.recipes);
-    if (nodesRes.data) setGatheringNodes(nodesRes.data.nodes);
-    if (pendingRes.data) setPendingEncounters(pendingRes.data.pendingEncounters);
-  };
-
-  const loadBestiary = async () => {
-    setBestiaryError(null);
-    setBestiaryLoading(true);
-    try {
-      const { data, error } = await getBestiary();
-      if (data) setBestiaryMobs(data.mobs);
-      else setBestiaryError(error?.message ?? 'Failed to load bestiary');
-    } finally {
-      setBestiaryLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isAuthenticated && activeScreen === 'bestiary') {
-      void loadBestiary();
-    }
-  }, [isAuthenticated, activeScreen]);
-
-  const loadGatheringNodes = async () => {
-    const { data } = await getGatheringNodes(); // Load all player's discovered nodes
-    if (data) setGatheringNodes(data.nodes);
-  };
-
-  const handleNavigate = (screen: string) => {
-    setActiveScreen(screen as Screen);
-  };
-
-  const getActiveTab = () => {
-    if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
-    if (['explore', 'gathering', 'crafting'].includes(activeScreen)) return 'explore';
-    if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
-    if (['combat'].includes(activeScreen)) return 'combat';
-    return 'profile';
-  };
+  const {
+    activeScreen,
+    setActiveScreen,
+    handleNavigate,
+    getActiveTab,
+    handleTravelToZone,
+    turns,
+    setTurns,
+    zones,
+    activeZoneId,
+    skills,
+    inventory,
+    equipment,
+    gatheringNodes,
+    craftingRecipes,
+    explorationLog,
+    gatheringLog,
+    pendingEncounters,
+    pendingClockMs,
+    lastCombat,
+    busyAction,
+    actionError,
+    bestiaryMobs,
+    bestiaryLoading,
+    bestiaryError,
+    hpState,
+    setHpState,
+    currentZone,
+    ownedByTemplateId,
+    handleStartExploration,
+    handleStartCombat,
+    handleMine,
+    handleCraft,
+    handleDestroyItem,
+    handleRepairItem,
+    handleEquipItem,
+    handleUnequipSlot,
+  } = useGameController({ isAuthenticated });
 
   if (isLoading) {
     return (
@@ -451,271 +178,6 @@ export default function GamePage() {
       </div>
     );
   }
-
-  const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const currentZone =
-    zones.find((z) => z.id === activeZoneId) ??
-    zones.find((z) => z.discovered) ??
-    zones.find((z) => z.isStarter) ??
-    null;
-
-  const ownedByTemplateId = (() => {
-    const map = new Map<string, number>();
-    for (const item of inventory) {
-      map.set(item.template.id, (map.get(item.template.id) ?? 0) + item.quantity);
-    }
-    return map;
-  })();
-
-  const handleStartExploration = async (turnSpend: number) => {
-    if (!currentZone) return;
-    if (busyAction) return;
-
-    setBusyAction('exploration');
-    setActionError(null);
-    try {
-      const res = await startExploration(currentZone.id, turnSpend);
-      const data = res.data;
-      if (!data) {
-        setActionError(res.error?.message ?? 'Exploration failed');
-        return;
-      }
-
-      setTurns(data.turns.currentTurns);
-      setExplorationLog((prev) => [
-        { timestamp: nowStamp(), type: 'info', message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}.` },
-        ...prev,
-      ]);
-
-      if (data.mobEncounters.length > 0) {
-        setPendingEncounters((prev) => {
-          const existing = new Set(prev.map((p) => p.encounterId));
-          const fresh = data.mobEncounters
-            .filter((m) => !existing.has(m.encounterId))
-            .map((m) => ({
-              encounterId: m.encounterId,
-              zoneId: m.zoneId,
-              zoneName: m.zoneName,
-              mobTemplateId: m.mobTemplateId,
-              mobName: m.mobName,
-              turnOccurred: m.turnOccurred,
-              createdAt: m.createdAt,
-              expiresAt: m.expiresAt,
-            }));
-          return [...fresh, ...prev];
-        });
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'success', message: `Encountered ${data.mobEncounters.length} mob(s). Check Combat tab.` },
-          ...prev,
-        ]);
-      }
-
-      if (data.resourceDiscoveries.length > 0) {
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'success', message: `Found ${data.resourceDiscoveries.length} resource node(s).` },
-          ...prev,
-        ]);
-        // Refresh gathering nodes so new discoveries appear immediately
-        await loadGatheringNodes();
-      }
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleStartCombat = async (pendingEncounterId: string) => {
-    if (busyAction) return;
-
-    setBusyAction('combat');
-    setActionError(null);
-    try {
-      const res = await startCombatFromPendingEncounter(pendingEncounterId, 'melee');
-      const data = res.data;
-      if (!data) {
-        if (res.error?.code === 'ENCOUNTER_EXPIRED' || res.error?.code === 'NOT_FOUND') {
-          setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
-        }
-        setActionError(res.error?.message ?? 'Combat failed');
-        return;
-      }
-
-      setTurns(data.turns.currentTurns);
-      setLastCombat({
-        outcome: data.combat.outcome,
-        log: data.combat.log.map((e) => ({ round: e.round, actor: e.actor, message: e.message })),
-        rewards: { xp: data.rewards.xp, loot: data.rewards.loot },
-      });
-
-      // Level up notification in exploration log
-      const skillXp = data.rewards?.skillXp;
-      if (skillXp?.leveledUp) {
-        const skillName = skillXp.skillType.charAt(0).toUpperCase() + skillXp.skillType.slice(1);
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'success', message: `🎉 ${skillName} leveled up to ${skillXp.newLevel}!` },
-          ...prev,
-        ]);
-      }
-
-      // Refresh inventory/equipment/skills after loot/durability/XP changes
-      await Promise.all([loadAll(), loadTurnsAndHp()]);
-      setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleMine = async (playerNodeId: string, turnSpend: number) => {
-    if (busyAction) return;
-    if (!activeZoneId) return;
-    setBusyAction('mining');
-    setActionError(null);
-    try {
-      const res = await mine(playerNodeId, turnSpend, activeZoneId);
-      const data = res.data;
-      if (!data) {
-        setActionError(res.error?.message ?? 'Mining failed');
-        return;
-      }
-
-      setTurns(data.turns.currentTurns);
-
-      const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
-
-      // Level up notification first (it's a big deal!)
-      if (data.xp?.leveledUp) {
-        newLogs.push({
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `🎉 Mining leveled up to ${data.xp.newLevel}!`,
-        });
-      }
-
-      // Node depletion notification
-      if (data.node.nodeDepleted) {
-        newLogs.push({
-          timestamp: nowStamp(),
-          type: 'info',
-          message: `Vein depleted! Mined ${data.results.totalYield} resource(s).`,
-        });
-      } else {
-        newLogs.push({
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `Mined ${data.results.totalYield} resource(s). ${data.node.remainingCapacity} remaining.`,
-        });
-      }
-
-      setGatheringLog((prev) => [...newLogs, ...prev]);
-      await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleCraft = async (recipeId: string) => {
-    if (busyAction) return;
-    setBusyAction('crafting');
-    setActionError(null);
-    try {
-      const res = await craft(recipeId, 1);
-      const data = res.data;
-      if (!data) {
-        setActionError(res.error?.message ?? 'Crafting failed');
-        return;
-      }
-
-      setTurns(data.turns.currentTurns);
-
-      const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
-
-      // Level up notification first
-      if (data.xp?.leveledUp) {
-        newLogs.push({
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `🎉 ${data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1)} leveled up to ${data.xp.newLevel}!`,
-        });
-      }
-
-      newLogs.push({
-        timestamp: nowStamp(),
-        type: 'info',
-        message: `Crafted x${data.crafted.quantity}.`,
-      });
-
-      setGatheringLog((prev) => [...newLogs, ...prev]);
-      await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleDestroyItem = async (itemId: string) => {
-    if (busyAction) return;
-    setBusyAction('destroy');
-    setActionError(null);
-    try {
-      const res = await destroyInventoryItem(itemId);
-      if (!res.data) {
-        setActionError(res.error?.message ?? 'Destroy failed');
-        return;
-      }
-      await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleRepairItem = async (itemId: string) => {
-    if (busyAction) return;
-    setBusyAction('repair');
-    setActionError(null);
-    try {
-      const res = await repairItem(itemId);
-      const data = res.data;
-      if (!data) {
-        setActionError(res.error?.message ?? 'Repair failed');
-        return;
-      }
-      if (data.turns) setTurns(data.turns.currentTurns);
-      await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleEquipItem = async (itemId: string, slot: string) => {
-    if (busyAction) return;
-    setBusyAction('equip');
-    setActionError(null);
-    try {
-      const res = await equip(itemId, slot);
-      if (!res.data) {
-        setActionError(res.error?.message ?? 'Equip failed');
-        return;
-      }
-      await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleUnequipSlot = async (slot: string) => {
-    if (busyAction) return;
-    setBusyAction('unequip');
-    setActionError(null);
-    try {
-      const res = await unequip(slot);
-      if (!res.data) {
-        setActionError(res.error?.message ?? 'Unequip failed');
-        return;
-      }
-      await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
-  };
 
   const renderScreen = () => {
     switch (activeScreen) {
@@ -795,7 +257,7 @@ export default function GamePage() {
         return (
           <Equipment
             slots={equipment.map((e) => {
-              const label = e.slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+              const label = titleCaseFromSnake(e.slot);
               const template = e.item?.template;
               const templateMax = template?.maxDurability ?? 0;
               const max = template ? (e.item?.maxDurability ?? templateMax) : 0;
@@ -888,25 +350,7 @@ export default function GamePage() {
               isCurrent: z.id === activeZoneId,
               imageSrc: z.discovered && z.name !== '???' ? zoneImageSrc(z.name) : undefined,
             }))}
-            onTravel={async (id) => {
-              const leavingZoneId = activeZoneId;
-              const leavingCount = leavingZoneId
-                ? pendingEncounters.filter((p) => p.zoneId === leavingZoneId).length
-                : 0;
-
-              if (leavingZoneId && leavingCount > 0) {
-                const ok = window.confirm(
-                  `You have ${leavingCount} pending encounter(s) in this zone. Traveling will abandon them. Continue?`
-                );
-                if (!ok) return;
-
-                await abandonPendingEncounters(leavingZoneId);
-                setPendingEncounters((prev) => prev.filter((p) => p.zoneId !== leavingZoneId));
-              }
-
-              setActiveZoneId(id);
-              setActiveScreen('explore');
-            }}
+            onTravel={handleTravelToZone}
           />
         );
       case 'bestiary':
@@ -980,7 +424,7 @@ export default function GamePage() {
             efficiency={Math.round(calculateEfficiency(skills.find((s) => s.skillType === 'mining')?.dailyXpGained ?? 0, 'mining') * 100)}
             nodes={gatheringNodes.map((n) => ({
               id: n.id,
-              name: n.resourceType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+              name: titleCaseFromSnake(n.resourceType),
               imageSrc: resourceImageSrc(n.resourceType),
               levelRequired: n.levelRequired,
               baseYield: n.baseYield,
@@ -1000,70 +444,14 @@ export default function GamePage() {
         );
       case 'combat':
         return (
-          <div className="space-y-4">
-            {/* Knockout Banner */}
-            {hpState.isRecovering && (
-              <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
-                  <div>
-                    <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
-                    <div className="text-sm text-[var(--rpg-text-secondary)]">
-                      You must recover before fighting. Cost: {hpState.recoveryCost?.toLocaleString()} turns
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {pendingEncounters.length > 0 ? (
-              <div className="space-y-2">
-                <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Pending Encounters</h2>
-                {pendingEncounters.map((e) => (
-                  <div key={e.encounterId} className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-[var(--rpg-text-primary)] font-semibold">{e.mobName}</div>
-                      <div className="text-xs text-[var(--rpg-text-secondary)]">
-                        Zone: {e.zoneName} • Found {Math.max(0, Math.ceil((pendingClockMs - new Date(e.createdAt).getTime()) / 60000))}m ago • Expires in {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - pendingClockMs) / 60000))}m
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => void handleStartCombat(e.encounterId)}
-                      disabled={hpState.isRecovering || busyAction === 'combat'}
-                      className={`px-3 py-2 rounded font-semibold ${
-                        hpState.isRecovering
-                          ? 'bg-[var(--rpg-border)] text-[var(--rpg-text-secondary)] cursor-not-allowed'
-                          : 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
-                      }`}
-                    >
-                      {hpState.isRecovering ? 'Recover First' : 'Fight'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-[var(--rpg-text-secondary)]">No pending encounters. Explore to find mobs.</p>
-              </div>
-            )}
-
-            {lastCombat && (
-              <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-[var(--rpg-text-primary)] font-semibold">Last Combat</div>
-                  <div className="text-xs text-[var(--rpg-text-secondary)]">{lastCombat.outcome}</div>
-                </div>
-                <div className="space-y-1 max-h-60 overflow-y-auto text-sm">
-                  {lastCombat.log.map((l, idx) => (
-                    <div key={idx} className="text-[var(--rpg-text-secondary)]">
-                      <span className="text-[var(--rpg-gold)] font-mono mr-2">R{l.round}</span>
-                      {l.message}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <CombatScreen
+            hpState={hpState}
+            pendingEncounters={pendingEncounters}
+            pendingClockMs={pendingClockMs}
+            busyAction={busyAction}
+            lastCombat={lastCombat}
+            onStartCombat={handleStartCombat}
+          />
         );
       case 'rest':
         return (

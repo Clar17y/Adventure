@@ -28,6 +28,11 @@ const startSchema = z.object({
   message: 'pendingEncounterId or zoneId is required',
 });
 
+function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
+  if (value === 'melee' || value === 'ranged' || value === 'magic') return value;
+  return null;
+}
+
 function pickWeighted<T extends { encounterWeight: number }>(items: T[]): T | null {
   const totalWeight = items.reduce((sum, item) => sum + item.encounterWeight, 0);
   if (totalWeight <= 0) return null;
@@ -71,6 +76,16 @@ async function getEquipmentStats(playerId: string): Promise<{
   }
 
   return { attack, armor, health, evasion };
+}
+
+async function getMainHandAttackSkill(playerId: string): Promise<AttackSkill | null> {
+  const mainHand = await prisma.playerEquipment.findUnique({
+    where: { playerId_slot: { playerId, slot: 'main_hand' } },
+    include: { item: { include: { template: true } } },
+  });
+
+  const requiredSkill = mainHand?.item?.template?.requiredSkill as SkillType | null | undefined;
+  return attackSkillFromRequiredSkill(requiredSkill);
 }
 
 async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
@@ -209,7 +224,9 @@ combatRouter.post('/start', async (req, res, next) => {
 
     const turnSpend = await spendPlayerTurns(playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
 
-    const attackSkill: AttackSkill = body.attackSkill ?? 'melee';
+    const requestedAttackSkill: AttackSkill | null = body.attackSkill ?? null;
+    const mainHandAttackSkill = await getMainHandAttackSkill(playerId);
+    const attackSkill: AttackSkill = mainHandAttackSkill ?? requestedAttackSkill ?? 'melee';
     const [attackLevel, defenceLevel, vitalityLevel, evasionLevel] = await Promise.all([
       getSkillLevel(playerId, attackSkill),
       getSkillLevel(playerId, 'defence'),
@@ -221,7 +238,7 @@ combatRouter.post('/start', async (req, res, next) => {
     const playerStats = buildPlayerCombatStats(
       100,
       {
-        melee: attackLevel,
+        attack: attackLevel,
         defence: defenceLevel,
         vitality: vitalityLevel,
         evasion: evasionLevel,
@@ -264,6 +281,7 @@ combatRouter.post('/start', async (req, res, next) => {
           mobTemplateId: mob.id,
           mobName: mob.name,
           pendingEncounterId: consumedPendingEncounterId,
+          attackSkill,
           outcome: combatResult.outcome,
           log: combatResult.log,
           rewards: {
@@ -296,6 +314,7 @@ combatRouter.post('/start', async (req, res, next) => {
         zoneId,
         mobTemplateId: mob.id,
         pendingEncounterId: consumedPendingEncounterId,
+        attackSkill,
         outcome: combatResult.outcome,
         log: combatResult.log,
       },

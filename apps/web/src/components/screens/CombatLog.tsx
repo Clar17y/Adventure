@@ -4,6 +4,7 @@ import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
 import { Skull, Trophy, Coins, Sparkles } from 'lucide-react';
+import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 
 interface CombatLogProps {
   enemy: {
@@ -137,18 +138,12 @@ export function CombatLog({ enemy, player, combatLog, status, rewards, onContinu
                       <div className="text-xs text-[var(--rpg-text-secondary)] mb-2">Items Dropped:</div>
                       <div className="flex gap-2 justify-center flex-wrap">
                         {rewards.items.map((item, idx) => {
-                          const rarityColors: Record<string, string> = {
-                            common: '#5a5a6a',
-                            uncommon: '#6aaa5a',
-                            rare: '#5aaad4',
-                            epic: '#7a4a9a',
-                            legendary: '#d4a84b',
-                          };
+                          const borderColor = RARITY_COLORS[(item.rarity as Rarity) ?? 'common'] ?? RARITY_COLORS.common;
                           return (
                             <div
                               key={idx}
                               className="w-14 h-14 bg-[var(--rpg-surface)] border-2 rounded-lg flex items-center justify-center text-2xl"
-                              style={{ borderColor: rarityColors[item.rarity] || '#5a5a6a' }}
+                              style={{ borderColor }}
                               title={item.name}
                             >
                               {item.icon}

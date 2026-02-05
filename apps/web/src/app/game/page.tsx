@@ -38,18 +38,9 @@ import { Crafting } from '@/components/screens/Crafting';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
+import { rarityFromTier, type Rarity } from '@/lib/rarity';
 import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
 import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
-
-type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-
-function rarityFromTier(tier: number): Rarity {
-  if (tier >= 5) return 'legendary';
-  if (tier === 4) return 'epic';
-  if (tier === 3) return 'rare';
-  if (tier === 2) return 'uncommon';
-  return 'common';
-}
 
 function xpForLevel(level: number): number {
   if (level <= 1) return 0;

@@ -6,12 +6,13 @@ import { PixelButton } from '@/components/PixelButton';
 import { BookOpen, X, MapPin, Sword, Shield, Heart } from 'lucide-react';
 import Image from 'next/image';
 import { uiIconSrc } from '@/lib/assets';
+import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 
 interface MonsterDrop {
   name: string;
   imageSrc?: string;
   dropRate: number;
-  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+  rarity: Rarity;
 }
 
 interface Monster {
@@ -243,19 +244,11 @@ export function Bestiary({ monsters }: BestiaryProps) {
                   <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm mb-2">Known Drops</h4>
                   <div className="space-y-2">
                     {selectedMonster.drops.map((drop, idx) => {
-                      const rarityColors = {
-                        common: '#5a5a6a',
-                        uncommon: '#6aaa5a',
-                        rare: '#5aaad4',
-                        epic: '#7a4a9a',
-                        legendary: '#d4a84b',
-                      };
-
                       return (
                         <div key={idx} className="flex items-center gap-3">
                           <div
                             className="w-8 h-8 rounded border-2 flex items-center justify-center text-lg"
-                            style={{ borderColor: rarityColors[drop.rarity] }}
+                            style={{ borderColor: RARITY_COLORS[drop.rarity] }}
                           >
                             {drop.imageSrc ? (
                               <Image

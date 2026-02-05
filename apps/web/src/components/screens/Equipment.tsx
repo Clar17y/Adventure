@@ -5,13 +5,14 @@ import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
 import { Heart, Shield, Sword, X, Zap } from 'lucide-react';
+import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 
 interface EquippedItem {
   id: string;
   name: string;
   icon?: string;
   imageSrc?: string;
-  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+  rarity: Rarity;
   durability: number;
   maxDurability: number;
   baseStats?: Record<string, unknown>;
@@ -30,7 +31,7 @@ interface EquipmentProps {
     name: string;
     icon?: string;
     imageSrc?: string;
-    rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+    rarity: Rarity;
     slot: string;
     equippedSlot: string | null;
     durability: { current: number; max: number } | null;
@@ -60,14 +61,6 @@ function prettySlot(slot: string) {
 }
 
 export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: EquipmentProps) {
-  const rarityColors = {
-    common: '#5a5a6a',
-    uncommon: '#6aaa5a',
-    rare: '#5aaad4',
-    epic: '#7a4a9a',
-    legendary: '#d4a84b',
-  };
-
   const slotPositions: Record<string, { gridColumn: string; gridRow: string; label: string }> = {
     head: { gridColumn: '2', gridRow: '1', label: 'Head' },
     neck: { gridColumn: '2', gridRow: '2', label: 'Neck' },
@@ -124,7 +117,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
               : 'bg-[var(--rpg-background)] border-2 border-dashed border-[var(--rpg-border)] hover:border-[var(--rpg-text-secondary)]'
           }`}
           style={{
-            borderColor: item ? rarityColors[item.rarity] : undefined,
+            borderColor: item ? RARITY_COLORS[item.rarity] : undefined,
           }}
         >
           {item ? (
@@ -226,7 +219,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                     <div className="flex items-center gap-3">
                       <div
                         className="w-10 h-10 rounded border-2 flex items-center justify-center text-xl flex-shrink-0"
-                        style={{ borderColor: rarityColors[currentItem.rarity] }}
+                        style={{ borderColor: RARITY_COLORS[currentItem.rarity] }}
                       >
                         {currentItem.imageSrc ? (
                           <img
@@ -335,7 +328,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                           <div className="flex items-start gap-3">
                             <div
                               className="w-10 h-10 rounded border-2 flex items-center justify-center text-xl flex-shrink-0"
-                              style={{ borderColor: rarityColors[item.rarity] }}
+                              style={{ borderColor: RARITY_COLORS[item.rarity] }}
                             >
                               {item.imageSrc ? (
                                 <img
@@ -480,7 +473,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
               <div className="flex items-center gap-3">
                 <div
                   className="w-10 h-10 rounded border-2 flex items-center justify-center text-xl flex-shrink-0"
-                  style={{ borderColor: slot.item ? rarityColors[slot.item.rarity] : 'var(--rpg-border)' }}
+                  style={{ borderColor: slot.item ? RARITY_COLORS[slot.item.rarity] : 'var(--rpg-border)' }}
                 >
                   {slot.item?.imageSrc ? (
                     <img

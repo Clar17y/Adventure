@@ -5,6 +5,7 @@ import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle } from 'lucide-react';
+import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 
 interface Material {
   name: string;
@@ -24,7 +25,7 @@ interface Recipe {
   turnCost: number;
   xpReward: number;
   materials: Material[];
-  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+  rarity: Rarity;
 }
 
 interface CraftingProps {
@@ -42,14 +43,6 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, isRecovering
   const canCraft = (recipe: Recipe) => {
     if (recipe.requiredLevel > skillLevel) return false;
     return recipe.materials.every((m) => m.owned >= m.required);
-  };
-
-  const rarityColors = {
-    common: '#5a5a6a',
-    uncommon: '#6aaa5a',
-    rare: '#5aaad4',
-    epic: '#7a4a9a',
-    legendary: '#d4a84b',
   };
 
   return (
@@ -99,7 +92,7 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, isRecovering
                   <div className="flex items-center gap-3">
                     <div
                       className="w-12 h-12 rounded border-2 flex items-center justify-center text-2xl flex-shrink-0"
-                      style={{ borderColor: rarityColors[recipe.rarity] }}
+                      style={{ borderColor: RARITY_COLORS[recipe.rarity] }}
                     >
                       {recipe.imageSrc ? (
                         <img
@@ -146,7 +139,7 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, isRecovering
           <div className="flex items-center gap-3 mb-4">
             <div
               className="w-16 h-16 rounded-lg border-2 flex items-center justify-center text-3xl flex-shrink-0"
-              style={{ borderColor: rarityColors[selectedRecipe.rarity] }}
+              style={{ borderColor: RARITY_COLORS[selectedRecipe.rarity] }}
             >
               {selectedRecipe.imageSrc ? (
                 <img

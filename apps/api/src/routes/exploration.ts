@@ -5,6 +5,7 @@ import { estimateExploration, simulateExploration, validateExplorationTurns } fr
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns } from '../services/turnBankService';
+import { getHpState } from '../services/hpService';
 
 export const explorationRouter = Router();
 
@@ -86,6 +87,12 @@ explorationRouter.post('/start', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = startSchema.parse(req.body);
+
+    // Check if player is recovering
+    const hpState = await getHpState(playerId);
+    if (hpState.isRecovering) {
+      throw new AppError(400, 'Cannot explore while recovering', 'IS_RECOVERING');
+    }
 
     const validation = validateExplorationTurns(body.turns);
     if (!validation.valid) {

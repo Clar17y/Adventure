@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { EquipmentSlot } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
+import { AppError } from '../middleware/errorHandler';
 import { equipItem, ensureEquipmentSlots, unequipSlot } from '../services/equipmentService';
+import { getHpState } from '../services/hpService';
 
 export const equipmentRouter = Router();
 
@@ -35,6 +37,12 @@ equipmentRouter.post('/equip', async (req, res, next) => {
     const playerId = req.player!.playerId;
     const body = equipSchema.parse(req.body);
 
+    // Check if player is recovering (prevents HP gear exploit)
+    const hpState = await getHpState(playerId);
+    if (hpState.isRecovering) {
+      throw new AppError(400, 'Cannot change equipment while recovering', 'IS_RECOVERING');
+    }
+
     await equipItem(playerId, body.itemId, body.slot as EquipmentSlot);
     res.json({ success: true });
   } catch (err) {
@@ -53,6 +61,12 @@ equipmentRouter.post('/unequip', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = unequipSchema.parse(req.body);
+
+    // Check if player is recovering (prevents HP gear exploit)
+    const hpState = await getHpState(playerId);
+    if (hpState.isRecovering) {
+      throw new AppError(400, 'Cannot change equipment while recovering', 'IS_RECOVERING');
+    }
 
     await unequipSlot(playerId, body.slot as EquipmentSlot);
     res.json({ success: true });

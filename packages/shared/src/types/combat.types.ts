@@ -40,11 +40,23 @@ export interface CombatLogEntry {
   blocked?: number;
   evaded?: boolean;
   message: string;
+  attackModifier?: number;
+  targetDefence?: number;
+  rawDamage?: number;
+  armorReduction?: number;
+  isCritical?: boolean;
+  playerHpAfter?: number;
+  mobHpAfter?: number;
 }
 
 export type CombatAction = 'attack' | 'spell' | 'defend' | 'flee';
 
 export type CombatOutcome = 'victory' | 'defeat' | 'fled';
+
+export interface SecondarySkillXpEntry {
+  events: number;
+  xpGained: number;
+}
 
 export interface CombatResult {
   outcome: CombatOutcome;
@@ -54,6 +66,10 @@ export interface CombatResult {
   durabilityLost: DurabilityLoss[];
   turnsSpent: number;
   playerHpRemaining: number;
+  secondarySkillXp: {
+    defence: SecondarySkillXpEntry;
+    evasion: SecondarySkillXpEntry;
+  };
 }
 
 export interface LootDrop {

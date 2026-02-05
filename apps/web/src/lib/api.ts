@@ -365,67 +365,70 @@ export async function startExploration(zoneId: string, turns: number) {
 }
 
 // Combat
+
+export interface CombatLogEntryResponse {
+  round: number;
+  actor: 'player' | 'mob';
+  action: string;
+  message: string;
+  roll?: number;
+  damage?: number;
+  evaded?: boolean;
+  attackModifier?: number;
+  targetDefence?: number;
+  rawDamage?: number;
+  armorReduction?: number;
+  isCritical?: boolean;
+  playerHpAfter?: number;
+  mobHpAfter?: number;
+}
+
+export interface SkillXpGrantResponse {
+  skillType: string;
+  xpGained: number;
+  xpAfterEfficiency: number;
+  efficiency: number;
+  leveledUp: boolean;
+  newLevel: number;
+  atDailyCap: boolean;
+  newTotalXp: number;
+  newDailyXpGained: number;
+}
+
+export interface SecondarySkillXpResponse {
+  defence: { events: number; xpGained: number };
+  evasion: { events: number; xpGained: number };
+  grants: SkillXpGrantResponse[];
+}
+
+export interface CombatResponse {
+  logId: string;
+  turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+  combat: {
+    zoneId: string;
+    mobTemplateId: string;
+    pendingEncounterId: string | null;
+    outcome: 'victory' | 'defeat' | 'fled';
+    log: CombatLogEntryResponse[];
+  };
+  rewards: {
+    xp: number;
+    loot: Array<{ itemTemplateId: string; quantity: number }>;
+    durabilityLost: Array<{ itemId: string; amount: number }>;
+    skillXp: SkillXpGrantResponse | null;
+    secondarySkillXp: SecondarySkillXpResponse;
+  };
+}
+
 export async function startCombat(zoneId: string, attackSkill: 'melee' | 'ranged' | 'magic' = 'melee', mobTemplateId?: string) {
-  return fetchApi<{
-    logId: string;
-    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
-    combat: {
-      zoneId: string;
-      mobTemplateId: string;
-      pendingEncounterId: string | null;
-      outcome: 'victory' | 'defeat' | 'fled';
-      log: Array<{ round: number; actor: 'player' | 'mob'; action: string; message: string }>;
-    };
-    rewards: {
-      xp: number;
-      loot: Array<{ itemTemplateId: string; quantity: number }>;
-      durabilityLost: Array<{ itemId: string; amount: number }>;
-      skillXp: null | {
-        skillType: string;
-        xpGained: number;
-        xpAfterEfficiency: number;
-        efficiency: number;
-        leveledUp: boolean;
-        newLevel: number;
-        atDailyCap: boolean;
-        newTotalXp: number;
-        newDailyXpGained: number;
-      };
-    };
-  }>('/api/v1/combat/start', {
+  return fetchApi<CombatResponse>('/api/v1/combat/start', {
     method: 'POST',
     body: JSON.stringify({ zoneId, attackSkill, ...(mobTemplateId ? { mobTemplateId } : {}) }),
   });
 }
 
 export async function startCombatFromPendingEncounter(pendingEncounterId: string, attackSkill: 'melee' | 'ranged' | 'magic' = 'melee') {
-  return fetchApi<{
-    logId: string;
-    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
-    combat: {
-      zoneId: string;
-      mobTemplateId: string;
-      pendingEncounterId: string | null;
-      outcome: 'victory' | 'defeat' | 'fled';
-      log: Array<{ round: number; actor: 'player' | 'mob'; action: string; message: string }>;
-    };
-    rewards: {
-      xp: number;
-      loot: Array<{ itemTemplateId: string; quantity: number }>;
-      durabilityLost: Array<{ itemId: string; amount: number }>;
-      skillXp: null | {
-        skillType: string;
-        xpGained: number;
-        xpAfterEfficiency: number;
-        efficiency: number;
-        leveledUp: boolean;
-        newLevel: number;
-        atDailyCap: boolean;
-        newTotalXp: number;
-        newDailyXpGained: number;
-      };
-    };
-  }>('/api/v1/combat/start', {
+  return fetchApi<CombatResponse>('/api/v1/combat/start', {
     method: 'POST',
     body: JSON.stringify({ pendingEncounterId, attackSkill }),
   });

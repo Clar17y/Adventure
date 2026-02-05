@@ -46,10 +46,49 @@ export interface PendingEncounter {
   expiresAt: string;
 }
 
+export interface LastCombatLogEntry {
+  round: number;
+  actor: 'player' | 'mob';
+  action: string;
+  message: string;
+  roll?: number;
+  damage?: number;
+  evaded?: boolean;
+  attackModifier?: number;
+  targetDefence?: number;
+  rawDamage?: number;
+  armorReduction?: number;
+  isCritical?: boolean;
+  playerHpAfter?: number;
+  mobHpAfter?: number;
+}
+
 export interface LastCombat {
   outcome: string;
-  log: Array<{ round: number; actor: string; message: string }>;
-  rewards: { xp: number; loot: Array<{ itemTemplateId: string; quantity: number }> };
+  log: LastCombatLogEntry[];
+  rewards: {
+    xp: number;
+    loot: Array<{ itemTemplateId: string; quantity: number }>;
+    skillXp: {
+      skillType: string;
+      xpGained: number;
+      xpAfterEfficiency: number;
+      efficiency: number;
+      leveledUp: boolean;
+      newLevel: number;
+    } | null;
+    secondarySkillXp: {
+      defence: { events: number; xpGained: number };
+      evasion: { events: number; xpGained: number };
+      grants: Array<{
+        skillType: string;
+        xpGained: number;
+        xpAfterEfficiency: number;
+        leveledUp: boolean;
+        newLevel: number;
+      }>;
+    };
+  };
 }
 
 export interface HpState {
@@ -406,8 +445,22 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setTurns(data.turns.currentTurns);
       setLastCombat({
         outcome: data.combat.outcome,
-        log: data.combat.log.map((e) => ({ round: e.round, actor: e.actor, message: e.message })),
-        rewards: { xp: data.rewards.xp, loot: data.rewards.loot },
+        log: data.combat.log,
+        rewards: {
+          xp: data.rewards.xp,
+          loot: data.rewards.loot,
+          skillXp: data.rewards.skillXp
+            ? {
+                skillType: data.rewards.skillXp.skillType,
+                xpGained: data.rewards.skillXp.xpGained,
+                xpAfterEfficiency: data.rewards.skillXp.xpAfterEfficiency,
+                efficiency: data.rewards.skillXp.efficiency,
+                leveledUp: data.rewards.skillXp.leveledUp,
+                newLevel: data.rewards.skillXp.newLevel,
+              }
+            : null,
+          secondarySkillXp: data.rewards.secondarySkillXp,
+        },
       });
 
       const skillXp = data.rewards?.skillXp;

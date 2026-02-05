@@ -38,7 +38,7 @@ import { Crafting } from '@/components/screens/Crafting';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
-import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
+import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer, AlertTriangle } from 'lucide-react';
 
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -701,6 +701,8 @@ export default function GamePage() {
             availableTurns={turns}
             onStartExploration={handleStartExploration}
             activityLog={explorationLog}
+            isRecovering={hpState.isRecovering}
+            recoveryCost={hpState.recoveryCost}
           />
         );
       case 'inventory':
@@ -910,6 +912,8 @@ export default function GamePage() {
               rarity: rarityFromTier(r.resultTemplate.tier),
             }))}
             onCraft={handleCraft}
+            isRecovering={hpState.isRecovering}
+            recoveryCost={hpState.recoveryCost}
           />
         );
       case 'gathering':
@@ -934,11 +938,28 @@ export default function GamePage() {
             availableTurns={turns}
             gatheringLog={gatheringLog}
             onStartGathering={handleMine}
+            isRecovering={hpState.isRecovering}
+            recoveryCost={hpState.recoveryCost}
           />
         );
       case 'combat':
         return (
           <div className="space-y-4">
+            {/* Knockout Banner */}
+            {hpState.isRecovering && (
+              <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
+                  <div>
+                    <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
+                    <div className="text-sm text-[var(--rpg-text-secondary)]">
+                      You must recover before fighting. Cost: {hpState.recoveryCost?.toLocaleString()} turns
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {pendingEncounters.length > 0 ? (
               <div className="space-y-2">
                 <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Pending Encounters</h2>
@@ -952,10 +973,14 @@ export default function GamePage() {
                     </div>
                     <button
                       onClick={() => void handleStartCombat(e.encounterId)}
-                      disabled={busyAction === 'combat'}
-                      className="px-3 py-2 rounded bg-[var(--rpg-gold)] text-[var(--rpg-background)] font-semibold"
+                      disabled={hpState.isRecovering || busyAction === 'combat'}
+                      className={`px-3 py-2 rounded font-semibold ${
+                        hpState.isRecovering
+                          ? 'bg-[var(--rpg-border)] text-[var(--rpg-text-secondary)] cursor-not-allowed'
+                          : 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                      }`}
                     >
-                      Fight
+                      {hpState.isRecovering ? 'Recover First' : 'Fight'}
                     </button>
                   </div>
                 ))}

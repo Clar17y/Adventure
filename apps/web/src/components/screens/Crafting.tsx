@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
-import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle } from 'lucide-react';
+import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
 interface Material {
   name: string;
@@ -31,9 +31,11 @@ interface CraftingProps {
   skillLevel: number;
   recipes: Recipe[];
   onCraft: (recipeId: string) => void;
+  isRecovering?: boolean;
+  recoveryCost?: number | null;
 }
 
-export function Crafting({ skillName, skillLevel, recipes, onCraft }: CraftingProps) {
+export function Crafting({ skillName, skillLevel, recipes, onCraft, isRecovering = false, recoveryCost }: CraftingProps) {
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
 
   const canCraft = (recipe: Recipe) => {
@@ -51,6 +53,21 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft }: CraftingPr
 
   return (
     <div className="space-y-4">
+      {/* Knockout Banner */}
+      {isRecovering && (
+        <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
+            <div>
+              <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
+              <div className="text-sm text-[var(--rpg-text-secondary)]">
+                You must recover before crafting. Cost: {recoveryCost?.toLocaleString()} turns
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -221,9 +238,9 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft }: CraftingPr
             size="lg"
             className="w-full"
             onClick={() => onCraft(selectedRecipe.id)}
-            disabled={!canCraft(selectedRecipe)}
+            disabled={isRecovering || !canCraft(selectedRecipe)}
           >
-            Craft {selectedRecipe.name}
+            {isRecovering ? 'Recover First' : `Craft ${selectedRecipe.name}`}
           </PixelButton>
         </PixelCard>
       )}

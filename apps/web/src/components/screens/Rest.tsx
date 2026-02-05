@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
@@ -33,35 +33,40 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchHpState = useCallback(async () => {
-    const result = await api.getHpState();
-    if (result.data) {
-      setHpState(result.data);
-      onHpUpdate(result.data);
-    }
-  }, [onHpUpdate]);
+  // Use refs for callbacks to avoid dependency issues
+  const onHpUpdateRef = useRef(onHpUpdate);
+  onHpUpdateRef.current = onHpUpdate;
 
-  const fetchEstimate = useCallback(async () => {
+  // Fetch HP state once on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await api.getHpState();
+      if (!cancelled && result.data) {
+        setHpState(result.data);
+        onHpUpdateRef.current(result.data);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Fetch estimate when turns or currentHp changes (debounced)
+  useEffect(() => {
     if (!hpState || hpState.isRecovering) return;
 
-    const result = await api.restEstimate(turns);
-    if (result.data && !result.data.isRecovering) {
-      setEstimate({
-        healAmount: result.data.healAmount ?? 0,
-        resultingHp: result.data.resultingHp ?? 0,
-        turnsNeeded: result.data.turnsNeeded ?? 0,
-      });
-    }
-  }, [turns, hpState]);
+    const timer = setTimeout(async () => {
+      const result = await api.restEstimate(turns);
+      if (result.data && !result.data.isRecovering) {
+        setEstimate({
+          healAmount: result.data.healAmount ?? 0,
+          resultingHp: result.data.resultingHp ?? 0,
+          turnsNeeded: result.data.turnsNeeded ?? 0,
+        });
+      }
+    }, 300);
 
-  useEffect(() => {
-    fetchHpState();
-  }, [fetchHpState]);
-
-  useEffect(() => {
-    const timer = setTimeout(fetchEstimate, 300);
     return () => clearTimeout(timer);
-  }, [fetchEstimate]);
+  }, [turns, hpState?.currentHp, hpState?.isRecovering]);
 
   const handleRest = async () => {
     if (!hpState) return;
@@ -102,7 +107,12 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
 
     if (result.data) {
       onTurnsUpdate(result.data.turns.currentTurns);
-      await fetchHpState();
+      // Fetch fresh HP state after recovery
+      const hpResult = await api.getHpState();
+      if (hpResult.data) {
+        setHpState(hpResult.data);
+        onHpUpdateRef.current(hpResult.data);
+      }
     }
 
     setIsLoading(false);

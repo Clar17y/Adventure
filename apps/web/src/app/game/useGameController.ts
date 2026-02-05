@@ -329,13 +329,21 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     return map;
   })();
 
-  const handleStartExploration = async (turnSpend: number) => {
-    if (!currentZone) return;
+  const runAction = async (actionName: string, fn: () => Promise<void>) => {
     if (busyAction) return;
-
-    setBusyAction('exploration');
+    setBusyAction(actionName);
     setActionError(null);
     try {
+      await fn();
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleStartExploration = async (turnSpend: number) => {
+    if (!currentZone) return;
+
+    await runAction('exploration', async () => {
       const res = await startExploration(currentZone.id, turnSpend);
       const data = res.data;
       if (!data) {
@@ -379,17 +387,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         ]);
         await loadGatheringNodes();
       }
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleStartCombat = async (pendingEncounterId: string) => {
-    if (busyAction) return;
-
-    setBusyAction('combat');
-    setActionError(null);
-    try {
+    await runAction('combat', async () => {
       const res = await startCombatFromPendingEncounter(pendingEncounterId, 'melee');
       const data = res.data;
       if (!data) {
@@ -418,17 +420,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       await Promise.all([loadAll(), loadTurnsAndHp()]);
       setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleMine = async (playerNodeId: string, turnSpend: number) => {
-    if (busyAction) return;
     if (!activeZoneId) return;
-    setBusyAction('mining');
-    setActionError(null);
-    try {
+
+    await runAction('mining', async () => {
       const res = await mine(playerNodeId, turnSpend, activeZoneId);
       const data = res.data;
       if (!data) {
@@ -464,16 +462,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setGatheringLog((prev) => [...newLogs, ...prev]);
       await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleCraft = async (recipeId: string) => {
-    if (busyAction) return;
-    setBusyAction('crafting');
-    setActionError(null);
-    try {
+    await runAction('crafting', async () => {
       const res = await craft(recipeId, 1);
       const data = res.data;
       if (!data) {
@@ -501,32 +494,22 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setGatheringLog((prev) => [...newLogs, ...prev]);
       await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleDestroyItem = async (itemId: string) => {
-    if (busyAction) return;
-    setBusyAction('destroy');
-    setActionError(null);
-    try {
+    await runAction('destroy', async () => {
       const res = await destroyInventoryItem(itemId);
       if (!res.data) {
         setActionError(res.error?.message ?? 'Destroy failed');
         return;
       }
       await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleRepairItem = async (itemId: string) => {
-    if (busyAction) return;
-    setBusyAction('repair');
-    setActionError(null);
-    try {
+    await runAction('repair', async () => {
       const res = await repairItem(itemId);
       const data = res.data;
       if (!data) {
@@ -535,41 +518,29 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
       if (data.turns) setTurns(data.turns.currentTurns);
       await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleEquipItem = async (itemId: string, slot: string) => {
-    if (busyAction) return;
-    setBusyAction('equip');
-    setActionError(null);
-    try {
+    await runAction('equip', async () => {
       const res = await equip(itemId, slot);
       if (!res.data) {
         setActionError(res.error?.message ?? 'Equip failed');
         return;
       }
       await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleUnequipSlot = async (slot: string) => {
-    if (busyAction) return;
-    setBusyAction('unequip');
-    setActionError(null);
-    try {
+    await runAction('unequip', async () => {
       const res = await unequip(slot);
       if (!res.data) {
         setActionError(res.error?.message ?? 'Unequip failed');
         return;
       }
       await loadAll();
-    } finally {
-      setBusyAction(null);
-    }
+    });
   };
 
   const handleTravelToZone = async (id: string) => {
@@ -637,4 +608,3 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleUnequipSlot,
   };
 }
-

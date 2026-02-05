@@ -1,5 +1,9 @@
 # HP System Design
 
+**Status: Implemented** (2026-02-05)
+
+Core HP system is complete. Potions are designed but not yet implemented.
+
 ## Overview
 
 Persistent HP system with resource management that creates strategic depth around turn economy. Players must balance exploring, fighting, resting, and crafting to maintain combat readiness.
@@ -101,8 +105,12 @@ An Evasion roll determines the outcome.
 
 **Evasion Roll Formula:**
 ```
-rollChance = BASE_FLEE_CHANCE + (evasionLevel × FLEE_CHANCE_PER_EVASION)
+levelDiff = evasionLevel - mobLevel
+fleeChance = BASE_FLEE_CHANCE + (levelDiff × FLEE_CHANCE_PER_LEVEL_DIFF)
+fleeChance = clamp(fleeChance, MIN_FLEE_CHANCE, MAX_FLEE_CHANCE)
 ```
+
+This means fighting equal-level mobs gives 30% base flee chance (70% knockout), while outleveling mobs increases your escape chance up to 95%.
 
 **Recovering State Restrictions:**
 - Cannot explore
@@ -152,10 +160,11 @@ export const HP_CONSTANTS = {
 } as const;
 
 export const FLEE_CONSTANTS = {
-  BASE_FLEE_CHANCE: 0.3,
-  FLEE_CHANCE_PER_EVASION: 0.02,
-  HIGH_SUCCESS_THRESHOLD: 0.8,
-  PARTIAL_SUCCESS_THRESHOLD: 0.4,
+  BASE_FLEE_CHANCE: 0.3,           // When evasion == mob level
+  FLEE_CHANCE_PER_LEVEL_DIFF: 0.02, // Per level difference (evasion - mobLevel)
+  MIN_FLEE_CHANCE: 0.05,           // Floor (95% knockout max)
+  MAX_FLEE_CHANCE: 0.95,           // Cap (5% knockout min)
+  HIGH_SUCCESS_THRESHOLD: 0.8,     // Top 20% of successful escapes = clean
   HIGH_SUCCESS_HP_PERCENT: 0.15,
   PARTIAL_SUCCESS_HP: 1,
   GOLD_LOSS_MINOR: 0.05,
@@ -215,9 +224,16 @@ Mode 2 - Normal:
 | Evasion | Skill levels | Better flee outcomes when losing |
 | Alchemy | Skill levels + materials + turns | Potions for burst heal / skip recovery |
 
-## Implementation Scope
+## Implementation Status
 
-- Database: 4 new fields on Player model
-- Backend: HP service, rest endpoint, potion endpoints, combat integration
-- Frontend: Dashboard HP display, Rest screen with two modes
-- Constants: All values tunable in gameConstants.ts
+**Implemented:**
+- Database: 4 new fields on Player model + mob level field
+- Backend: HP service, rest/recover endpoints, combat integration with flee mechanics
+- Frontend: Dashboard HP display, Rest screen with recovery mode, knockout banners on all action screens
+- Action blocking while recovering (explore, gather, craft, fight, equip)
+- Flee chance scales with evasion vs mob level
+
+**Not Yet Implemented:**
+- Health Potions (burst heal)
+- Recovery Potions (skip knockout penalty)
+- Gold loss on flee (gold system not implemented)

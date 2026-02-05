@@ -122,6 +122,10 @@ GET    /exploration/estimate
 POST   /combat/start
 GET    /combat/logs/:id
 GET    /bestiary
+GET    /hp
+POST   /hp/rest
+POST   /hp/recover
+GET    /hp/rest/estimate
 ```
 
 ## Game Constants Location
@@ -131,6 +135,9 @@ All balance values in `packages/shared/src/constants/gameConstants.ts`:
 - XP curves
 - Combat formulas
 - Exploration probabilities
+- HP, regen, and rest rates
+- Flee mechanics (scales with evasion vs mob level)
+- Potion heal amounts
 
 Change here, affects entire game. Easy to tune.
 
@@ -167,6 +174,7 @@ Focus tests on:
 ## Reference Docs
 
 - Game Design: `docs/plans/2026-01-31-game-design.md`
+- HP System: `docs/plans/2026-02-05-hp-system-design.md`
 - Implementation Plan: `docs/plans/mvp-implementation-plan.md`
 - Asset Workflow: `docs/assets/stable-diffusion-workflow.md`
 - Color Palette: `docs/assets/color-palette.md`

@@ -1,6 +1,12 @@
 # HP System Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status: Complete** (2026-02-05)
+
+All 14 tasks implemented and merged to main. Additional improvements made during implementation:
+- Flee mechanics now scale with evasion vs mob level (not just evasion)
+- Added `level` field to mob_templates table
+- Added knockout banners to Explore/Gathering/Crafting/Combat screens
+- Blocked crafting while recovering
 
 **Goal:** Implement persistent HP system with passive regeneration, active rest mechanic, knockout/flee mechanics, and potion support.
 

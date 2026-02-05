@@ -57,7 +57,7 @@ playerRouter.get('/skills', async (req, res, next) => {
     });
 
     // Convert BigInt to number for JSON serialization
-    const serializedSkills = skills.map(skill => ({
+    const serializedSkills = skills.map((skill: typeof skills[number]) => ({
       ...skill,
       xp: Number(skill.xp),
     }));

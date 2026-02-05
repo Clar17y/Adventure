@@ -35,7 +35,7 @@ inventoryRouter.get('/', async (req, res, next) => {
     }
 
     res.json({
-      items: items.map((item) => ({
+      items: items.map((item: typeof items[number]) => ({
         ...item,
         equippedSlot: equippedByItemId.get(item.id) ?? null,
       })),

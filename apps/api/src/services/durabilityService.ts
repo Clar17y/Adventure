@@ -1,4 +1,4 @@
-import { prisma } from '@adventure/database';
+import { Prisma, prisma } from '@adventure/database';
 import { DURABILITY_CONSTANTS, type DurabilityLoss } from '@adventure/shared';
 
 export async function degradeEquippedDurability(
@@ -20,7 +20,7 @@ export async function degradeEquippedDurability(
     if (eq.item) uniqueItems.set(eq.item.id, eq.item);
   }
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     for (const item of uniqueItems.values()) {
       if (!item) continue;
 

@@ -45,16 +45,21 @@ const startSchema = z.object({
   turns: z.number().int(),
 });
 
-function pickWeighted<T extends { encounterWeight?: number; discoveryWeight?: number }>(
+function pickWeighted<T>(
   items: T[],
   weightKey: 'encounterWeight' | 'discoveryWeight' = 'encounterWeight'
 ): T | null {
-  const totalWeight = items.reduce((sum, item) => sum + ((item as any)[weightKey] ?? 100), 0);
+  const getWeight = (item: T): number => {
+    const value = (item as Record<string, unknown>)[weightKey];
+    return typeof value === 'number' ? value : 100;
+  };
+
+  const totalWeight = items.reduce((sum, item) => sum + getWeight(item), 0);
   if (totalWeight <= 0) return null;
 
   let roll = Math.random() * totalWeight;
   for (const item of items) {
-    roll -= (item as any)[weightKey] ?? 100;
+    roll -= getWeight(item);
     if (roll <= 0) return item;
   }
   return items[items.length - 1] ?? null;
@@ -120,7 +125,7 @@ explorationRouter.post('/start', async (req, res, next) => {
 
     for (const outcome of outcomes) {
       if (outcome.type === 'mob_encounter' && mobTemplates.length > 0) {
-        const mob = pickWeighted(mobTemplates, 'encounterWeight');
+        const mob = pickWeighted(mobTemplates, 'encounterWeight') as typeof mobTemplates[number] | null;
         if (mob) {
           mobEncounters.push({
             turnOccurred: outcome.turnOccurred,
@@ -131,7 +136,7 @@ explorationRouter.post('/start', async (req, res, next) => {
       }
 
       if (outcome.type === 'resource_node' && resourceNodes.length > 0) {
-        const nodeTemplate = pickWeighted(resourceNodes, 'discoveryWeight');
+        const nodeTemplate = pickWeighted(resourceNodes, 'discoveryWeight') as typeof resourceNodes[number] | null;
         if (nodeTemplate) {
           // Create a player-specific node instance with random capacity
           const capacity = randomCapacity(nodeTemplate.minCapacity, nodeTemplate.maxCapacity);

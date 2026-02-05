@@ -57,7 +57,7 @@ craftingRouter.get('/recipes', async (req, res, next) => {
       select: { skillType: true, level: true },
     });
 
-    const skillLevels = new Map<string, number>(skills.map(s => [s.skillType, s.level]));
+    const skillLevels = new Map<string, number>(skills.map((s: typeof skills[number]) => [s.skillType, s.level]));
 
     const recipes = await prisma.craftingRecipe.findMany({
       include: { resultTemplate: true },
@@ -65,8 +65,8 @@ craftingRouter.get('/recipes', async (req, res, next) => {
     });
 
     const visible = recipes
-      .filter(r => (skillLevels.get(r.skillType) ?? 1) >= r.requiredLevel)
-      .map(r => ({
+      .filter((r: typeof recipes[number]) => (skillLevels.get(r.skillType) ?? 1) >= r.requiredLevel)
+      .map((r: typeof recipes[number]) => ({
         id: r.id,
         skillType: r.skillType,
         requiredLevel: r.requiredLevel,
@@ -87,11 +87,11 @@ craftingRouter.get('/recipes', async (req, res, next) => {
       where: { id: { in: Array.from(allMaterialIds) } },
       select: { id: true, name: true, itemType: true, stackable: true },
     });
-    const byId = new Map(templates.map(t => [t.id, t]));
+    const byId = new Map(templates.map((t: typeof templates[number]) => [t.id, t]));
 
     for (const r of visible) {
       r.materialTemplates = r.materials
-        .map(m => byId.get(m.templateId))
+        .map((m: CraftingMaterial) => byId.get(m.templateId))
         .filter(Boolean) as Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
     }
 

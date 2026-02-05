@@ -48,7 +48,7 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
     });
 
     res.json({
-      nodes: playerNodes.map((pn) => {
+      nodes: playerNodes.map((pn: typeof playerNodes[number]) => {
         const template = pn.resourceNode;
         return {
           id: pn.id, // PlayerResourceNode ID (what frontend uses to mine)
@@ -87,7 +87,7 @@ async function getResourceTemplateId(resourceType: string): Promise<string> {
     select: { id: true, name: true },
   });
 
-  const match = templates.find(t => toResourceTemplateKey(t.name) === resourceType);
+  const match = templates.find((t: typeof templates[number]) => toResourceTemplateKey(t.name) === resourceType);
   if (!match) {
     throw new AppError(400, `No resource item template found for resourceType=${resourceType}`, 'MISSING_TEMPLATE');
   }

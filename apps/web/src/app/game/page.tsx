@@ -36,6 +36,7 @@ import { ZoneMap } from '@/components/screens/ZoneMap';
 import { Bestiary } from '@/components/screens/Bestiary';
 import { Crafting } from '@/components/screens/Crafting';
 import { Gathering } from '@/components/screens/Gathering';
+import { Rest } from '@/components/screens/Rest';
 import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
 import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
 
@@ -176,7 +177,7 @@ const mockGatheringNodes = [
 
 */
 
-type Screen = 'home' | 'explore' | 'inventory' | 'combat' | 'profile' | 'skills' | 'equipment' | 'zones' | 'bestiary' | 'crafting' | 'gathering';
+type Screen = 'home' | 'explore' | 'inventory' | 'combat' | 'profile' | 'skills' | 'equipment' | 'zones' | 'bestiary' | 'crafting' | 'gathering' | 'rest';
 
 export default function GamePage() {
   const router = useRouter();
@@ -381,7 +382,7 @@ export default function GamePage() {
   };
 
   const getActiveTab = () => {
-    if (['home', 'skills', 'zones', 'bestiary'].includes(activeScreen)) return 'home';
+    if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
     if (['combat'].includes(activeScreen)) return 'combat';
@@ -983,6 +984,14 @@ export default function GamePage() {
               </div>
             )}
           </div>
+        );
+      case 'rest':
+        return (
+          <Rest
+            onComplete={() => setActiveScreen('home')}
+            onTurnsUpdate={(newTurns) => setTurns(newTurns)}
+            onHpUpdate={(hp) => setHpState(hp)}
+          />
         );
       case 'profile':
         return (

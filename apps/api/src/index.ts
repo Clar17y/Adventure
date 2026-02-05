@@ -13,6 +13,7 @@ import { equipmentRouter } from './routes/equipment';
 import { gatheringRouter } from './routes/gathering';
 import { craftingRouter } from './routes/crafting';
 import { bestiaryRouter } from './routes/bestiary';
+import { hpRouter } from './routes/hp';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -43,6 +44,7 @@ app.use('/api/v1/equipment', equipmentRouter);
 app.use('/api/v1/gathering', gatheringRouter);
 app.use('/api/v1/crafting', craftingRouter);
 app.use('/api/v1/bestiary', bestiaryRouter);
+app.use('/api/v1/hp', hpRouter);
 
 // Error handler
 app.use(errorHandler);

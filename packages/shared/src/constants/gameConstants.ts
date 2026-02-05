@@ -169,17 +169,20 @@ export const HP_CONSTANTS = {
 } as const;
 
 export const FLEE_CONSTANTS = {
-  /** Base chance to flee successfully */
+  /** Base chance to flee when evasion equals mob level */
   BASE_FLEE_CHANCE: 0.3,
 
-  /** Additional flee chance per Evasion level */
-  FLEE_CHANCE_PER_EVASION: 0.02,
+  /** Flee chance adjustment per level difference (evasion - mobLevel) */
+  FLEE_CHANCE_PER_LEVEL_DIFF: 0.02,
 
-  /** Roll threshold for clean escape */
+  /** Minimum flee chance (even against much higher level mobs) */
+  MIN_FLEE_CHANCE: 0.05,
+
+  /** Maximum flee chance (even against much lower level mobs) */
+  MAX_FLEE_CHANCE: 0.95,
+
+  /** Roll threshold for clean escape (top 20% of successful escapes) */
   HIGH_SUCCESS_THRESHOLD: 0.8,
-
-  /** Roll threshold for wounded escape */
-  PARTIAL_SUCCESS_THRESHOLD: 0.4,
 
   /** HP percentage remaining on clean escape */
   HIGH_SUCCESS_HP_PERCENT: 0.15,

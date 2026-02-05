@@ -3,6 +3,7 @@ import type { FleeOutcome } from '@adventure/shared';
 
 export interface FleeInput {
   evasionLevel: number;
+  mobLevel: number;
   maxHp: number;
   currentGold: number;
 }
@@ -14,11 +15,19 @@ export interface FleeCalculationResult {
   recoveryCost: number | null;
 }
 
-export function calculateFleeChance(evasionLevel: number): number {
-  return Math.min(
-    0.95,
-    FLEE_CONSTANTS.BASE_FLEE_CHANCE +
-      evasionLevel * FLEE_CONSTANTS.FLEE_CHANCE_PER_EVASION
+/**
+ * Calculate flee chance based on evasion vs mob level.
+ * When evasion equals mob level, you get BASE_FLEE_CHANCE (30%).
+ * Each level difference adjusts by FLEE_CHANCE_PER_LEVEL_DIFF (2%).
+ */
+export function calculateFleeChance(evasionLevel: number, mobLevel: number): number {
+  const levelDiff = evasionLevel - mobLevel;
+  const rawChance = FLEE_CONSTANTS.BASE_FLEE_CHANCE +
+    levelDiff * FLEE_CONSTANTS.FLEE_CHANCE_PER_LEVEL_DIFF;
+
+  return Math.max(
+    FLEE_CONSTANTS.MIN_FLEE_CHANCE,
+    Math.min(FLEE_CONSTANTS.MAX_FLEE_CHANCE, rawChance)
   );
 }
 
@@ -46,7 +55,7 @@ export function calculateFleeResult(
   input: FleeInput,
   roll: number = Math.random()
 ): FleeCalculationResult {
-  const fleeChance = calculateFleeChance(input.evasionLevel);
+  const fleeChance = calculateFleeChance(input.evasionLevel, input.mobLevel);
   const outcome = determineFleeOutcome(roll, fleeChance);
 
   let remainingHp: number;

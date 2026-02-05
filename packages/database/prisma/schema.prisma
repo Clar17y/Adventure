@@ -19,6 +19,12 @@ model Player {
   createdAt    DateTime  @default(now()) @map("created_at")
   lastActiveAt DateTime? @map("last_active_at")
 
+  // HP System
+  currentHp     Int      @default(100) @map("current_hp")
+  lastHpRegenAt DateTime @default(now()) @map("last_hp_regen_at")
+  isRecovering  Boolean  @default(false) @map("is_recovering")
+  recoveryCost  Int?     @map("recovery_cost")
+
   turnBank          TurnBank?
   skills            PlayerSkill[]
   equipment         PlayerEquipment[]

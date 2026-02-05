@@ -6,3 +6,4 @@ export { SkillCard } from './SkillCard';
 export { Slider } from './ui/Slider';
 export { BottomNav } from './BottomNav';
 export { AppShell } from './AppShell';
+export { KnockoutBanner } from './KnockoutBanner';

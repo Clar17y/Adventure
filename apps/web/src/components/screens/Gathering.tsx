@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
-import { Pickaxe, Clock, MapPin, AlertTriangle } from 'lucide-react';
+import { KnockoutBanner } from '@/components/KnockoutBanner';
+import { Pickaxe, Clock, MapPin } from 'lucide-react';
 import { GATHERING_CONSTANTS } from '@adventure/shared';
 
 interface ResourceNode {
@@ -92,17 +93,7 @@ export function Gathering({
     <div className="space-y-4">
       {/* Knockout Banner */}
       {isRecovering && (
-        <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
-            <div>
-              <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
-              <div className="text-sm text-[var(--rpg-text-secondary)]">
-                You must recover before gathering. Cost: {recoveryCost?.toLocaleString()} turns
-              </div>
-            </div>
-          </div>
-        </div>
+        <KnockoutBanner action="gathering" recoveryCost={recoveryCost} />
       )}
 
       {/* Header */}

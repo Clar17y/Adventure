@@ -37,8 +37,9 @@ import { Bestiary } from '@/components/screens/Bestiary';
 import { Crafting } from '@/components/screens/Crafting';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
+import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
-import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer, AlertTriangle } from 'lucide-react';
+import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
 
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -1003,17 +1004,7 @@ export default function GamePage() {
           <div className="space-y-4">
             {/* Knockout Banner */}
             {hpState.isRecovering && (
-              <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
-                  <div>
-                    <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
-                    <div className="text-sm text-[var(--rpg-text-secondary)]">
-                      You must recover before fighting. Cost: {hpState.recoveryCost?.toLocaleString()} turns
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <KnockoutBanner action="fighting" recoveryCost={hpState.recoveryCost} />
             )}
 
             {pendingEncounters.length > 0 ? (

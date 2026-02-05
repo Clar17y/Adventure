@@ -4,7 +4,8 @@ import type { LucideIcon } from 'lucide-react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
-import { Coins, TrendingUp, MapPin, Sword, Pickaxe, Hammer, Heart, AlertTriangle } from 'lucide-react';
+import { KnockoutBanner } from '@/components/KnockoutBanner';
+import { Coins, TrendingUp, MapPin, Sword, Pickaxe, Hammer, Heart } from 'lucide-react';
 import Image from 'next/image';
 import { uiIconSrc } from '@/lib/assets';
 
@@ -33,17 +34,7 @@ export function Dashboard({ playerData, skills, onNavigate }: DashboardProps) {
     <div className="space-y-4">
       {/* Knockout Banner */}
       {playerData.isRecovering && (
-        <div className="bg-[var(--rpg-red)]/20 border border-[var(--rpg-red)] rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <AlertTriangle size={24} className="text-[var(--rpg-red)] flex-shrink-0" />
-            <div>
-              <div className="font-bold text-[var(--rpg-red)]">Knocked Out</div>
-              <div className="text-sm text-[var(--rpg-text-secondary)]">
-                You must recover before taking any actions. Cost: {playerData.recoveryCost?.toLocaleString()} turns
-              </div>
-            </div>
-          </div>
-        </div>
+        <KnockoutBanner action="taking any actions" recoveryCost={playerData.recoveryCost} />
       )}
 
       {/* Turn Counter */}

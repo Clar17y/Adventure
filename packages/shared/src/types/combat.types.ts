@@ -52,6 +52,7 @@ export interface CombatResult {
   loot: LootDrop[];
   durabilityLost: DurabilityLoss[];
   turnsSpent: number;
+  playerHpRemaining: number;
 }
 
 export interface LootDrop {

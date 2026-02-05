@@ -94,6 +94,7 @@ export function runCombat(
     loot: [], // Loot is rolled separately by the service layer
     durabilityLost: [], // Durability is handled by the service layer
     turnsSpent: 0, // Set by the service layer
+    playerHpRemaining: Math.max(0, state.playerHp),
   };
 }
 

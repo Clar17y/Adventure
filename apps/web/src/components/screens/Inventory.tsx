@@ -6,6 +6,7 @@ import { ItemCard } from '@/components/ItemCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
 import { Heart, Shield, Sword, X, Zap } from 'lucide-react';
+import { titleCaseFromSnake } from '@/lib/format';
 
 interface Item {
   id: string;
@@ -37,7 +38,7 @@ function numStat(value: unknown): number | null {
 }
 
 function prettySlot(slot: string) {
-  return slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return titleCaseFromSnake(slot);
 }
 
 export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: InventoryProps) {

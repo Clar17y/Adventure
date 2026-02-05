@@ -6,6 +6,7 @@ import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
 import { Heart, Shield, Sword, X, Zap } from 'lucide-react';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
+import { titleCaseFromSnake } from '@/lib/format';
 
 interface EquippedItem {
   id: string;
@@ -57,7 +58,7 @@ function statValue(stats: Record<string, unknown> | undefined, key: string): num
 }
 
 function prettySlot(slot: string) {
-  return slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return titleCaseFromSnake(slot);
 }
 
 export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: EquipmentProps) {

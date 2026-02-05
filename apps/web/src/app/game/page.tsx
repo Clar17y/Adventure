@@ -39,6 +39,7 @@ import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { rarityFromTier, type Rarity } from '@/lib/rarity';
+import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, SKILL_CONSTANTS, COMBAT_SKILLS, GATHERING_SKILLS, CRAFTING_SKILLS } from '@adventure/shared';
 import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
 
@@ -787,7 +788,7 @@ export default function GamePage() {
         return (
           <Equipment
             slots={equipment.map((e) => {
-              const label = e.slot.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+              const label = titleCaseFromSnake(e.slot);
               const template = e.item?.template;
               const templateMax = template?.maxDurability ?? 0;
               const max = template ? (e.item?.maxDurability ?? templateMax) : 0;
@@ -972,7 +973,7 @@ export default function GamePage() {
             efficiency={Math.round(calculateEfficiency(skills.find((s) => s.skillType === 'mining')?.dailyXpGained ?? 0, 'mining') * 100)}
             nodes={gatheringNodes.map((n) => ({
               id: n.id,
-              name: n.resourceType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+              name: titleCaseFromSnake(n.resourceType),
               imageSrc: resourceImageSrc(n.resourceType),
               levelRequired: n.levelRequired,
               baseYield: n.baseYield,

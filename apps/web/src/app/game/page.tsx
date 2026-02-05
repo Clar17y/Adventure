@@ -310,16 +310,15 @@ export default function GamePage() {
   useEffect(() => {
     if (isAuthenticated) {
       void loadAll();
-      const interval = setInterval(() => void loadTurns(), 10000);
+      const interval = setInterval(() => void loadTurnsAndHp(), 10000);
       return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
 
-  const loadTurns = async () => {
-    const { data } = await getTurns();
-    if (data) {
-      setTurns(data.currentTurns);
-    }
+  const loadTurnsAndHp = async () => {
+    const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
+    if (turnRes.data) setTurns(turnRes.data.currentTurns);
+    if (hpRes.data) setHpState(hpRes.data);
   };
 
   const loadAll = async () => {
@@ -503,7 +502,7 @@ export default function GamePage() {
       }
 
       // Refresh inventory/equipment/skills after loot/durability/XP changes
-      await Promise.all([loadAll(), loadTurns()]);
+      await Promise.all([loadAll(), loadTurnsAndHp()]);
       setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
     } finally {
       setBusyAction(null);

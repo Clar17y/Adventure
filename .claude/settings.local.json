@@ -5,7 +5,9 @@
       "mcp__codex__codex",
       "Bash(npx tsx:*)",
       "WebSearch",
-      "mcp__grepai__grepai_search"
+      "mcp__grepai__grepai_search",
+      "Bash(pushd:*)",
+      "Bash(popd:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

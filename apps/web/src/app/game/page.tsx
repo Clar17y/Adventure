@@ -14,6 +14,7 @@ import {
   getPendingEncounters,
   getTurns,
   getZones,
+  getHpState,
   mine,
   repairItem,
   equip,
@@ -291,6 +292,13 @@ export default function GamePage() {
   }>>([]);
   const [bestiaryLoading, setBestiaryLoading] = useState(false);
   const [bestiaryError, setBestiaryError] = useState<string | null>(null);
+  const [hpState, setHpState] = useState<{
+    currentHp: number;
+    maxHp: number;
+    regenPerSecond: number;
+    isRecovering: boolean;
+    recoveryCost: number | null;
+  }>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -316,7 +324,7 @@ export default function GamePage() {
   const loadAll = async () => {
     setActionError(null);
 
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, nodesRes] = await Promise.all([
+    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, nodesRes, hpRes] = await Promise.all([
       getTurns(),
       getSkills(),
       getZones(),
@@ -325,10 +333,12 @@ export default function GamePage() {
       getCraftingRecipes(),
       getPendingEncounters(),
       getGatheringNodes(),
+      getHpState(),
     ]);
 
     if (turnRes.data) setTurns(turnRes.data.currentTurns);
     if (skillsRes.data) setSkills(skillsRes.data.skills);
+    if (hpRes.data) setHpState(hpRes.data);
     if (zonesRes.data) {
       setZones(zonesRes.data.zones);
       if (!activeZoneId) {
@@ -664,6 +674,11 @@ export default function GamePage() {
               currentXP: skills.reduce((sum, s) => sum + (s.xp ?? 0), 0),
               nextLevelXP: 0,
               currentZone: currentZone?.name ?? 'Unknown',
+              currentHp: hpState.currentHp,
+              maxHp: hpState.maxHp,
+              hpRegenRate: hpState.regenPerSecond,
+              isRecovering: hpState.isRecovering,
+              recoveryCost: hpState.recoveryCost,
             }}
             skills={skills
               .map((s) => {

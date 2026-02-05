@@ -17,6 +17,12 @@ interface DashboardProps {
     currentXP: number;
     nextLevelXP: number;
     currentZone: string;
+    // HP fields
+    currentHp: number;
+    maxHp: number;
+    hpRegenRate: number;
+    isRecovering: boolean;
+    recoveryCost: number | null;
   };
   skills: Array<{ name: string; level: number; icon?: LucideIcon; imageSrc?: string }>;
   onNavigate: (screen: string) => void;
@@ -61,6 +67,57 @@ export function Dashboard({ playerData, skills, onNavigate }: DashboardProps) {
             showNumbers={false}
           />
         </div>
+      </PixelCard>
+
+      {/* HP Display */}
+      <PixelCard>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center">
+              <Heart size={32} color={playerData.isRecovering ? 'var(--rpg-red)' : 'var(--rpg-green-light)'} />
+            </div>
+            <div>
+              <div className="text-sm text-[var(--rpg-text-secondary)]">
+                {playerData.isRecovering ? 'Knocked Out' : 'Health'}
+              </div>
+              <div className="text-2xl font-bold font-mono">
+                {playerData.isRecovering ? (
+                  <span className="text-[var(--rpg-red)]">KO</span>
+                ) : (
+                  <span className="text-[var(--rpg-green-light)]">{playerData.currentHp} / {playerData.maxHp}</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            {playerData.isRecovering ? (
+              <>
+                <div className="text-xs text-[var(--rpg-text-secondary)]">Recovery Cost</div>
+                <div className="text-sm text-[var(--rpg-red)]">
+                  {playerData.recoveryCost?.toLocaleString()} turns
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-xs text-[var(--rpg-text-secondary)]">Regen Rate</div>
+                <div className="text-sm text-[var(--rpg-green-light)]">
+                  +{playerData.hpRegenRate.toFixed(1)}/sec
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        {!playerData.isRecovering && (
+          <div className="mt-3">
+            <StatBar
+              current={playerData.currentHp}
+              max={playerData.maxHp}
+              color="health"
+              size="sm"
+              showNumbers={false}
+            />
+          </div>
+        )}
       </PixelCard>
 
       {/* Quick Stats */}
@@ -149,10 +206,13 @@ export function Dashboard({ playerData, skills, onNavigate }: DashboardProps) {
             Craft
           </div>
         </PixelButton>
-        <PixelButton variant="secondary">
+        <PixelButton
+          variant={playerData.isRecovering ? 'primary' : 'secondary'}
+          onClick={() => onNavigate('rest')}
+        >
           <div className="flex items-center justify-center gap-2">
             <Heart size={20} />
-            Rest
+            {playerData.isRecovering ? 'Recover' : 'Rest'}
           </div>
         </PixelButton>
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -271,6 +271,8 @@ export default function GamePage() {
     createdAt: string;
     expiresAt: string;
   }>>([]);
+  const [pendingClockMs, setPendingClockMs] = useState(() => Date.now());
+  const pendingRefreshInFlightRef = useRef(false);
   const [lastCombat, setLastCombat] = useState<null | { outcome: string; log: Array<{ round: number; actor: string; message: string }>; rewards: { xp: number; loot: Array<{ itemTemplateId: string; quantity: number }> } }>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -314,6 +316,60 @@ export default function GamePage() {
       return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
+
+  const refreshPendingEncounters = useCallback(async () => {
+    if (!isAuthenticated) return;
+    if (pendingRefreshInFlightRef.current) return;
+    pendingRefreshInFlightRef.current = true;
+    try {
+      const res = await getPendingEncounters();
+      if (res.data) setPendingEncounters(res.data.pendingEncounters);
+    } finally {
+      pendingRefreshInFlightRef.current = false;
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (activeScreen !== 'combat') return;
+    void refreshPendingEncounters();
+  }, [isAuthenticated, activeScreen, refreshPendingEncounters]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (activeScreen !== 'combat') return;
+    if (pendingEncounters.length === 0) return;
+
+    const tick = () => {
+      const now = Date.now();
+      setPendingClockMs(now);
+      setPendingEncounters((prev) => {
+        const next = prev.filter((e) => new Date(e.expiresAt).getTime() > now);
+        return next.length === prev.length ? prev : next;
+      });
+    };
+
+    tick();
+    const interval = setInterval(tick, 15000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, activeScreen, pendingEncounters.length]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (activeScreen !== 'combat') return;
+    if (pendingEncounters.length === 0) return;
+
+    let nextExpiryMs = Number.POSITIVE_INFINITY;
+    for (const e of pendingEncounters) {
+      const ms = new Date(e.expiresAt).getTime();
+      if (Number.isFinite(ms) && ms < nextExpiryMs) nextExpiryMs = ms;
+    }
+    if (!Number.isFinite(nextExpiryMs)) return;
+
+    const delayMs = Math.max(0, nextExpiryMs - Date.now() + 250);
+    const timeout = setTimeout(() => void refreshPendingEncounters(), delayMs);
+    return () => clearTimeout(timeout);
+  }, [isAuthenticated, activeScreen, pendingEncounters, refreshPendingEncounters]);
 
   const loadTurnsAndHp = async () => {
     const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
@@ -968,7 +1024,7 @@ export default function GamePage() {
                     <div>
                       <div className="text-[var(--rpg-text-primary)] font-semibold">{e.mobName}</div>
                       <div className="text-xs text-[var(--rpg-text-secondary)]">
-                        Zone: {e.zoneName} • Found {Math.max(0, Math.ceil((Date.now() - new Date(e.createdAt).getTime()) / 60000))}m ago • Expires in {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - Date.now()) / 60000))}m
+                        Zone: {e.zoneName} • Found {Math.max(0, Math.ceil((pendingClockMs - new Date(e.createdAt).getTime()) / 60000))}m ago • Expires in {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - pendingClockMs) / 60000))}m
                       </div>
                     </div>
                     <button

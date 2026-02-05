@@ -58,6 +58,7 @@ packages/database/prisma/*.db-journal
 *.tsbuildinfo
 .turbo/
 .grepai/
+.worktrees/
 
 # Assets
 docs/assets/

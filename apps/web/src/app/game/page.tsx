@@ -932,7 +932,7 @@ export default function GamePage() {
                     <div>
                       <div className="text-[var(--rpg-text-primary)] font-semibold">{e.mobName}</div>
                       <div className="text-xs text-[var(--rpg-text-secondary)]">
-                        Zone: {e.zoneName} • Turn {e.turnOccurred} • Expires in {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - Date.now()) / 60000))}m
+                        Zone: {e.zoneName} • Found {Math.max(0, Math.ceil((Date.now() - new Date(e.createdAt).getTime()) / 60000))}m ago • Expires in {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - Date.now()) / 60000))}m
                       </div>
                     </div>
                     <button

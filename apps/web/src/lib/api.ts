@@ -496,19 +496,49 @@ export async function startCombatFromPendingEncounter(pendingEncounterId: string
   });
 }
 
-export async function getPendingEncounters() {
-  return fetchApi<{
-    pendingEncounters: Array<{
-      encounterId: string;
-      zoneId: string;
-      zoneName: string;
-      mobTemplateId: string;
-      mobName: string;
-      turnOccurred: number;
-      createdAt: string;
-      expiresAt: string;
-    }>;
-  }>('/api/v1/combat/pending');
+export interface PendingEncountersQuery {
+  page?: number;
+  pageSize?: number;
+  zoneId?: string;
+  mobTemplateId?: string;
+  sort?: 'recent' | 'expires';
+}
+
+export interface PendingEncountersResponse {
+  pendingEncounters: Array<{
+    encounterId: string;
+    zoneId: string;
+    zoneName: string;
+    mobTemplateId: string;
+    mobName: string;
+    turnOccurred: number;
+    createdAt: string;
+    expiresAt: string;
+  }>;
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+  filters: {
+    zones: Array<{ id: string; name: string }>;
+    mobs: Array<{ id: string; name: string }>;
+  };
+}
+
+export async function getPendingEncounters(query: PendingEncountersQuery = {}) {
+  const params = new URLSearchParams();
+  if (query.page !== undefined) params.set('page', String(query.page));
+  if (query.pageSize !== undefined) params.set('pageSize', String(query.pageSize));
+  if (query.zoneId) params.set('zoneId', query.zoneId);
+  if (query.mobTemplateId) params.set('mobTemplateId', query.mobTemplateId);
+  if (query.sort) params.set('sort', query.sort);
+
+  const suffix = params.toString();
+  return fetchApi<PendingEncountersResponse>(`/api/v1/combat/pending${suffix ? `?${suffix}` : ''}`);
 }
 
 export async function abandonPendingEncounters(zoneId?: string) {

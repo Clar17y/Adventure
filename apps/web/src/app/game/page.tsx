@@ -176,6 +176,14 @@ export default function GamePage() {
     gatheringLog,
     craftingLog,
     pendingEncounters,
+    pendingEncountersLoading,
+    pendingEncountersError,
+    pendingEncounterPage,
+    pendingEncounterPagination,
+    pendingEncounterFilters,
+    pendingEncounterZoneFilter,
+    pendingEncounterMobFilter,
+    pendingEncounterSort,
     pendingClockMs,
     lastCombat,
     busyAction,
@@ -193,6 +201,10 @@ export default function GamePage() {
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,
     handleGatheringResourceTypeFilterChange,
+    handlePendingEncounterPageChange,
+    handlePendingEncounterZoneFilterChange,
+    handlePendingEncounterMobFilterChange,
+    handlePendingEncounterSortChange,
     handleCraft,
     handleDestroyItem,
     handleRepairItem,
@@ -532,10 +544,22 @@ export default function GamePage() {
           <CombatScreen
             hpState={hpState}
             pendingEncounters={pendingEncounters}
+            pendingEncountersLoading={pendingEncountersLoading}
+            pendingEncountersError={pendingEncountersError}
+            pendingEncounterPage={pendingEncounterPage}
+            pendingEncounterPagination={pendingEncounterPagination}
+            pendingEncounterFilters={pendingEncounterFilters}
+            pendingEncounterZoneFilter={pendingEncounterZoneFilter}
+            pendingEncounterMobFilter={pendingEncounterMobFilter}
+            pendingEncounterSort={pendingEncounterSort}
             pendingClockMs={pendingClockMs}
             busyAction={busyAction}
             lastCombat={lastCombat}
             onStartCombat={handleStartCombat}
+            onPendingEncounterPageChange={handlePendingEncounterPageChange}
+            onPendingEncounterZoneFilterChange={handlePendingEncounterZoneFilterChange}
+            onPendingEncounterMobFilterChange={handlePendingEncounterMobFilterChange}
+            onPendingEncounterSortChange={handlePendingEncounterSortChange}
           />
         );
       case 'rest':

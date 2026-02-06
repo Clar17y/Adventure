@@ -36,6 +36,14 @@ const startSchema = z.object({
   message: 'pendingEncounterId or zoneId is required',
 });
 
+const listPendingQuerySchema = z.object({
+  zoneId: z.string().uuid().optional(),
+  mobTemplateId: z.string().uuid().optional(),
+  sort: z.enum(['recent', 'expires']).default('expires'),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
+});
+
 function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
   if (value === 'melee' || value === 'ranged' || value === 'magic') return value;
   return null;
@@ -106,27 +114,75 @@ async function getSkillLevel(playerId: string, skillType: SkillType): Promise<nu
 }
 
 /**
- * GET /api/v1/combat/pending
- * List pending encounters for the current player.
+ * GET /api/v1/combat/pending?page=1&pageSize=10&zoneId=...&mobTemplateId=...&sort=expires
+ * List pending encounters for the current player with pagination and filters.
  */
 combatRouter.get('/pending', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const now = new Date();
+    const query = listPendingQuerySchema.parse({
+      zoneId: req.query.zoneId,
+      mobTemplateId: req.query.mobTemplateId,
+      sort: req.query.sort,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+    });
 
     await prismaAny.pendingEncounter.deleteMany({
       where: { playerId, expiresAt: { lte: now } },
     });
 
-    const pending = await prismaAny.pendingEncounter.findMany({
-      where: { playerId, expiresAt: { gt: now } },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        zone: { select: { name: true } },
-        mobTemplate: { select: { name: true } },
-      },
-    });
+    const baseWhere = {
+      playerId,
+      expiresAt: { gt: now },
+    };
+    const where = {
+      ...baseWhere,
+      ...(query.zoneId ? { zoneId: query.zoneId } : {}),
+      ...(query.mobTemplateId ? { mobTemplateId: query.mobTemplateId } : {}),
+    };
+    const offset = (query.page - 1) * query.pageSize;
+
+    const [total, pending, filterRows] = await Promise.all([
+      prismaAny.pendingEncounter.count({ where }),
+      prismaAny.pendingEncounter.findMany({
+        where,
+        orderBy: query.sort === 'recent'
+          ? [{ createdAt: 'desc' }]
+          : [{ expiresAt: 'asc' }, { createdAt: 'desc' }],
+        skip: offset,
+        take: query.pageSize,
+        include: {
+          zone: { select: { name: true } },
+          mobTemplate: { select: { id: true, name: true } },
+        },
+      }),
+      prismaAny.pendingEncounter.findMany({
+        where: baseWhere,
+        select: {
+          zoneId: true,
+          mobTemplateId: true,
+          zone: { select: { name: true } },
+          mobTemplate: { select: { name: true } },
+        },
+      }),
+    ]);
+
+    const zoneById = new Map<string, string>();
+    const mobById = new Map<string, string>();
+    for (const row of filterRows) {
+      zoneById.set(row.zoneId, row.zone.name);
+      mobById.set(row.mobTemplateId, row.mobTemplate.name);
+    }
+
+    const zones = Array.from(zoneById.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const mobs = Array.from(mobById.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
     res.json({
       pendingEncounters: pending.map((p: any) => ({
@@ -139,6 +195,18 @@ combatRouter.get('/pending', async (req, res, next) => {
         createdAt: p.createdAt.toISOString(),
         expiresAt: p.expiresAt.toISOString(),
       })),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages,
+        hasNext: query.page < totalPages,
+        hasPrevious: query.page > 1,
+      },
+      filters: {
+        zones,
+        mobs,
+      },
     });
   } catch (err) {
     next(err);

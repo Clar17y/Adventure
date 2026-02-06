@@ -102,6 +102,7 @@ export interface HpState {
 }
 
 const GATHERING_PAGE_SIZE = 8;
+const PENDING_ENCOUNTER_PAGE_SIZE = 8;
 
 export function useGameController({ isAuthenticated }: { isAuthenticated: boolean }) {
   const [activeScreen, setActiveScreen] = useState<Screen>('home');
@@ -208,8 +209,29 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
   const [craftingLog, setCraftingLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
   const [pendingEncounters, setPendingEncounters] = useState<PendingEncounter[]>([]);
+  const [pendingEncountersLoading, setPendingEncountersLoading] = useState(false);
+  const [pendingEncountersError, setPendingEncountersError] = useState<string | null>(null);
+  const [pendingEncounterPage, setPendingEncounterPage] = useState(1);
+  const [pendingEncounterZoneFilter, setPendingEncounterZoneFilter] = useState('all');
+  const [pendingEncounterMobFilter, setPendingEncounterMobFilter] = useState('all');
+  const [pendingEncounterSort, setPendingEncounterSort] = useState<'recent' | 'expires'>('expires');
+  const [pendingEncounterPagination, setPendingEncounterPagination] = useState({
+    page: 1,
+    pageSize: PENDING_ENCOUNTER_PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrevious: false,
+  });
+  const [pendingEncounterFilters, setPendingEncounterFilters] = useState<{
+    zones: Array<{ id: string; name: string }>;
+    mobs: Array<{ id: string; name: string }>;
+  }>({
+    zones: [],
+    mobs: [],
+  });
+  const latestPendingRequestRef = useRef(0);
   const [pendingClockMs, setPendingClockMs] = useState(() => Date.now());
-  const pendingRefreshInFlightRef = useRef(false);
   const [lastCombat, setLastCombat] = useState<LastCombat | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -243,14 +265,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const loadAll = useCallback(async () => {
     setActionError(null);
 
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, hpRes] = await Promise.all([
+    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, hpRes] = await Promise.all([
       getTurns(),
       getSkills(),
       getZones(),
       getInventory(),
       getEquipment(),
       getCraftingRecipes(),
-      getPendingEncounters(),
       getHpState(),
     ]);
 
@@ -278,7 +299,6 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       );
     }
     if (recipesRes.data) setCraftingRecipes(recipesRes.data.recipes);
-    if (pendingRes.data) setPendingEncounters(pendingRes.data.pendingEncounters);
   }, []);
 
   useEffect(() => {
@@ -289,59 +309,71 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
   }, [isAuthenticated, loadAll, loadTurnsAndHp]);
 
-  const refreshPendingEncounters = useCallback(async () => {
+  const refreshPendingEncounters = useCallback(async (options?: { background?: boolean }) => {
     if (!isAuthenticated) return;
-    if (pendingRefreshInFlightRef.current) return;
-    pendingRefreshInFlightRef.current = true;
-    try {
-      const res = await getPendingEncounters();
-      if (res.data) setPendingEncounters(res.data.pendingEncounters);
-    } finally {
-      pendingRefreshInFlightRef.current = false;
+    const isBackground = options?.background ?? false;
+    const requestId = ++latestPendingRequestRef.current;
+
+    if (!isBackground) {
+      setPendingEncountersLoading(true);
     }
-  }, [isAuthenticated]);
+    setPendingEncountersError(null);
+
+    try {
+      const res = await getPendingEncounters({
+        page: pendingEncounterPage,
+        pageSize: PENDING_ENCOUNTER_PAGE_SIZE,
+        zoneId: pendingEncounterZoneFilter === 'all' ? undefined : pendingEncounterZoneFilter,
+        mobTemplateId: pendingEncounterMobFilter === 'all' ? undefined : pendingEncounterMobFilter,
+        sort: pendingEncounterSort,
+      });
+
+      if (latestPendingRequestRef.current !== requestId) return;
+
+      if (!res.data) {
+        setPendingEncounters([]);
+        setPendingEncounterPagination({
+          page: 1,
+          pageSize: PENDING_ENCOUNTER_PAGE_SIZE,
+          total: 0,
+          totalPages: 1,
+          hasNext: false,
+          hasPrevious: false,
+        });
+        setPendingEncounterFilters({ zones: [], mobs: [] });
+        setPendingEncountersError(res.error?.message ?? 'Failed to load pending encounters');
+        return;
+      }
+
+      if (pendingEncounterPage > res.data.pagination.totalPages) {
+        setPendingEncounterPage(res.data.pagination.totalPages);
+        return;
+      }
+
+      setPendingEncounters(res.data.pendingEncounters);
+      setPendingEncounterPagination(res.data.pagination);
+      setPendingEncounterFilters(res.data.filters);
+    } finally {
+      if (!isBackground && latestPendingRequestRef.current === requestId) {
+        setPendingEncountersLoading(false);
+      }
+    }
+  }, [isAuthenticated, pendingEncounterPage, pendingEncounterZoneFilter, pendingEncounterMobFilter, pendingEncounterSort]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     if (activeScreen !== 'combat') return;
-    void refreshPendingEncounters();
-  }, [isAuthenticated, activeScreen, refreshPendingEncounters]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (activeScreen !== 'combat') return;
-    if (pendingEncounters.length === 0) return;
 
     const tick = () => {
-      const now = Date.now();
-      setPendingClockMs(now);
-      setPendingEncounters((prev) => {
-        const next = prev.filter((e) => new Date(e.expiresAt).getTime() > now);
-        return next.length === prev.length ? prev : next;
-      });
+      setPendingClockMs(Date.now());
+      void refreshPendingEncounters({ background: true });
     };
 
-    tick();
+    setPendingClockMs(Date.now());
+    void refreshPendingEncounters();
     const interval = setInterval(tick, 15000);
     return () => clearInterval(interval);
-  }, [isAuthenticated, activeScreen, pendingEncounters.length]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (activeScreen !== 'combat') return;
-    if (pendingEncounters.length === 0) return;
-
-    let nextExpiryMs = Number.POSITIVE_INFINITY;
-    for (const e of pendingEncounters) {
-      const ms = new Date(e.expiresAt).getTime();
-      if (Number.isFinite(ms) && ms < nextExpiryMs) nextExpiryMs = ms;
-    }
-    if (!Number.isFinite(nextExpiryMs)) return;
-
-    const delayMs = Math.max(0, nextExpiryMs - Date.now() + 250);
-    const timeout = setTimeout(() => void refreshPendingEncounters(), delayMs);
-    return () => clearTimeout(timeout);
-  }, [isAuthenticated, activeScreen, pendingEncounters, refreshPendingEncounters]);
+  }, [isAuthenticated, activeScreen, refreshPendingEncounters]);
 
   const loadBestiary = useCallback(async () => {
     setBestiaryError(null);
@@ -413,6 +445,25 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setGatheringPage(1);
   }, []);
 
+  const handlePendingEncounterPageChange = useCallback((page: number) => {
+    setPendingEncounterPage(page);
+  }, []);
+
+  const handlePendingEncounterZoneFilterChange = useCallback((zoneId: string) => {
+    setPendingEncounterZoneFilter(zoneId);
+    setPendingEncounterPage(1);
+  }, []);
+
+  const handlePendingEncounterMobFilterChange = useCallback((mobTemplateId: string) => {
+    setPendingEncounterMobFilter(mobTemplateId);
+    setPendingEncounterPage(1);
+  }, []);
+
+  const handlePendingEncounterSortChange = useCallback((sort: 'recent' | 'expires') => {
+    setPendingEncounterSort(sort);
+    setPendingEncounterPage(1);
+  }, []);
+
   const handleNavigate = useCallback((screen: string) => {
     setActiveScreen(screen as Screen);
   }, []);
@@ -470,26 +521,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       ]);
 
       if (data.mobEncounters.length > 0) {
-        setPendingEncounters((prev) => {
-          const existing = new Set(prev.map((p) => p.encounterId));
-          const fresh = data.mobEncounters
-            .filter((m) => !existing.has(m.encounterId))
-            .map((m) => ({
-              encounterId: m.encounterId,
-              zoneId: m.zoneId,
-              zoneName: m.zoneName,
-              mobTemplateId: m.mobTemplateId,
-              mobName: m.mobName,
-              turnOccurred: m.turnOccurred,
-              createdAt: m.createdAt,
-              expiresAt: m.expiresAt,
-            }));
-          return [...fresh, ...prev];
-        });
         setExplorationLog((prev) => [
           { timestamp: nowStamp(), type: 'success', message: `Encountered ${data.mobEncounters.length} mob(s). Check Combat tab.` },
           ...prev,
         ]);
+        if (activeScreen === 'combat') {
+          await refreshPendingEncounters();
+        }
       }
 
       if (data.resourceDiscoveries.length > 0) {
@@ -508,7 +546,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       const data = res.data;
       if (!data) {
         if (res.error?.code === 'ENCOUNTER_EXPIRED' || res.error?.code === 'NOT_FOUND') {
-          setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
+          await refreshPendingEncounters();
         }
         setActionError(res.error?.message ?? 'Combat failed');
         return;
@@ -546,8 +584,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         ]);
       }
 
-      await Promise.all([loadAll(), loadTurnsAndHp()]);
-      setPendingEncounters((prev) => prev.filter((p) => p.encounterId !== pendingEncounterId));
+      await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters()]);
     });
   };
 
@@ -709,7 +746,17 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
   const handleTravelToZone = async (id: string) => {
     const leavingZoneId = activeZoneId;
-    const leavingCount = leavingZoneId ? pendingEncounters.filter((p) => p.zoneId === leavingZoneId).length : 0;
+    let leavingCount = 0;
+
+    if (leavingZoneId) {
+      const pendingInZoneRes = await getPendingEncounters({
+        zoneId: leavingZoneId,
+        page: 1,
+        pageSize: 1,
+      });
+      leavingCount = pendingInZoneRes.data?.pagination.total
+        ?? pendingEncounters.filter((p) => p.zoneId === leavingZoneId).length;
+    }
 
     if (leavingZoneId && leavingCount > 0) {
       const ok = window.confirm(
@@ -718,7 +765,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       if (!ok) return;
 
       await abandonPendingEncounters(leavingZoneId);
-      setPendingEncounters((prev) => prev.filter((p) => p.zoneId !== leavingZoneId));
+      await refreshPendingEncounters();
     }
 
     setActiveZoneId(id);
@@ -759,6 +806,14 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     gatheringLog,
     craftingLog,
     pendingEncounters,
+    pendingEncountersLoading,
+    pendingEncountersError,
+    pendingEncounterPage,
+    pendingEncounterPagination,
+    pendingEncounterFilters,
+    pendingEncounterZoneFilter,
+    pendingEncounterMobFilter,
+    pendingEncounterSort,
     pendingClockMs,
     lastCombat,
     busyAction,
@@ -780,6 +835,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,
     handleGatheringResourceTypeFilterChange,
+    handlePendingEncounterPageChange,
+    handlePendingEncounterZoneFilterChange,
+    handlePendingEncounterMobFilterChange,
+    handlePendingEncounterSortChange,
     handleCraft,
     handleDestroyItem,
     handleRepairItem,

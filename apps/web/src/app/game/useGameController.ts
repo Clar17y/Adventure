@@ -65,10 +65,12 @@ export interface LastCombatLogEntry {
 
 export interface LastCombat {
   outcome: string;
+  playerMaxHp: number;
+  mobMaxHp: number;
   log: LastCombatLogEntry[];
   rewards: {
     xp: number;
-    loot: Array<{ itemTemplateId: string; quantity: number }>;
+    loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>;
     skillXp: {
       skillType: string;
       xpGained: number;
@@ -445,6 +447,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setTurns(data.turns.currentTurns);
       setLastCombat({
         outcome: data.combat.outcome,
+        playerMaxHp: data.combat.playerMaxHp,
+        mobMaxHp: data.combat.mobMaxHp,
         log: data.combat.log,
         rewards: {
           xp: data.rewards.xp,

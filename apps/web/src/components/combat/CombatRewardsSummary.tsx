@@ -13,6 +13,7 @@ function capitalize(s: string): string {
 
 export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryProps) {
   const { skillXp, secondarySkillXp, xp, loot } = rewards;
+  const totalLootItems = loot.reduce((sum, drop) => sum + drop.quantity, 0);
 
   const hasAnyRewards = xp > 0 || skillXp || secondarySkillXp.defence.xpGained > 0 || secondarySkillXp.evasion.xpGained > 0 || loot.length > 0;
 
@@ -25,7 +26,7 @@ export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryP
       {/* Primary combat skill XP */}
       {skillXp && (
         <div className="flex items-center gap-2 text-sm">
-          <span>⚔️</span>
+          <span>ATK</span>
           <span className="text-[var(--rpg-text-primary)]">{capitalize(skillXp.skillType)}</span>
           <span className="text-[var(--rpg-gold)] font-mono">
             +{skillXp.xpAfterEfficiency} XP
@@ -46,7 +47,7 @@ export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryP
       {/* Secondary skill XP: defence */}
       {secondarySkillXp.defence.xpGained > 0 && (
         <div className="flex items-center gap-2 text-sm">
-          <span>🛡️</span>
+          <span>DEF</span>
           <span className="text-[var(--rpg-text-primary)]">Defence</span>
           <span className="text-[var(--rpg-blue-light)] font-mono">
             +{secondarySkillXp.defence.xpGained} XP
@@ -67,7 +68,7 @@ export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryP
       {/* Secondary skill XP: evasion */}
       {secondarySkillXp.evasion.xpGained > 0 && (
         <div className="flex items-center gap-2 text-sm">
-          <span>💨</span>
+          <span>EVA</span>
           <span className="text-[var(--rpg-text-primary)]">Evasion</span>
           <span className="text-[var(--rpg-blue-light)] font-mono">
             +{secondarySkillXp.evasion.xpGained} XP
@@ -87,11 +88,23 @@ export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryP
 
       {/* Loot */}
       {loot.length > 0 && (
-        <div className="flex items-center gap-2 text-sm">
-          <span>🎒</span>
-          <span className="text-[var(--rpg-text-primary)]">
-            {loot.length} item{loot.length !== 1 ? 's' : ''} dropped
-          </span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span>LOOT</span>
+            <span className="text-[var(--rpg-text-primary)]">
+              {totalLootItems} item{totalLootItems !== 1 ? 's' : ''} dropped
+            </span>
+          </div>
+          <div className="pl-9 space-y-0.5">
+            {loot.map((drop, idx) => {
+              const name = drop.itemName?.trim() || drop.itemTemplateId;
+              return (
+                <div key={`${drop.itemTemplateId}-${idx}`} className="text-xs text-[var(--rpg-text-secondary)]">
+                  {name}{drop.quantity > 1 ? ` x${drop.quantity}` : ''}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

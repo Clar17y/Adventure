@@ -7,10 +7,14 @@ import {
   CRAFTING_SKILLS,
   GATHERING_SKILLS,
   type CraftingMaterial,
+  type ItemStats,
+  type ItemType,
   type SkillType,
 } from '@adventure/shared';
+import { calculateCraftingCrit } from '@adventure/game-engine';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { getEquipmentStats } from '../services/equipmentService';
 import { spendPlayerTurns } from '../services/turnBankService';
 import { consumeItemsByTemplate, getTotalQuantityByTemplate } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
@@ -26,6 +30,10 @@ function isSkillType(value: string): value is SkillType {
     GATHERING_SKILLS.includes(value as SkillType) ||
     CRAFTING_SKILLS.includes(value as SkillType)
   );
+}
+
+function isItemType(value: string): value is ItemType {
+  return value === 'weapon' || value === 'armor' || value === 'resource' || value === 'consumable';
 }
 
 async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
@@ -163,6 +171,12 @@ craftingRouter.post('/craft', async (req, res, next) => {
 
     // Create result items (stack where possible)
     const craftedItemIds: string[] = [];
+    const craftedItemDetails: Array<{
+      id: string;
+      isCrit: boolean;
+      bonusStat?: string;
+      bonusValue?: number;
+    }> = [];
     const needsDurability = recipe.resultTemplate.itemType === 'weapon' || recipe.resultTemplate.itemType === 'armor';
     const levelBuckets = Math.floor((skillLevel - recipe.requiredLevel) / 10);
     const durabilityBonusPct = levelBuckets * CRAFTING_CONSTANTS.DURABILITY_BONUS_PER_10_LEVELS;
@@ -196,7 +210,24 @@ craftingRouter.post('/craft', async (req, res, next) => {
         craftedItemIds.push(created.id);
       }
     } else {
+      const itemType: ItemType = isItemType(recipe.resultTemplate.itemType)
+        ? recipe.resultTemplate.itemType
+        : 'resource';
+      const equipStats = await getEquipmentStats(playerId);
+      const templateBaseStats = recipe.resultTemplate.baseStats as ItemStats | null | undefined;
+
       for (let i = 0; i < quantity; i++) {
+        const critResult = calculateCraftingCrit({
+          skillLevel,
+          requiredLevel: recipe.requiredLevel,
+          luckStat: equipStats.luck,
+          itemType,
+          baseStats: templateBaseStats,
+        });
+        const bonusStats = critResult.isCrit && critResult.bonusStat && typeof critResult.bonusValue === 'number'
+          ? ({ [critResult.bonusStat]: critResult.bonusValue } as Prisma.InputJsonObject)
+          : undefined;
+
         const created = await prisma.item.create({
           data: {
             ownerId: playerId,
@@ -204,10 +235,21 @@ craftingRouter.post('/craft', async (req, res, next) => {
             quantity: 1,
             maxDurability: craftedMax,
             currentDurability: craftedMax,
+            bonusStats,
           },
           select: { id: true },
         });
         craftedItemIds.push(created.id);
+        craftedItemDetails.push(
+          critResult.isCrit && critResult.bonusStat && typeof critResult.bonusValue === 'number'
+            ? {
+                id: created.id,
+                isCrit: true,
+                bonusStat: critResult.bonusStat,
+                bonusValue: critResult.bonusValue,
+              }
+            : { id: created.id, isCrit: false }
+        );
       }
     }
 
@@ -227,6 +269,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
           materials,
           resultTemplateId: recipe.resultTemplateId,
           craftedItemIds,
+          craftedItemDetails,
           durability: needsDurability
             ? { baseMax, durabilityBonusPct, craftedMax }
             : null,
@@ -249,6 +292,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
         quantity,
         craftedItemIds,
       },
+      craftedItemDetails,
       xp: {
         skillType: xpGrant.skillType,
         ...xpGrant.xpResult,

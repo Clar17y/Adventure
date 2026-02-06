@@ -666,6 +666,7 @@ export interface GatheringNodesQuery {
   pageSize?: number;
   zoneId?: string;
   resourceType?: string;
+  skillRequired?: 'mining' | 'foraging' | 'woodcutting';
 }
 
 export interface GatheringNodesResponse {
@@ -704,6 +705,7 @@ export async function getGatheringNodes(query: GatheringNodesQuery = {}) {
   if (query.pageSize !== undefined) params.set('pageSize', String(query.pageSize));
   if (query.zoneId) params.set('zoneId', query.zoneId);
   if (query.resourceType) params.set('resourceType', query.resourceType);
+  if (query.skillRequired) params.set('skillRequired', query.skillRequired);
 
   const suffix = params.toString();
   return fetchApi<GatheringNodesResponse>(`/api/v1/gathering/nodes${suffix ? `?${suffix}` : ''}`);

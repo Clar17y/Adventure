@@ -372,6 +372,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       pageSize: GATHERING_PAGE_SIZE,
       zoneId: gatheringZoneFilter === 'all' ? undefined : gatheringZoneFilter,
       resourceType: gatheringResourceTypeFilter === 'all' ? undefined : gatheringResourceTypeFilter,
+      skillRequired: activeGatheringSkill,
     });
 
     if (data) {
@@ -390,7 +391,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
 
     setGatheringLoading(false);
-  }, [isAuthenticated, gatheringPage, gatheringZoneFilter, gatheringResourceTypeFilter]);
+  }, [isAuthenticated, gatheringPage, gatheringZoneFilter, gatheringResourceTypeFilter, activeGatheringSkill]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

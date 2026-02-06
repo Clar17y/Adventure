@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
-import { GATHERING_CONSTANTS, type SkillType } from '@adventure/shared';
+import { GATHERING_CONSTANTS, GATHERING_SKILLS, type SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns } from '../services/turnBankService';
@@ -16,6 +16,9 @@ gatheringRouter.use(authenticate);
 const nodesQuerySchema = z.object({
   zoneId: z.string().uuid().optional(),
   resourceType: z.string().trim().toLowerCase().regex(/^[a-z0-9_]+$/).max(32).optional(),
+  skillRequired: z.string().trim().toLowerCase().refine((value) => GATHERING_SKILLS.includes(value as SkillType), {
+    message: 'Invalid gathering skill',
+  }).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
 });
@@ -36,7 +39,7 @@ function getResourceTypeCategory(resourceType: string): string {
 }
 
 /**
- * GET /api/v1/gathering/nodes?zoneId=...&resourceType=...&page=...&pageSize=...
+ * GET /api/v1/gathering/nodes?zoneId=...&resourceType=...&skillRequired=...&page=...&pageSize=...
  * List player's discovered resource nodes with remaining capacity, pagination, and filter metadata.
  */
 gatheringRouter.get('/nodes', async (req, res, next) => {
@@ -53,6 +56,9 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
         { resourceType: query.resourceType },
         { resourceType: { endsWith: `_${query.resourceType}` } },
       ];
+    }
+    if (query.skillRequired) {
+      resourceNodeWhere.skillRequired = query.skillRequired;
     }
 
     const where: Prisma.PlayerResourceNodeWhereInput = {
@@ -76,7 +82,10 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
         take: query.pageSize,
       }),
       prisma.resourceNode.findMany({
-        where: { playerNodes: { some: { playerId } } },
+        where: {
+          playerNodes: { some: { playerId } },
+          ...(query.skillRequired ? { skillRequired: query.skillRequired } : {}),
+        },
         select: {
           zoneId: true,
           resourceType: true,

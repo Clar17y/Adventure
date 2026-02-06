@@ -661,22 +661,50 @@ export async function craft(recipeId: string, quantity: number = 1) {
   });
 }
 
-export async function getGatheringNodes(zoneId?: string) {
-  const q = zoneId ? `?zoneId=${zoneId}` : '';
-  return fetchApi<{
-    nodes: Array<{
-      id: string;
-      templateId: string;
-      zoneId: string;
-      zoneName: string;
-      resourceType: string;
-      skillRequired: string;
-      levelRequired: number;
-      baseYield: number;
-      remainingCapacity: number;
-      maxCapacity: number;
-      sizeName: string;
-      discoveredAt: string;
-    }>;
-  }>(`/api/v1/gathering/nodes${q}`);
+export interface GatheringNodesQuery {
+  page?: number;
+  pageSize?: number;
+  zoneId?: string;
+  resourceType?: string;
+}
+
+export interface GatheringNodesResponse {
+  nodes: Array<{
+    id: string;
+    templateId: string;
+    zoneId: string;
+    zoneName: string;
+    resourceType: string;
+    resourceTypeCategory: string;
+    skillRequired: string;
+    levelRequired: number;
+    baseYield: number;
+    remainingCapacity: number;
+    maxCapacity: number;
+    sizeName: string;
+    discoveredAt: string;
+  }>;
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+  filters: {
+    zones: Array<{ id: string; name: string }>;
+    resourceTypes: string[];
+  };
+}
+
+export async function getGatheringNodes(query: GatheringNodesQuery = {}) {
+  const params = new URLSearchParams();
+  if (query.page !== undefined) params.set('page', String(query.page));
+  if (query.pageSize !== undefined) params.set('pageSize', String(query.pageSize));
+  if (query.zoneId) params.set('zoneId', query.zoneId);
+  if (query.resourceType) params.set('resourceType', query.resourceType);
+
+  const suffix = params.toString();
+  return fetchApi<GatheringNodesResponse>(`/api/v1/gathering/nodes${suffix ? `?${suffix}` : ''}`);
 }

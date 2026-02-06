@@ -15,6 +15,9 @@ gatheringRouter.use(authenticate);
 
 const nodesQuerySchema = z.object({
   zoneId: z.string().uuid().optional(),
+  resourceType: z.string().trim().toLowerCase().regex(/^[a-z0-9_]+$/).max(32).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
 });
 
 function getNodeSizeName(remaining: number, maxCapacity: number): string {
@@ -26,27 +29,78 @@ function getNodeSizeName(remaining: number, maxCapacity: number): string {
   return 'Huge';
 }
 
+function getResourceTypeCategory(resourceType: string): string {
+  const normalized = resourceType.trim().toLowerCase();
+  const parts = normalized.split('_').filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1]! : normalized;
+}
+
 /**
- * GET /api/v1/gathering/nodes?zoneId=...
- * List player's discovered resource nodes with remaining capacity.
+ * GET /api/v1/gathering/nodes?zoneId=...&resourceType=...&page=...&pageSize=...
+ * List player's discovered resource nodes with remaining capacity, pagination, and filter metadata.
  */
 gatheringRouter.get('/nodes', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const query = nodesQuerySchema.parse(req.query);
 
-    const playerNodes = await prisma.playerResourceNode.findMany({
-      where: {
-        playerId,
-        ...(query.zoneId ? { resourceNode: { zoneId: query.zoneId } } : {}),
-      },
-      include: {
-        resourceNode: {
-          include: { zone: true },
+    const resourceNodeWhere: Prisma.ResourceNodeWhereInput = {};
+    if (query.zoneId) {
+      resourceNodeWhere.zoneId = query.zoneId;
+    }
+    if (query.resourceType) {
+      resourceNodeWhere.OR = [
+        { resourceType: query.resourceType },
+        { resourceType: { endsWith: `_${query.resourceType}` } },
+      ];
+    }
+
+    const where: Prisma.PlayerResourceNodeWhereInput = {
+      playerId,
+      ...(Object.keys(resourceNodeWhere).length > 0 ? { resourceNode: resourceNodeWhere } : {}),
+    };
+
+    const offset = (query.page - 1) * query.pageSize;
+
+    const [total, playerNodes, templatesForFilters] = await Promise.all([
+      prisma.playerResourceNode.count({ where }),
+      prisma.playerResourceNode.findMany({
+        where,
+        include: {
+          resourceNode: {
+            include: { zone: true },
+          },
         },
-      },
-      orderBy: [{ discoveredAt: 'desc' }],
-    });
+        orderBy: [{ discoveredAt: 'desc' }],
+        skip: offset,
+        take: query.pageSize,
+      }),
+      prisma.resourceNode.findMany({
+        where: { playerNodes: { some: { playerId } } },
+        select: {
+          zoneId: true,
+          resourceType: true,
+          zone: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const zoneById = new Map<string, string>();
+    const resourceTypeSet = new Set<string>();
+    for (const template of templatesForFilters) {
+      zoneById.set(template.zoneId, template.zone.name);
+      resourceTypeSet.add(getResourceTypeCategory(template.resourceType));
+    }
+
+    const zones = Array.from(zoneById.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const resourceTypes = Array.from(resourceTypeSet).sort((a, b) => a.localeCompare(b));
+    const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
     res.json({
       nodes: playerNodes.map((pn: typeof playerNodes[number]) => {
@@ -57,6 +111,7 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
           zoneId: template.zoneId,
           zoneName: template.zone.name,
           resourceType: template.resourceType,
+          resourceTypeCategory: getResourceTypeCategory(template.resourceType),
           skillRequired: template.skillRequired,
           levelRequired: template.levelRequired,
           baseYield: template.baseYield,
@@ -66,6 +121,18 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
           discoveredAt: pn.discoveredAt.toISOString(),
         };
       }),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages,
+        hasNext: query.page < totalPages,
+        hasPrevious: query.page > 1,
+      },
+      filters: {
+        zones,
+        resourceTypes,
+      },
     });
   } catch (err) {
     next(err);

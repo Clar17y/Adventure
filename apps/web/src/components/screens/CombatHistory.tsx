@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getCombatLog,
   getCombatLogs,
@@ -75,6 +75,8 @@ export function CombatHistory() {
   const [selectedLoading, setSelectedLoading] = useState(false);
   const [selectedError, setSelectedError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const latestDetailRequestRef = useRef(0);
+  const selectedLogIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -145,11 +147,22 @@ export function CombatHistory() {
     };
   }, [page, outcome, zoneId, mobTemplateId, sort, search]);
 
+  useEffect(() => {
+    selectedLogIdRef.current = selectedLogId;
+    if (!selectedLogId) {
+      setSelectedLoading(false);
+    }
+  }, [selectedLogId]);
+
   const loadDetail = useCallback(async (logId: string) => {
+    const requestId = ++latestDetailRequestRef.current;
     setSelectedLoading(true);
     setSelectedError(null);
 
     const { data, error } = await getCombatLog(logId);
+    const isStale = latestDetailRequestRef.current !== requestId || selectedLogIdRef.current !== logId;
+    if (isStale) return;
+
     if (!data) {
       setSelectedDetail(null);
       setSelectedError(error?.message ?? 'Failed to load combat log');

@@ -536,7 +536,16 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'mobName') AS "mobName",
             ("result"->>'outcome') AS "outcome",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
-            COALESCE(jsonb_array_length(COALESCE("result"->'log', '[]'::jsonb)), 0) AS "roundCount"
+            COALESCE((
+              SELECT MAX(
+                CASE
+                  WHEN jsonb_typeof(log_entry->'round') = 'number'
+                    THEN (log_entry->>'round')::int
+                  ELSE 0
+                END
+              )
+              FROM jsonb_array_elements(COALESCE("result"->'log', '[]'::jsonb)) AS log_entry
+            ), 0) AS "roundCount"
           FROM "activity_logs"
           ${whereClause}
           ORDER BY COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) DESC, "created_at" DESC
@@ -553,7 +562,16 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'mobName') AS "mobName",
             ("result"->>'outcome') AS "outcome",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
-            COALESCE(jsonb_array_length(COALESCE("result"->'log', '[]'::jsonb)), 0) AS "roundCount"
+            COALESCE((
+              SELECT MAX(
+                CASE
+                  WHEN jsonb_typeof(log_entry->'round') = 'number'
+                    THEN (log_entry->>'round')::int
+                  ELSE 0
+                END
+              )
+              FROM jsonb_array_elements(COALESCE("result"->'log', '[]'::jsonb)) AS log_entry
+            ), 0) AS "roundCount"
           FROM "activity_logs"
           ${whereClause}
           ORDER BY "created_at" DESC

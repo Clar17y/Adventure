@@ -142,6 +142,31 @@ export const CRAFTING_CONSTANTS = {
 
   /** Durability bonus per 10 levels above requirement (%) */
   DURABILITY_BONUS_PER_10_LEVELS: 5,
+
+  // Crafting Crit
+  /** Base crit chance when skill level exactly matches recipe requirement */
+  BASE_CRIT_CHANCE: 0.05,
+
+  /** Additional crit chance per skill level above recipe requirement */
+  CRIT_CHANCE_PER_LEVEL: 0.01,
+
+  /** Additional crit chance per point of equipped luck */
+  LUCK_CRIT_BONUS_PER_POINT: 0.002,
+
+  /** Floor crit chance */
+  MIN_CRIT_CHANCE: 0.01,
+
+  /** Ceiling crit chance */
+  MAX_CRIT_CHANCE: 0.5,
+
+  /** Minimum crit bonus as a percent of the base stat */
+  MIN_BONUS_PERCENT: 0.1,
+
+  /** Maximum crit bonus as a percent of the base stat */
+  MAX_BONUS_PERCENT: 0.3,
+
+  /** Minimum guaranteed crit bonus value */
+  MIN_BONUS_MAGNITUDE: 1,
 } as const;
 
 // =============================================================================

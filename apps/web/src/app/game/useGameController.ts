@@ -177,6 +177,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [gatheringPage, setGatheringPage] = useState(1);
   const [gatheringZoneFilter, setGatheringZoneFilter] = useState('all');
   const [gatheringResourceTypeFilter, setGatheringResourceTypeFilter] = useState('all');
+  const [activeGatheringSkill, setActiveGatheringSkill] = useState<'mining' | 'foraging' | 'woodcutting'>('mining');
   const [gatheringPagination, setGatheringPagination] = useState({
     page: 1,
     pageSize: GATHERING_PAGE_SIZE,
@@ -202,6 +203,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     materialTemplates: Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
     xpReward: number;
   }>>([]);
+  const [activeCraftingSkill, setActiveCraftingSkill] = useState<'weaponsmithing' | 'alchemy'>('weaponsmithing');
   const [explorationLog, setExplorationLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>>([]);
   const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
   const [craftingLog, setCraftingLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
@@ -551,23 +553,26 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const handleMine = async (playerNodeId: string, turnSpend: number) => {
     if (!activeZoneId) return;
 
-    await runAction('mining', async () => {
+    await runAction('gathering', async () => {
       const res = await mine(playerNodeId, turnSpend, activeZoneId);
       const data = res.data;
       if (!data) {
-        setActionError(res.error?.message ?? 'Mining failed');
+        setActionError(res.error?.message ?? 'Gathering failed');
         return;
       }
 
       setTurns(data.turns.currentTurns);
 
       const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
+      const gatheredSkillName = data.xp?.skillType
+        ? data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1)
+        : 'Gathering';
 
       if (data.xp?.leveledUp) {
         newLogs.push({
           timestamp: nowStamp(),
           type: 'success',
-          message: `🎉 Mining leveled up to ${data.xp.newLevel}!`,
+          message: `${gatheredSkillName} leveled up to ${data.xp.newLevel}!`,
         });
       }
 
@@ -575,13 +580,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         newLogs.push({
           timestamp: nowStamp(),
           type: 'info',
-          message: `Vein depleted! Mined ${data.results.totalYield} resource(s).`,
+          message: `Node depleted! Gathered ${data.results.totalYield} resource(s).`,
         });
       } else {
         newLogs.push({
           timestamp: nowStamp(),
           type: 'success',
-          message: `Mined ${data.results.totalYield} resource(s). ${data.node.remainingCapacity} remaining.`,
+          message: `Gathered ${data.results.totalYield} resource(s). ${data.node.remainingCapacity} remaining.`,
         });
       }
 
@@ -744,7 +749,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     gatheringFilters,
     gatheringZoneFilter,
     gatheringResourceTypeFilter,
+    activeGatheringSkill,
+    setActiveGatheringSkill,
     craftingRecipes,
+    activeCraftingSkill,
+    setActiveCraftingSkill,
     explorationLog,
     gatheringLog,
     craftingLog,

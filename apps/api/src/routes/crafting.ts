@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
-import { CRAFTING_CONSTANTS, type CraftingMaterial, type SkillType } from '@adventure/shared';
+import {
+  COMBAT_SKILLS,
+  CRAFTING_CONSTANTS,
+  CRAFTING_SKILLS,
+  GATHERING_SKILLS,
+  type CraftingMaterial,
+  type SkillType,
+} from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns } from '../services/turnBankService';
@@ -15,14 +22,9 @@ craftingRouter.use(authenticate);
 
 function isSkillType(value: string): value is SkillType {
   return (
-    value === 'melee' ||
-    value === 'ranged' ||
-    value === 'magic' ||
-    value === 'defence' ||
-    value === 'vitality' ||
-    value === 'evasion' ||
-    value === 'mining' ||
-    value === 'weaponsmithing'
+    COMBAT_SKILLS.includes(value as SkillType) ||
+    GATHERING_SKILLS.includes(value as SkillType) ||
+    CRAFTING_SKILLS.includes(value as SkillType)
   );
 }
 

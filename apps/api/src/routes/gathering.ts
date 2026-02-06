@@ -204,7 +204,7 @@ gatheringRouter.post('/mine', async (req, res, next) => {
 
     // Validate player is in the correct zone
     if (template.zoneId !== body.currentZoneId) {
-      throw new AppError(400, 'You must travel to this zone to mine this resource', 'WRONG_ZONE');
+      throw new AppError(400, 'You must travel to this zone to gather this resource', 'WRONG_ZONE');
     }
 
     const skillRequired = template.skillRequired as SkillType;
@@ -261,12 +261,12 @@ gatheringRouter.post('/mine', async (req, res, next) => {
 
     // XP: 5 XP per action
     const rawXp = actions * 5;
-    const xpGrant = await grantSkillXp(playerId, 'mining', rawXp);
+    const xpGrant = await grantSkillXp(playerId, skillRequired, rawXp);
 
     const log = await prisma.activityLog.create({
       data: {
         playerId,
-        activityType: 'mining',
+        activityType: skillRequired,
         turnsSpent,
         result: {
           zoneId: template.zoneId,

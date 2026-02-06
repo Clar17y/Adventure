@@ -17,10 +17,22 @@ const IDS = {
     copperOre: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
     woodenSword: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
     leatherCap: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    forestSage: 'abababab-1111-1111-1111-111111111111',
+    moonpetal: 'abababab-2222-2222-2222-222222222222',
+    oakLog: 'abababab-3333-3333-3333-333333333333',
+    mapleLog: 'abababab-4444-4444-4444-444444444444',
+    minorHealthPotion: 'abababab-5555-5555-5555-555555555555',
+    healthPotion: 'abababab-6666-6666-6666-666666666666',
+    oakShortbow: 'abababab-7777-7777-7777-777777777777',
+    oakStaff: 'abababab-8888-8888-8888-888888888888',
   },
   resourceNodes: {
     copperNodeForestEdge: '99999999-9999-9999-9999-999999999999',
     ironNodeDeepForest: '99999999-8888-8888-8888-888888888888',
+    forestSageForestEdge: '88888888-1111-1111-1111-111111111111',
+    moonpetalDeepForest: '88888888-2222-2222-2222-222222222222',
+    oakLogForestEdge: '88888888-3333-3333-3333-333333333333',
+    mapleLogDeepForest: '88888888-4444-4444-4444-444444444444',
   },
   items2: {
     ironOre: '11111111-dddd-dddd-dddd-dddddddddddd',
@@ -33,6 +45,10 @@ const IDS = {
   },
   recipes: {
     woodenSword: '77777777-7777-7777-7777-777777777777',
+    minorHealthPotion: '66666666-1111-1111-1111-111111111111',
+    healthPotion: '66666666-2222-2222-2222-222222222222',
+    oakShortbow: '66666666-3333-3333-3333-333333333333',
+    oakStaff: '66666666-4444-4444-4444-444444444444',
   },
 } as const;
 
@@ -310,6 +326,114 @@ async function seedResourceNodes() {
       discoveryWeight: 100,
     },
   });
+
+  await prisma.resourceNode.upsert({
+    where: { id: IDS.resourceNodes.forestSageForestEdge },
+    create: {
+      id: IDS.resourceNodes.forestSageForestEdge,
+      zoneId: IDS.zones.forestEdge,
+      resourceType: 'forest_sage',
+      skillRequired: 'foraging',
+      levelRequired: 1,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.25'),
+      minCapacity: 15,
+      maxCapacity: 80,
+      discoveryWeight: 100,
+    },
+    update: {
+      zoneId: IDS.zones.forestEdge,
+      resourceType: 'forest_sage',
+      skillRequired: 'foraging',
+      levelRequired: 1,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.25'),
+      minCapacity: 15,
+      maxCapacity: 80,
+      discoveryWeight: 100,
+    },
+  });
+
+  await prisma.resourceNode.upsert({
+    where: { id: IDS.resourceNodes.moonpetalDeepForest },
+    create: {
+      id: IDS.resourceNodes.moonpetalDeepForest,
+      zoneId: IDS.zones.deepForest,
+      resourceType: 'moonpetal',
+      skillRequired: 'foraging',
+      levelRequired: 10,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.15'),
+      minCapacity: 30,
+      maxCapacity: 150,
+      discoveryWeight: 100,
+    },
+    update: {
+      zoneId: IDS.zones.deepForest,
+      resourceType: 'moonpetal',
+      skillRequired: 'foraging',
+      levelRequired: 10,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.15'),
+      minCapacity: 30,
+      maxCapacity: 150,
+      discoveryWeight: 100,
+    },
+  });
+
+  await prisma.resourceNode.upsert({
+    where: { id: IDS.resourceNodes.oakLogForestEdge },
+    create: {
+      id: IDS.resourceNodes.oakLogForestEdge,
+      zoneId: IDS.zones.forestEdge,
+      resourceType: 'oak_log',
+      skillRequired: 'woodcutting',
+      levelRequired: 1,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.25'),
+      minCapacity: 15,
+      maxCapacity: 80,
+      discoveryWeight: 100,
+    },
+    update: {
+      zoneId: IDS.zones.forestEdge,
+      resourceType: 'oak_log',
+      skillRequired: 'woodcutting',
+      levelRequired: 1,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.25'),
+      minCapacity: 15,
+      maxCapacity: 80,
+      discoveryWeight: 100,
+    },
+  });
+
+  await prisma.resourceNode.upsert({
+    where: { id: IDS.resourceNodes.mapleLogDeepForest },
+    create: {
+      id: IDS.resourceNodes.mapleLogDeepForest,
+      zoneId: IDS.zones.deepForest,
+      resourceType: 'maple_log',
+      skillRequired: 'woodcutting',
+      levelRequired: 10,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.15'),
+      minCapacity: 30,
+      maxCapacity: 150,
+      discoveryWeight: 100,
+    },
+    update: {
+      zoneId: IDS.zones.deepForest,
+      resourceType: 'maple_log',
+      skillRequired: 'woodcutting',
+      levelRequired: 10,
+      baseYield: 1,
+      discoveryChance: new Prisma.Decimal('0.15'),
+      minCapacity: 30,
+      maxCapacity: 150,
+      discoveryWeight: 100,
+    },
+  });
 }
 
 async function seedItemTemplates2() {
@@ -338,6 +462,224 @@ async function seedItemTemplates2() {
       requiredLevel: 1,
       maxDurability: 0,
       stackable: true,
+    },
+  });
+}
+
+async function seedNewSkillItemTemplates() {
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.forestSage },
+    create: {
+      id: IDS.items.forestSage,
+      name: 'Forest Sage',
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    update: {
+      name: 'Forest Sage',
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+  });
+
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.moonpetal },
+    create: {
+      id: IDS.items.moonpetal,
+      name: 'Moonpetal',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    update: {
+      name: 'Moonpetal',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+  });
+
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.oakLog },
+    create: {
+      id: IDS.items.oakLog,
+      name: 'Oak Log',
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    update: {
+      name: 'Oak Log',
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+  });
+
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.mapleLog },
+    create: {
+      id: IDS.items.mapleLog,
+      name: 'Maple Log',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    update: {
+      name: 'Maple Log',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+  });
+
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.minorHealthPotion },
+    create: {
+      id: IDS.items.minorHealthPotion,
+      name: 'Minor Health Potion',
+      itemType: 'consumable',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    update: {
+      name: 'Minor Health Potion',
+      itemType: 'consumable',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+  });
+
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.healthPotion },
+    create: {
+      id: IDS.items.healthPotion,
+      name: 'Health Potion',
+      itemType: 'consumable',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    update: {
+      name: 'Health Potion',
+      itemType: 'consumable',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+  });
+
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.oakShortbow },
+    create: {
+      id: IDS.items.oakShortbow,
+      name: 'Oak Shortbow',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 1,
+      baseStats: { rangedPower: 6 },
+      requiredSkill: 'ranged',
+      requiredLevel: 1,
+      maxDurability: 80,
+      stackable: false,
+    },
+    update: {
+      name: 'Oak Shortbow',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 1,
+      baseStats: { rangedPower: 6 },
+      requiredSkill: 'ranged',
+      requiredLevel: 1,
+      maxDurability: 80,
+      stackable: false,
+    },
+  });
+
+  await prisma.itemTemplate.upsert({
+    where: { id: IDS.items.oakStaff },
+    create: {
+      id: IDS.items.oakStaff,
+      name: 'Oak Staff',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 1,
+      baseStats: { magicPower: 6 },
+      requiredSkill: 'magic',
+      requiredLevel: 1,
+      maxDurability: 80,
+      stackable: false,
+    },
+    update: {
+      name: 'Oak Staff',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 1,
+      baseStats: { magicPower: 6 },
+      requiredSkill: 'magic',
+      requiredLevel: 1,
+      maxDurability: 80,
+      stackable: false,
     },
   });
 }
@@ -445,6 +787,108 @@ async function seedRecipes() {
       xpReward: 25,
     },
   });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.minorHealthPotion },
+    create: {
+      id: IDS.recipes.minorHealthPotion,
+      skillType: 'alchemy',
+      requiredLevel: 1,
+      resultTemplateId: IDS.items.minorHealthPotion,
+      turnCost: 20,
+      materials: [
+        { templateId: IDS.items.forestSage, quantity: 3 },
+      ],
+      xpReward: 20,
+    },
+    update: {
+      skillType: 'alchemy',
+      requiredLevel: 1,
+      resultTemplateId: IDS.items.minorHealthPotion,
+      turnCost: 20,
+      materials: [
+        { templateId: IDS.items.forestSage, quantity: 3 },
+      ],
+      xpReward: 20,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.healthPotion },
+    create: {
+      id: IDS.recipes.healthPotion,
+      skillType: 'alchemy',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.healthPotion,
+      turnCost: 40,
+      materials: [
+        { templateId: IDS.items.moonpetal, quantity: 5 },
+      ],
+      xpReward: 50,
+    },
+    update: {
+      skillType: 'alchemy',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.healthPotion,
+      turnCost: 40,
+      materials: [
+        { templateId: IDS.items.moonpetal, quantity: 5 },
+      ],
+      xpReward: 50,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.oakShortbow },
+    create: {
+      id: IDS.recipes.oakShortbow,
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.oakShortbow,
+      turnCost: 50,
+      materials: [
+        { templateId: IDS.items.oakLog, quantity: 8 },
+        { templateId: IDS.items.copperOre, quantity: 3 },
+      ],
+      xpReward: 35,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.oakShortbow,
+      turnCost: 50,
+      materials: [
+        { templateId: IDS.items.oakLog, quantity: 8 },
+        { templateId: IDS.items.copperOre, quantity: 3 },
+      ],
+      xpReward: 35,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.oakStaff },
+    create: {
+      id: IDS.recipes.oakStaff,
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.oakStaff,
+      turnCost: 50,
+      materials: [
+        { templateId: IDS.items.oakLog, quantity: 10 },
+      ],
+      xpReward: 35,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.oakStaff,
+      turnCost: 50,
+      materials: [
+        { templateId: IDS.items.oakLog, quantity: 10 },
+      ],
+      xpReward: 35,
+    },
+  });
 }
 
 async function main() {
@@ -453,6 +897,7 @@ async function main() {
   await seedZones();
   await seedItemTemplates();
   await seedItemTemplates2();
+  await seedNewSkillItemTemplates();
   await seedMobs();
   await seedResourceNodes();
   await seedDropTables();

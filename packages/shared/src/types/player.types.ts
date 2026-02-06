@@ -30,11 +30,14 @@ export type SkillType =
   | 'vitality'
   | 'evasion'
   | 'mining'
-  | 'weaponsmithing';
+  | 'foraging'
+  | 'woodcutting'
+  | 'weaponsmithing'
+  | 'alchemy';
 
 export const COMBAT_SKILLS: SkillType[] = ['melee', 'ranged', 'magic', 'defence', 'vitality', 'evasion'];
-export const GATHERING_SKILLS: SkillType[] = ['mining'];
-export const CRAFTING_SKILLS: SkillType[] = ['weaponsmithing'];
+export const GATHERING_SKILLS: SkillType[] = ['mining', 'foraging', 'woodcutting'];
+export const CRAFTING_SKILLS: SkillType[] = ['weaponsmithing', 'alchemy'];
 
 export interface PlayerEquipment {
   playerId: string;

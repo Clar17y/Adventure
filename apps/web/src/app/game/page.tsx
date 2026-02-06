@@ -146,6 +146,13 @@ export default function GamePage() {
     inventory,
     equipment,
     gatheringNodes,
+    gatheringLoading,
+    gatheringError,
+    gatheringPage,
+    gatheringPagination,
+    gatheringFilters,
+    gatheringZoneFilter,
+    gatheringResourceTypeFilter,
     craftingRecipes,
     explorationLog,
     gatheringLog,
@@ -165,6 +172,9 @@ export default function GamePage() {
     handleStartExploration,
     handleStartCombat,
     handleMine,
+    handleGatheringPageChange,
+    handleGatheringZoneFilterChange,
+    handleGatheringResourceTypeFilterChange,
     handleCraft,
     handleDestroyItem,
     handleRepairItem,
@@ -432,6 +442,7 @@ export default function GamePage() {
               baseYield: n.baseYield,
               zoneId: n.zoneId,
               zoneName: n.zoneName,
+              resourceTypeCategory: n.resourceTypeCategory,
               remainingCapacity: n.remainingCapacity,
               maxCapacity: n.maxCapacity,
               sizeName: n.sizeName,
@@ -439,6 +450,16 @@ export default function GamePage() {
             currentZoneId={activeZoneId}
             availableTurns={turns}
             gatheringLog={gatheringLog}
+            nodesLoading={gatheringLoading}
+            nodesError={gatheringError}
+            page={gatheringPage}
+            pagination={gatheringPagination}
+            filters={gatheringFilters}
+            zoneFilter={gatheringZoneFilter}
+            resourceTypeFilter={gatheringResourceTypeFilter}
+            onPageChange={handleGatheringPageChange}
+            onZoneFilterChange={handleGatheringZoneFilterChange}
+            onResourceTypeFilterChange={handleGatheringResourceTypeFilterChange}
             onStartGathering={handleMine}
             isRecovering={hpState.isRecovering}
             recoveryCost={hpState.recoveryCost}

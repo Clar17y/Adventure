@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
+import { Pagination } from '@/components/common/Pagination';
 import { Slider } from '@/components/ui/Slider';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
+import { titleCaseFromSnake } from '@/lib/format';
 import { Pickaxe, Clock, MapPin } from 'lucide-react';
 import { GATHERING_CONSTANTS } from '@adventure/shared';
 
@@ -17,6 +19,7 @@ interface ResourceNode {
   baseYield: number;
   zoneId: string;
   zoneName: string;
+  resourceTypeCategory?: string;
   remainingCapacity: number;
   maxCapacity: number;
   sizeName: string;
@@ -36,6 +39,26 @@ interface GatheringProps {
   currentZoneId: string | null;
   availableTurns: number;
   gatheringLog: GatheringLog[];
+  nodesLoading: boolean;
+  nodesError: string | null;
+  page: number;
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+  filters: {
+    zones: Array<{ id: string; name: string }>;
+    resourceTypes: string[];
+  };
+  zoneFilter: string;
+  resourceTypeFilter: string;
+  onPageChange: (page: number) => void;
+  onZoneFilterChange: (zoneId: string) => void;
+  onResourceTypeFilterChange: (resourceType: string) => void;
   onStartGathering: (nodeId: string, turns: number) => void;
   isRecovering?: boolean;
   recoveryCost?: number | null;
@@ -49,6 +72,16 @@ export function Gathering({
   currentZoneId,
   availableTurns,
   gatheringLog,
+  nodesLoading,
+  nodesError,
+  page,
+  pagination,
+  filters,
+  zoneFilter,
+  resourceTypeFilter,
+  onPageChange,
+  onZoneFilterChange,
+  onResourceTypeFilterChange,
   onStartGathering,
   isRecovering = false,
   recoveryCost,
@@ -58,7 +91,10 @@ export function Gathering({
 
   // Sync selected node with updated data from props (e.g., after mining reduces capacity)
   useEffect(() => {
-    if (!selectedNode) return;
+    if (!selectedNode) {
+      if (nodes.length > 0) setSelectedNode(nodes[0]);
+      return;
+    }
 
     const updatedNode = nodes.find((n) => n.id === selectedNode.id);
     if (!updatedNode) {
@@ -112,10 +148,48 @@ export function Gathering({
 
       {/* Resource Nodes */}
       <div className="space-y-2">
-        <h3 className="font-semibold text-[var(--rpg-text-primary)] text-sm">Discovered Veins</h3>
-        {nodes.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <select
+            value={zoneFilter}
+            onChange={(event) => onZoneFilterChange(event.target.value)}
+            className="px-3 py-2 rounded border border-[var(--rpg-border)] bg-[var(--rpg-background)] text-[var(--rpg-text-primary)] text-sm"
+            disabled={nodesLoading}
+          >
+            <option value="all">Zone: All</option>
+            {filters.zones.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={resourceTypeFilter}
+            onChange={(event) => onResourceTypeFilterChange(event.target.value)}
+            className="px-3 py-2 rounded border border-[var(--rpg-border)] bg-[var(--rpg-background)] text-[var(--rpg-text-primary)] text-sm"
+            disabled={nodesLoading}
+          >
+            <option value="all">Type: All</option>
+            {filters.resourceTypes.map((resourceType) => (
+              <option key={resourceType} value={resourceType}>
+                {titleCaseFromSnake(resourceType)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <h3 className="font-semibold text-[var(--rpg-text-primary)] text-sm">Discovered Nodes</h3>
+        {nodesLoading ? (
           <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">
-            No resource veins discovered. Explore to find some!
+            Loading resource nodes...
+          </div>
+        ) : nodesError ? (
+          <div className="text-sm text-[var(--rpg-red)] text-center py-4">
+            {nodesError}
+          </div>
+        ) : nodes.length === 0 ? (
+          <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">
+            No resource nodes match these filters.
           </div>
         ) : nodes.map((node) => {
           const isSelected = selectedNode?.id === node.id;
@@ -180,6 +254,15 @@ export function Gathering({
             </button>
           );
         })}
+
+        {!nodesLoading && !nodesError && pagination.totalPages > 1 && (
+          <Pagination
+            page={page}
+            totalPages={pagination.totalPages}
+            onPageChange={onPageChange}
+            className="pt-1"
+          />
+        )}
       </div>
 
       {/* Turn Investment */}
@@ -253,14 +336,14 @@ export function Gathering({
               <div className="text-sm text-[var(--rpg-text-secondary)]">{selectedNode.name}</div>
               <div className="text-3xl font-bold text-[var(--rpg-gold)] font-mono">{yieldInfo.totalYield}</div>
               <div className="text-xs text-[var(--rpg-text-secondary)]">
-                {yieldInfo.actions} action{yieldInfo.actions !== 1 ? 's' : ''} × {yieldInfo.baseYield} base
+                {yieldInfo.actions} action{yieldInfo.actions !== 1 ? 's' : ''} x {yieldInfo.baseYield} base
                 {yieldInfo.yieldMultiplier > 1 && (
-                  <span className="text-[var(--rpg-green-light)]"> × {yieldInfo.yieldMultiplier.toFixed(1)}</span>
+                  <span className="text-[var(--rpg-green-light)]"> x {yieldInfo.yieldMultiplier.toFixed(1)}</span>
                 )}
               </div>
               {yieldInfo.willDeplete && (
                 <div className="text-xs text-[var(--rpg-red)] mt-1 font-semibold">
-                  ⚠️ Will exhaust vein completely
+                  WARNING: Will exhaust node completely
                 </div>
               )}
             </div>
@@ -275,7 +358,7 @@ export function Gathering({
           size="lg"
           className="w-full"
           onClick={() => onStartGathering(selectedNode.id, turnInvestment[0])}
-          disabled={isRecovering || turnInvestment[0] > availableTurns}
+          disabled={isRecovering || turnInvestment[0] > availableTurns || nodesLoading || Boolean(nodesError)}
         >
           <div className="flex items-center justify-center gap-2">
             <Pickaxe size={20} />

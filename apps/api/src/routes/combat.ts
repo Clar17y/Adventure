@@ -121,13 +121,17 @@ combatRouter.get('/pending', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const now = new Date();
-    const query = listPendingQuerySchema.parse({
+    const parsedQuery = listPendingQuerySchema.safeParse({
       zoneId: req.query.zoneId,
       mobTemplateId: req.query.mobTemplateId,
       sort: req.query.sort,
       page: req.query.page,
       pageSize: req.query.pageSize,
     });
+    if (!parsedQuery.success) {
+      throw new AppError(400, 'Invalid pending encounter query parameters', 'INVALID_QUERY');
+    }
+    const query = parsedQuery.data;
 
     await prismaAny.pendingEncounter.deleteMany({
       where: { playerId, expiresAt: { lte: now } },
@@ -144,7 +148,7 @@ combatRouter.get('/pending', async (req, res, next) => {
     };
     const offset = (query.page - 1) * query.pageSize;
 
-    const [total, pending, filterRows] = await Promise.all([
+    const [total, pending, distinctZones, distinctMobs] = await Promise.all([
       prismaAny.pendingEncounter.count({ where }),
       prismaAny.pendingEncounter.findMany({
         where,
@@ -158,30 +162,36 @@ combatRouter.get('/pending', async (req, res, next) => {
           mobTemplate: { select: { id: true, name: true } },
         },
       }),
-      prismaAny.pendingEncounter.findMany({
+      prismaAny.pendingEncounter.groupBy({
         where: baseWhere,
-        select: {
-          zoneId: true,
-          mobTemplateId: true,
-          zone: { select: { name: true } },
-          mobTemplate: { select: { name: true } },
-        },
+        by: ['zoneId'],
+      }),
+      prismaAny.pendingEncounter.groupBy({
+        where: baseWhere,
+        by: ['mobTemplateId'],
       }),
     ]);
 
-    const zoneById = new Map<string, string>();
-    const mobById = new Map<string, string>();
-    for (const row of filterRows) {
-      zoneById.set(row.zoneId, row.zone.name);
-      mobById.set(row.mobTemplateId, row.mobTemplate.name);
-    }
+    const zoneIds = distinctZones.map((row: { zoneId: string }) => row.zoneId);
+    const mobTemplateIds = distinctMobs.map((row: { mobTemplateId: string }) => row.mobTemplateId);
 
-    const zones = Array.from(zoneById.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const mobs = Array.from(mobById.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const [zoneRows, mobRows] = await Promise.all([
+      zoneIds.length > 0
+        ? prisma.zone.findMany({
+            where: { id: { in: zoneIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+      mobTemplateIds.length > 0
+        ? prisma.mobTemplate.findMany({
+            where: { id: { in: mobTemplateIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+    ]);
+
+    const zones = zoneRows.sort((a, b) => a.name.localeCompare(b.name));
+    const mobs = mobRows.sort((a, b) => a.name.localeCompare(b.name));
     const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
     res.json({

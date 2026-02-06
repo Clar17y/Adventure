@@ -38,11 +38,14 @@ function hpSnapshot(state: CombatState): Pick<CombatLogEntry, 'playerHpAfter' | 
  */
 export function runCombat(
   playerStats: CombatantStats,
-  mob: MobTemplate
+  mob: MobTemplate & { currentHp?: number; maxHp?: number }
 ): CombatResult {
+  const mobMaxHp = typeof mob.maxHp === 'number' ? mob.maxHp : mob.hp;
+  const mobCurrentHp = typeof mob.currentHp === 'number' ? mob.currentHp : mob.hp;
+
   const mobStats: CombatantStats = {
-    hp: mob.hp,
-    maxHp: mob.hp,
+    hp: mobCurrentHp,
+    maxHp: mobMaxHp,
     attack: mob.attack,
     defence: mob.defence,
     evasion: mob.evasion,
@@ -107,6 +110,8 @@ export function runCombat(
   return {
     outcome: state.outcome,
     log: state.log,
+    playerMaxHp: state.playerMaxHp,
+    mobMaxHp: state.mobMaxHp,
     xpGained: state.outcome === 'victory' ? mob.xpReward : 0,
     loot: [],
     durabilityLost: [],

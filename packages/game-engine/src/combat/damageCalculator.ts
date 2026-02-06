@@ -82,13 +82,14 @@ export function rollInitiative(speed: number): number {
  * This is a placeholder - actual implementation will aggregate from equipment.
  */
 export function buildPlayerCombatStats(
-  baseHp: number,
+  currentHp: number,
+  maxHp: number,
   skillLevels: { attack: number; defence: number; vitality: number; evasion: number },
   equipmentStats: { attack: number; armor: number; health: number; evasion: number }
 ): CombatantStats {
   return {
-    hp: baseHp + equipmentStats.health + skillLevels.vitality * 5,
-    maxHp: baseHp + equipmentStats.health + skillLevels.vitality * 5,
+    hp: Math.min(currentHp, maxHp),
+    maxHp,
     attack: skillLevels.attack + equipmentStats.attack,
     defence: skillLevels.defence + equipmentStats.armor,
     evasion: skillLevels.evasion + equipmentStats.evasion,

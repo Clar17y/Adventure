@@ -401,6 +401,28 @@ export interface SecondarySkillXpResponse {
   grants: SkillXpGrantResponse[];
 }
 
+export type CombatOutcomeResponse = 'victory' | 'defeat' | 'fled';
+
+export interface CombatResultResponse {
+  zoneId: string;
+  zoneName: string;
+  mobTemplateId: string;
+  mobName: string;
+  pendingEncounterId: string | null;
+  attackSkill: 'melee' | 'ranged' | 'magic';
+  outcome: CombatOutcomeResponse;
+  playerMaxHp: number;
+  mobMaxHp: number;
+  log: CombatLogEntryResponse[];
+  rewards: {
+    xp: number;
+    loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>;
+    durabilityLost: Array<{ itemId: string; amount: number }>;
+    skillXp: SkillXpGrantResponse | null;
+    secondarySkillXp: SecondarySkillXpResponse;
+  };
+}
+
 export interface CombatResponse {
   logId: string;
   turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
@@ -408,16 +430,56 @@ export interface CombatResponse {
     zoneId: string;
     mobTemplateId: string;
     pendingEncounterId: string | null;
-    outcome: 'victory' | 'defeat' | 'fled';
+    outcome: CombatOutcomeResponse;
+    playerMaxHp: number;
+    mobMaxHp: number;
     log: CombatLogEntryResponse[];
   };
   rewards: {
     xp: number;
-    loot: Array<{ itemTemplateId: string; quantity: number }>;
+    loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>;
     durabilityLost: Array<{ itemId: string; amount: number }>;
     skillXp: SkillXpGrantResponse | null;
     secondarySkillXp: SecondarySkillXpResponse;
   };
+}
+
+export interface CombatHistoryListItemResponse {
+  logId: string;
+  createdAt: string;
+  zoneId: string | null;
+  zoneName: string | null;
+  mobTemplateId: string | null;
+  mobName: string | null;
+  outcome: string | null;
+  roundCount: number;
+  xpGained: number;
+}
+
+export interface CombatHistoryResponse {
+  logs: CombatHistoryListItemResponse[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+  filters: {
+    zones: Array<{ id: string; name: string }>;
+    mobs: Array<{ id: string; name: string }>;
+  };
+}
+
+export interface CombatHistoryQuery {
+  page?: number;
+  pageSize?: number;
+  outcome?: CombatOutcomeResponse;
+  zoneId?: string;
+  mobTemplateId?: string;
+  sort?: 'recent' | 'xp';
+  search?: string;
 }
 
 export async function startCombat(zoneId: string, attackSkill: 'melee' | 'ranged' | 'magic' = 'melee', mobTemplateId?: string) {
@@ -457,11 +519,22 @@ export async function abandonPendingEncounters(zoneId?: string) {
 }
 
 export async function getCombatLog(id: string) {
-  return fetchApi<{
-    logId: string;
-    createdAt: string;
-    combat: unknown;
-  }>(`/api/v1/combat/logs/${id}`);
+  return fetchApi<{ logId: string; createdAt: string; combat: CombatResultResponse }>(`/api/v1/combat/logs/${id}`);
+}
+
+export async function getCombatLogs(query: CombatHistoryQuery = {}) {
+  const params = new URLSearchParams();
+
+  if (query.page !== undefined) params.set('page', String(query.page));
+  if (query.pageSize !== undefined) params.set('pageSize', String(query.pageSize));
+  if (query.outcome) params.set('outcome', query.outcome);
+  if (query.zoneId) params.set('zoneId', query.zoneId);
+  if (query.mobTemplateId) params.set('mobTemplateId', query.mobTemplateId);
+  if (query.sort) params.set('sort', query.sort);
+  if (query.search) params.set('search', query.search);
+
+  const suffix = params.toString();
+  return fetchApi<CombatHistoryResponse>(`/api/v1/combat/logs${suffix ? `?${suffix}` : ''}`);
 }
 
 // Inventory & Equipment

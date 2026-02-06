@@ -61,6 +61,8 @@ export interface SecondarySkillXpEntry {
 export interface CombatResult {
   outcome: CombatOutcome;
   log: CombatLogEntry[];
+  playerMaxHp: number;
+  mobMaxHp: number;
   xpGained: number;
   loot: LootDrop[];
   durabilityLost: DurabilityLoss[];

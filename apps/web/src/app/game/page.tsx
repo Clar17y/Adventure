@@ -292,6 +292,7 @@ export default function GamePage() {
                 return { current: cur, max };
               })(),
               baseStats: item.template.baseStats,
+              bonusStats: item.bonusStats ?? null,
               requiredSkill: item.template.requiredSkill ?? null,
               requiredLevel: item.template.requiredLevel ?? 1,
             }))}
@@ -322,6 +323,7 @@ export default function GamePage() {
                       durability: cur,
                       maxDurability: max,
                       baseStats: template.baseStats,
+                      bonusStats: e.item?.bonusStats ?? null,
                     }
                   : null,
               };
@@ -342,6 +344,7 @@ export default function GamePage() {
                   equippedSlot: item.equippedSlot,
                   durability,
                   baseStats: item.template.baseStats,
+                  bonusStats: item.bonusStats ?? null,
                 };
               })}
             onEquip={handleEquipItem}
@@ -353,11 +356,19 @@ export default function GamePage() {
               let evasion = 0;
               for (const e of equipment) {
                 const base = e.item?.template?.baseStats as Record<string, unknown> | undefined;
-                if (!base) continue;
-                if (typeof base.attack === 'number') attack += base.attack;
-                if (typeof base.armor === 'number') defence += base.armor;
-                if (typeof base.health === 'number') hp += base.health;
-                if (typeof base.evasion === 'number') evasion += base.evasion;
+                const bonus = e.item?.bonusStats ?? undefined;
+                if (base) {
+                  if (typeof base.attack === 'number') attack += base.attack;
+                  if (typeof base.armor === 'number') defence += base.armor;
+                  if (typeof base.health === 'number') hp += base.health;
+                  if (typeof base.evasion === 'number') evasion += base.evasion;
+                }
+                if (bonus) {
+                  if (typeof bonus.attack === 'number') attack += bonus.attack;
+                  if (typeof bonus.armor === 'number') defence += bonus.armor;
+                  if (typeof bonus.health === 'number') hp += bonus.health;
+                  if (typeof bonus.evasion === 'number') evasion += bonus.evasion;
+                }
               }
               return { attack, defence, hp, evasion };
             })()}

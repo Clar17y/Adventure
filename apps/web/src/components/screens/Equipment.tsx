@@ -17,6 +17,7 @@ interface EquippedItem {
   durability: number;
   maxDurability: number;
   baseStats?: Record<string, unknown>;
+  bonusStats?: Record<string, unknown> | null;
 }
 
 interface EquipmentSlot {
@@ -37,6 +38,7 @@ interface EquipmentProps {
     equippedSlot: string | null;
     durability: { current: number; max: number } | null;
     baseStats?: Record<string, unknown>;
+    bonusStats?: Record<string, unknown> | null;
   }>;
   onEquip?: (itemId: string, slot: string) => void | Promise<void>;
   onUnequip?: (slot: string) => void | Promise<void>;
@@ -55,6 +57,21 @@ function numStat(value: unknown): number | null {
 function statValue(stats: Record<string, unknown> | undefined, key: string): number {
   const v = stats ? numStat((stats as any)[key]) : null;
   return typeof v === 'number' ? v : 0;
+}
+
+function totalStatValue(
+  baseStats: Record<string, unknown> | undefined,
+  bonusStats: Record<string, unknown> | null | undefined,
+  key: string
+): number {
+  return statValue(baseStats, key) + statValue(bonusStats ?? undefined, key);
+}
+
+function prettyStatName(stat: string): string {
+  return stat
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (char) => char.toUpperCase())
+    .trim();
 }
 
 function prettySlot(slot: string) {
@@ -249,43 +266,62 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                     />
 
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      {statValue(currentItem.baseStats, 'attack') !== 0 && (
+                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'attack') !== 0 && (
                         <div className="flex items-center gap-2">
                           <Sword size={16} className="text-[var(--rpg-red)]" />
                           <span className="text-[var(--rpg-text-secondary)]">Attack</span>
                           <span className="ml-auto font-mono text-[var(--rpg-red)]">
-                            +{statValue(currentItem.baseStats, 'attack')}
+                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'attack')}
                           </span>
                         </div>
                       )}
-                      {statValue(currentItem.baseStats, 'armor') !== 0 && (
+                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'armor') !== 0 && (
                         <div className="flex items-center gap-2">
                           <Shield size={16} className="text-[var(--rpg-blue-light)]" />
                           <span className="text-[var(--rpg-text-secondary)]">Armor</span>
                           <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">
-                            +{statValue(currentItem.baseStats, 'armor')}
+                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'armor')}
                           </span>
                         </div>
                       )}
-                      {statValue(currentItem.baseStats, 'health') !== 0 && (
+                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'health') !== 0 && (
                         <div className="flex items-center gap-2">
                           <Heart size={16} className="text-[var(--rpg-green-light)]" />
                           <span className="text-[var(--rpg-text-secondary)]">HP</span>
                           <span className="ml-auto font-mono text-[var(--rpg-green-light)]">
-                            +{statValue(currentItem.baseStats, 'health')}
+                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'health')}
                           </span>
                         </div>
                       )}
-                      {statValue(currentItem.baseStats, 'evasion') !== 0 && (
+                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'evasion') !== 0 && (
                         <div className="flex items-center gap-2">
                           <Zap size={16} className="text-[var(--rpg-gold)]" />
                           <span className="text-[var(--rpg-text-secondary)]">Evasion</span>
                           <span className="ml-auto font-mono text-[var(--rpg-gold)]">
-                            +{statValue(currentItem.baseStats, 'evasion')}
+                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'evasion')}
                           </span>
                         </div>
                       )}
                     </div>
+
+                    {(() => {
+                      const bonusEntries = Object.entries(currentItem.bonusStats ?? {})
+                        .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] !== 0);
+                      if (bonusEntries.length === 0) return null;
+
+                      return (
+                        <div className="mt-2 border-t border-[var(--rpg-border)] pt-2">
+                          <div className="text-xs font-semibold text-[var(--rpg-gold)] mb-1">Critical Bonus</div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono">
+                            {bonusEntries.map(([stat, value]) => (
+                              <span key={stat} className="text-[var(--rpg-green-light)]">
+                                +{value} {prettyStatName(stat)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="text-sm text-[var(--rpg-text-secondary)]">Empty</div>
@@ -301,15 +337,15 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                 ) : (
                   <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                     {candidates.map((item) => {
-                      const currentAttack = statValue(currentItem?.baseStats, 'attack');
-                      const currentArmor = statValue(currentItem?.baseStats, 'armor');
-                      const currentHealth = statValue(currentItem?.baseStats, 'health');
-                      const currentEvasion = statValue(currentItem?.baseStats, 'evasion');
+                      const currentAttack = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'attack');
+                      const currentArmor = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'armor');
+                      const currentHealth = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'health');
+                      const currentEvasion = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'evasion');
 
-                      const nextAttack = statValue(item.baseStats, 'attack');
-                      const nextArmor = statValue(item.baseStats, 'armor');
-                      const nextHealth = statValue(item.baseStats, 'health');
-                      const nextEvasion = statValue(item.baseStats, 'evasion');
+                      const nextAttack = totalStatValue(item.baseStats, item.bonusStats, 'attack');
+                      const nextArmor = totalStatValue(item.baseStats, item.bonusStats, 'armor');
+                      const nextHealth = totalStatValue(item.baseStats, item.bonusStats, 'health');
+                      const nextEvasion = totalStatValue(item.baseStats, item.bonusStats, 'evasion');
 
                       const diffs = [
                         { key: 'Attack', diff: nextAttack - currentAttack },
@@ -492,13 +528,30 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                     <span className="text-xs text-[var(--rpg-text-secondary)] capitalize">{slot.name}</span>
                   </div>
                   {slot.item && (
-                    <StatBar
-                      current={slot.item.durability}
-                      max={slot.item.maxDurability}
-                      color="durability"
-                      size="sm"
-                      showNumbers={false}
-                    />
+                    <>
+                      <StatBar
+                        current={slot.item.durability}
+                        max={slot.item.maxDurability}
+                        color="durability"
+                        size="sm"
+                        showNumbers={false}
+                      />
+                      {(() => {
+                        const bonusEntries = Object.entries(slot.item.bonusStats ?? {})
+                          .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] !== 0);
+                        if (bonusEntries.length === 0) return null;
+
+                        return (
+                          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs font-mono">
+                            {bonusEntries.map(([stat, value]) => (
+                              <span key={stat} className="text-[var(--rpg-green-light)]">
+                                +{value} {prettyStatName(stat)}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </>
                   )}
                 </div>
               </div>

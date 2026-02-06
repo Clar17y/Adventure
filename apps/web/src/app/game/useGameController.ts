@@ -123,6 +123,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     quantity: number;
     currentDurability: number | null;
     maxDurability: number | null;
+    bonusStats: Record<string, number> | null;
     equippedSlot: string | null;
     template: {
       id: string;
@@ -144,6 +145,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       id: string;
       currentDurability: number | null;
       maxDurability: number | null;
+      bonusStats: Record<string, number> | null;
       template: {
         id: string;
         name: string;
@@ -293,7 +295,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           slot: e.slot,
           itemId: e.itemId,
           item: e.item
-            ? { id: e.item.id, currentDurability: e.item.currentDurability, maxDurability: e.item.maxDurability, template: e.item.template }
+            ? {
+                id: e.item.id,
+                currentDurability: e.item.currentDurability,
+                maxDurability: e.item.maxDurability,
+                bonusStats: e.item.bonusStats ?? null,
+                template: e.item.template,
+              }
             : null,
         }))
       );
@@ -477,6 +485,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatStatName = (stat: string) =>
+    stat
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, (char) => char.toUpperCase())
+      .trim();
 
   const currentZone =
     zones.find((z) => z.id === activeZoneId) ??
@@ -670,6 +683,15 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         type: 'success',
         message: `Crafted ${recipe?.resultTemplate.name ?? 'item'} x${data.crafted.quantity}.`,
       });
+
+      for (const detail of data.craftedItemDetails ?? []) {
+        if (!detail.isCrit || !detail.bonusStat || typeof detail.bonusValue !== 'number') continue;
+        newLogs.push({
+          timestamp,
+          type: 'success',
+          message: `Critical craft! +${detail.bonusValue} ${formatStatName(detail.bonusStat)}.`,
+        });
+      }
 
       newLogs.push({
         timestamp,

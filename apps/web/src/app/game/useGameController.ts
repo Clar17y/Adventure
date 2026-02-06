@@ -16,6 +16,7 @@ import {
   getZones,
   mine,
   repairItem,
+  salvage,
   startCombatFromPendingEncounter,
   startExploration,
   unequip,
@@ -720,6 +721,31 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     });
   };
 
+  const handleSalvageItem = async (itemId: string) => {
+    await runAction('salvage', async () => {
+      const res = await salvage(itemId);
+      const data = res.data;
+      if (!data) {
+        setActionError(res.error?.message ?? 'Salvage failed');
+        return;
+      }
+
+      setTurns(data.turns.currentTurns);
+      const materialSummary = data.salvage.returnedMaterials
+        .map((entry) => `${entry.name} x${entry.quantity}`)
+        .join(', ');
+      setCraftingLog((prev) => [
+        {
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Salvaged item for: ${materialSummary}.`,
+        },
+        ...prev,
+      ]);
+      await loadAll();
+    });
+  };
+
   const handleDestroyItem = async (itemId: string) => {
     await runAction('destroy', async () => {
       const res = await destroyInventoryItem(itemId);
@@ -862,6 +888,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handlePendingEncounterMobFilterChange,
     handlePendingEncounterSortChange,
     handleCraft,
+    handleSalvageItem,
     handleDestroyItem,
     handleRepairItem,
     handleEquipItem,

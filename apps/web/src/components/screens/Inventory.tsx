@@ -29,6 +29,7 @@ interface Item {
 interface InventoryProps {
   items: Item[];
   onDrop?: (itemId: string) => void | Promise<void>;
+  onSalvage?: (itemId: string) => void | Promise<void>;
   onRepair?: (itemId: string) => void | Promise<void>;
   onEquip?: (itemId: string, slot: string) => void | Promise<void>;
   onUnequip?: (slot: string) => void | Promise<void>;
@@ -57,7 +58,7 @@ function statDisplay(stat: string) {
   return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: prettyStatName(stat) };
 }
 
-export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: InventoryProps) {
+export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequip }: InventoryProps) {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -78,6 +79,7 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
   const canRepair = Boolean(onRepair && isRepairable);
   const canEquip = Boolean(onEquip && isEquippable && !isEquipped);
   const canUnequip = Boolean(onUnequip && isEquippable && isEquipped);
+  const canSalvage = Boolean(onSalvage && isRepairable && !isEquipped);
   const canDrop = Boolean(onDrop && !isEquipped);
 
   return (
@@ -244,7 +246,7 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <PixelButton
                 variant="primary"
                 size="sm"
@@ -286,6 +288,25 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
                 }}
               >
                 {selectedItem.equippedSlot ? 'Unequip' : 'Equip'}
+              </PixelButton>
+
+              <PixelButton
+                variant="secondary"
+                size="sm"
+                className="flex-1"
+                disabled={busy || !canSalvage}
+                onClick={async () => {
+                  if (!onSalvage) return;
+                  setBusy(true);
+                  try {
+                    await onSalvage(selectedItem.id);
+                    setSelectedItem(null);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Salvage
               </PixelButton>
 
               <PixelButton

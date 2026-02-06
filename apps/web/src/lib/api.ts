@@ -694,6 +694,21 @@ export async function craft(recipeId: string, quantity: number = 1) {
   });
 }
 
+export async function salvage(itemId: string) {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    salvage: {
+      salvagedItemId: string;
+      salvagedTemplateId: string;
+      returnedMaterials: Array<{ templateId: string; name: string; quantity: number }>;
+    };
+  }>('/api/v1/crafting/salvage', {
+    method: 'POST',
+    body: JSON.stringify({ itemId }),
+  });
+}
+
 export interface GatheringNodesQuery {
   page?: number;
   pageSize?: number;

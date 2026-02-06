@@ -206,6 +206,7 @@ export default function GamePage() {
     handlePendingEncounterMobFilterChange,
     handlePendingEncounterSortChange,
     handleCraft,
+    handleSalvageItem,
     handleDestroyItem,
     handleRepairItem,
     handleEquipItem,
@@ -297,6 +298,7 @@ export default function GamePage() {
               requiredLevel: item.template.requiredLevel ?? 1,
             }))}
             onDrop={handleDestroyItem}
+            onSalvage={handleSalvageItem}
             onRepair={handleRepairItem}
             onEquip={handleEquipItem}
             onUnequip={handleUnequipSlot}

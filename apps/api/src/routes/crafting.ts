@@ -16,7 +16,7 @@ import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { getEquipmentStats } from '../services/equipmentService';
 import { spendPlayerTurns } from '../services/turnBankService';
-import { consumeItemsByTemplate, getTotalQuantityByTemplate } from '../services/inventoryService';
+import { addStackableItem, consumeItemsByTemplate, getTotalQuantityByTemplate } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
 
@@ -53,6 +53,26 @@ function parseMaterials(value: unknown): CraftingMaterial[] {
 
   const arraySchema = z.array(materialSchema);
   return arraySchema.parse(value);
+}
+
+function calculateSalvageMaterials(materials: CraftingMaterial[]): CraftingMaterial[] {
+  const refunded = materials.map((material) => ({
+    templateId: material.templateId,
+    quantity: Math.floor(material.quantity * CRAFTING_CONSTANTS.SALVAGE_BASE_REFUND_RATE),
+  }));
+
+  if (refunded.length > 0 && refunded.every((material) => material.quantity <= 0)) {
+    let richestIndex = 0;
+    for (let i = 1; i < materials.length; i++) {
+      if (materials[i]!.quantity > materials[richestIndex]!.quantity) richestIndex = i;
+    }
+    refunded[richestIndex] = {
+      templateId: materials[richestIndex]!.templateId,
+      quantity: CRAFTING_CONSTANTS.SALVAGE_MIN_PRIMARY_RETURN,
+    };
+  }
+
+  return refunded.filter((material) => material.quantity > 0);
 }
 
 /**
@@ -115,6 +135,10 @@ craftingRouter.get('/recipes', async (req, res, next) => {
 const craftSchema = z.object({
   recipeId: z.string().uuid(),
   quantity: z.number().int().positive().default(1),
+});
+
+const salvageSchema = z.object({
+  itemId: z.string().uuid(),
 });
 
 /**
@@ -298,6 +322,153 @@ craftingRouter.post('/craft', async (req, res, next) => {
         ...xpGrant.xpResult,
         newTotalXp: xpGrant.newTotalXp,
         newDailyXpGained: xpGrant.newDailyXpGained,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/crafting/salvage
+ * Salvage one crafted weapon/armor for a partial material refund.
+ */
+craftingRouter.post('/salvage', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = salvageSchema.parse(req.body);
+
+    const item = await prisma.item.findUnique({
+      where: { id: body.itemId },
+      include: { template: true },
+    });
+
+    if (!item || item.ownerId !== playerId) {
+      throw new AppError(404, 'Item not found', 'NOT_FOUND');
+    }
+
+    if (item.template.itemType !== 'weapon' && item.template.itemType !== 'armor') {
+      throw new AppError(400, 'Only weapons/armor can be salvaged', 'INVALID_ITEM_TYPE');
+    }
+
+    if (item.quantity !== 1) {
+      throw new AppError(400, 'Cannot salvage stacked items', 'INVALID_STACK');
+    }
+
+    const equipped = await prisma.playerEquipment.findFirst({
+      where: { playerId, itemId: item.id },
+      select: { slot: true },
+    });
+
+    if (equipped) {
+      throw new AppError(400, 'Cannot salvage an equipped item', 'ITEM_EQUIPPED');
+    }
+
+    const recipe = await prisma.craftingRecipe.findFirst({
+      where: { resultTemplateId: item.templateId },
+      select: { id: true, materials: true, resultTemplateId: true },
+    });
+
+    if (!recipe) {
+      throw new AppError(400, 'This item cannot be salvaged', 'NOT_SALVAGEABLE');
+    }
+
+    const recipeMaterials = parseMaterials(recipe.materials);
+    const refundedMaterials = calculateSalvageMaterials(recipeMaterials);
+    if (refundedMaterials.length === 0) {
+      throw new AppError(400, 'No salvageable materials for this item', 'NOT_SALVAGEABLE');
+    }
+
+    const turnSpend = await spendPlayerTurns(playerId, CRAFTING_CONSTANTS.SALVAGE_TURN_COST);
+
+    const materialTemplates = await prisma.itemTemplate.findMany({
+      where: { id: { in: refundedMaterials.map((material) => material.templateId) } },
+      select: { id: true, name: true, itemType: true, stackable: true, maxDurability: true },
+    });
+    const templateById = new Map(materialTemplates.map((template) => [template.id, template]));
+
+    const returned: Array<{
+      templateId: string;
+      name: string;
+      quantity: number;
+      itemIds: string[];
+    }> = [];
+
+    for (const material of refundedMaterials) {
+      const template = templateById.get(material.templateId);
+      if (!template) {
+        throw new AppError(400, 'Recipe references invalid material template', 'INVALID_RECIPE');
+      }
+
+      if (template.stackable) {
+        const stack = await addStackableItem(playerId, material.templateId, material.quantity);
+        returned.push({
+          templateId: material.templateId,
+          name: template.name,
+          quantity: material.quantity,
+          itemIds: [stack.itemId],
+        });
+        continue;
+      }
+
+      const createdIds: string[] = [];
+      const needsDurability = template.itemType === 'weapon' || template.itemType === 'armor';
+      const maxDurability = needsDurability ? template.maxDurability : null;
+      for (let i = 0; i < material.quantity; i++) {
+        const created = await prisma.item.create({
+          data: {
+            ownerId: playerId,
+            templateId: material.templateId,
+            quantity: 1,
+            maxDurability,
+            currentDurability: maxDurability,
+          },
+          select: { id: true },
+        });
+        createdIds.push(created.id);
+      }
+
+      returned.push({
+        templateId: material.templateId,
+        name: template.name,
+        quantity: material.quantity,
+        itemIds: createdIds,
+      });
+    }
+
+    await prisma.item.delete({ where: { id: item.id } });
+
+    const log = await prisma.activityLog.create({
+      data: {
+        playerId,
+        activityType: 'salvage',
+        turnsSpent: CRAFTING_CONSTANTS.SALVAGE_TURN_COST,
+        result: {
+          salvagedItemId: item.id,
+          salvagedTemplateId: item.templateId,
+          salvageRecipeId: recipe.id,
+          salvageRefundRate: CRAFTING_CONSTANTS.SALVAGE_BASE_REFUND_RATE,
+          returnedMaterials: returned.map((entry) => ({
+            templateId: entry.templateId,
+            name: entry.name,
+            quantity: entry.quantity,
+            itemIds: entry.itemIds,
+          })),
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    res.json({
+      logId: log.id,
+      turns: turnSpend,
+      salvage: {
+        salvagedItemId: item.id,
+        salvagedTemplateId: item.templateId,
+        returnedMaterials: returned.map((entry) => ({
+          templateId: entry.templateId,
+          name: entry.name,
+          quantity: entry.quantity,
+        })),
       },
     });
   } catch (err) {

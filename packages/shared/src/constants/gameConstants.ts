@@ -167,6 +167,15 @@ export const CRAFTING_CONSTANTS = {
 
   /** Minimum guaranteed crit bonus value */
   MIN_BONUS_MAGNITUDE: 1,
+
+  /** Turn cost to salvage one crafted equipment item */
+  SALVAGE_TURN_COST: 50,
+
+  /** Base salvage refund rate (material quantity * rate, rounded down) */
+  SALVAGE_BASE_REFUND_RATE: 0.6,
+
+  /** Minimum quantity returned for at least one material */
+  SALVAGE_MIN_PRIMARY_RETURN: 1,
 } as const;
 
 // =============================================================================

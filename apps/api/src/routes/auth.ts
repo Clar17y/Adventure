@@ -26,7 +26,7 @@ const loginSchema = z.object({
 
 const ALL_SKILLS: SkillType[] = [
   'melee', 'ranged', 'magic', 'defence', 'vitality', 'evasion',
-  'mining', 'weaponsmithing',
+  'mining', 'foraging', 'woodcutting', 'weaponsmithing', 'alchemy',
 ];
 
 authRouter.post('/register', async (req, res, next) => {

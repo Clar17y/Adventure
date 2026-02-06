@@ -20,7 +20,7 @@ import { rarityFromTier } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
 import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
-import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer } from 'lucide-react';
+import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer, Leaf, FlaskConical, Axe } from 'lucide-react';
 import { CombatScreen } from './screens/CombatScreen';
 import { useGameController, type Screen } from './useGameController';
 
@@ -32,8 +32,22 @@ const SKILL_META: Record<string, { name: string; icon: typeof Sword; color: stri
   magic: { name: 'Magic', icon: Sparkles, color: 'var(--rpg-purple)' },
   evasion: { name: 'Evasion', icon: Zap, color: 'var(--rpg-gold)' },
   mining: { name: 'Mining', icon: Pickaxe, color: 'var(--rpg-text-secondary)' },
+  foraging: { name: 'Foraging', icon: Leaf, color: 'var(--rpg-green-light)' },
+  woodcutting: { name: 'Woodcutting', icon: Axe, color: 'var(--rpg-text-secondary)' },
   weaponsmithing: { name: 'Weaponsmithing', icon: Hammer, color: 'var(--rpg-gold)' },
+  alchemy: { name: 'Alchemy', icon: FlaskConical, color: 'var(--rpg-purple)' },
 };
+
+const GATHERING_SKILL_TABS = [
+  { id: 'mining', label: 'Mining' },
+  { id: 'foraging', label: 'Foraging' },
+  { id: 'woodcutting', label: 'Woodcutting' },
+] as const;
+
+const CRAFTING_SKILL_TABS = [
+  { id: 'weaponsmithing', label: 'Weaponsmithing' },
+  { id: 'alchemy', label: 'Alchemy' },
+] as const;
 
 /* Mock data for demo - will be replaced with API calls
 const mockPlayerData = {
@@ -153,7 +167,11 @@ export default function GamePage() {
     gatheringFilters,
     gatheringZoneFilter,
     gatheringResourceTypeFilter,
+    activeGatheringSkill,
+    setActiveGatheringSkill,
     craftingRecipes,
+    activeCraftingSkill,
+    setActiveCraftingSkill,
     explorationLog,
     gatheringLog,
     craftingLog,
@@ -189,6 +207,13 @@ export default function GamePage() {
       </div>
     );
   }
+
+  const activeGatheringSkillMeta = SKILL_META[activeGatheringSkill];
+  const activeCraftingSkillMeta = SKILL_META[activeCraftingSkill];
+  const activeGatheringSkillData = skills.find((s) => s.skillType === activeGatheringSkill);
+  const activeCraftingSkillData = skills.find((s) => s.skillType === activeCraftingSkill);
+  const filteredGatheringNodes = gatheringNodes.filter((n) => n.skillRequired === activeGatheringSkill);
+  const filteredCraftingRecipes = craftingRecipes.filter((recipe) => recipe.skillType === activeCraftingSkill);
 
   const renderScreen = () => {
     switch (activeScreen) {
@@ -398,72 +423,109 @@ export default function GamePage() {
         );
       case 'crafting':
         return (
-          <Crafting
-            skillName="Weaponsmithing"
-            skillLevel={skills.find((s) => s.skillType === 'weaponsmithing')?.level ?? 1}
-            recipes={craftingRecipes.map((r) => ({
-              id: r.id,
-              name: r.resultTemplate.name,
-              imageSrc: itemImageSrc(r.resultTemplate.name, r.resultTemplate.itemType),
-              resultQuantity: 1,
-              requiredLevel: r.requiredLevel,
-              turnCost: r.turnCost,
-              xpReward: r.xpReward,
-              materials: r.materials.map((m) => {
-                const meta = r.materialTemplates.find((t) => t.id === m.templateId);
-                const owned = ownedByTemplateId.get(m.templateId) ?? 0;
-                return {
-                  name: meta?.name ?? 'Unknown',
-                  icon: '❓',
-                  imageSrc: meta ? itemImageSrc(meta.name, meta.itemType) : undefined,
-                  required: m.quantity,
-                  owned,
-                };
-              }),
-              rarity: rarityFromTier(r.resultTemplate.tier),
-            }))}
-            onCraft={handleCraft}
-            activityLog={craftingLog}
-            isRecovering={hpState.isRecovering}
-            recoveryCost={hpState.recoveryCost}
-          />
+          <div className="space-y-3">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {CRAFTING_SKILL_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveCraftingSkill(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                    activeCraftingSkill === tab.id
+                      ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                      : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)] hover:text-[var(--rpg-text-primary)]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <Crafting
+              skillName={activeCraftingSkillMeta?.name ?? 'Crafting'}
+              skillLevel={activeCraftingSkillData?.level ?? 1}
+              recipes={filteredCraftingRecipes.map((r) => ({
+                id: r.id,
+                name: r.resultTemplate.name,
+                imageSrc: itemImageSrc(r.resultTemplate.name, r.resultTemplate.itemType),
+                resultQuantity: 1,
+                requiredLevel: r.requiredLevel,
+                turnCost: r.turnCost,
+                xpReward: r.xpReward,
+                materials: r.materials.map((m) => {
+                  const meta = r.materialTemplates.find((t) => t.id === m.templateId);
+                  const owned = ownedByTemplateId.get(m.templateId) ?? 0;
+                  return {
+                    name: meta?.name ?? 'Unknown',
+                    icon: '?',
+                    imageSrc: meta ? itemImageSrc(meta.name, meta.itemType) : undefined,
+                    required: m.quantity,
+                    owned,
+                  };
+                }),
+                rarity: rarityFromTier(r.resultTemplate.tier),
+              }))}
+              onCraft={handleCraft}
+              activityLog={craftingLog}
+              isRecovering={hpState.isRecovering}
+              recoveryCost={hpState.recoveryCost}
+            />
+          </div>
         );
       case 'gathering':
         return (
-          <Gathering
-            skillName="Mining"
-            skillLevel={skills.find((s) => s.skillType === 'mining')?.level ?? 1}
-            efficiency={Math.round(calculateEfficiency(skills.find((s) => s.skillType === 'mining')?.dailyXpGained ?? 0, 'mining') * 100)}
-            nodes={gatheringNodes.map((n) => ({
-              id: n.id,
-              name: titleCaseFromSnake(n.resourceType),
-              imageSrc: resourceImageSrc(n.resourceType),
-              levelRequired: n.levelRequired,
-              baseYield: n.baseYield,
-              zoneId: n.zoneId,
-              zoneName: n.zoneName,
-              resourceTypeCategory: n.resourceTypeCategory,
-              remainingCapacity: n.remainingCapacity,
-              maxCapacity: n.maxCapacity,
-              sizeName: n.sizeName,
-            }))}
-            currentZoneId={activeZoneId}
-            availableTurns={turns}
-            gatheringLog={gatheringLog}
-            nodesLoading={gatheringLoading}
-            nodesError={gatheringError}
-            page={gatheringPage}
-            pagination={gatheringPagination}
-            filters={gatheringFilters}
-            zoneFilter={gatheringZoneFilter}
-            resourceTypeFilter={gatheringResourceTypeFilter}
-            onPageChange={handleGatheringPageChange}
-            onZoneFilterChange={handleGatheringZoneFilterChange}
-            onResourceTypeFilterChange={handleGatheringResourceTypeFilterChange}
-            onStartGathering={handleMine}
-            isRecovering={hpState.isRecovering}
-            recoveryCost={hpState.recoveryCost}
-          />
+          <div className="space-y-3">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {GATHERING_SKILL_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveGatheringSkill(tab.id);
+                    handleGatheringPageChange(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                    activeGatheringSkill === tab.id
+                      ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                      : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)] hover:text-[var(--rpg-text-primary)]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <Gathering
+              skillName={activeGatheringSkillMeta?.name ?? 'Gathering'}
+              skillLevel={activeGatheringSkillData?.level ?? 1}
+              efficiency={Math.round(calculateEfficiency(activeGatheringSkillData?.dailyXpGained ?? 0, activeGatheringSkill as SkillType) * 100)}
+              nodes={filteredGatheringNodes.map((n) => ({
+                id: n.id,
+                name: titleCaseFromSnake(n.resourceType),
+                imageSrc: resourceImageSrc(n.resourceType),
+                levelRequired: n.levelRequired,
+                baseYield: n.baseYield,
+                zoneId: n.zoneId,
+                zoneName: n.zoneName,
+                resourceTypeCategory: n.resourceTypeCategory,
+                remainingCapacity: n.remainingCapacity,
+                maxCapacity: n.maxCapacity,
+                sizeName: n.sizeName,
+              }))}
+              currentZoneId={activeZoneId}
+              availableTurns={turns}
+              gatheringLog={gatheringLog}
+              nodesLoading={gatheringLoading}
+              nodesError={gatheringError}
+              page={gatheringPage}
+              pagination={gatheringPagination}
+              filters={gatheringFilters}
+              zoneFilter={gatheringZoneFilter}
+              resourceTypeFilter={gatheringResourceTypeFilter}
+              onPageChange={handleGatheringPageChange}
+              onZoneFilterChange={handleGatheringZoneFilterChange}
+              onResourceTypeFilterChange={handleGatheringResourceTypeFilterChange}
+              onStartGathering={handleMine}
+              isRecovering={hpState.isRecovering}
+              recoveryCost={hpState.recoveryCost}
+            />
+          </div>
         );
       case 'combat':
         return (
@@ -584,3 +646,4 @@ export default function GamePage() {
     </>
   );
 }
+

@@ -230,7 +230,7 @@ export function Gathering({
                       <MapPin size={10} className={isInZone ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-text-secondary)]'} />
                       <span className={`text-xs ${isInZone ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-text-secondary)]'}`}>
                         {node.zoneName}
-                        {!isInZone && ' (travel here to mine)'}
+                        {!isInZone && ' (travel here to gather)'}
                       </span>
                     </div>
                     {/* Capacity bar */}

@@ -1,6 +1,6 @@
 import { prisma } from '@adventure/database';
 import type { EquipmentSlot, SkillType } from '@adventure/shared';
-import { ALL_EQUIPMENT_SLOTS } from '@adventure/shared';
+import { ALL_EQUIPMENT_SLOTS, COMBAT_SKILLS, CRAFTING_SKILLS, GATHERING_SKILLS } from '@adventure/shared';
 import { AppError } from '../middleware/errorHandler';
 
 export interface EquipmentStats {
@@ -12,14 +12,9 @@ export interface EquipmentStats {
 
 export function isSkillType(value: string): value is SkillType {
   return (
-    value === 'melee' ||
-    value === 'ranged' ||
-    value === 'magic' ||
-    value === 'defence' ||
-    value === 'vitality' ||
-    value === 'evasion' ||
-    value === 'mining' ||
-    value === 'weaponsmithing'
+    COMBAT_SKILLS.includes(value as SkillType) ||
+    GATHERING_SKILLS.includes(value as SkillType) ||
+    CRAFTING_SKILLS.includes(value as SkillType)
   );
 }
 

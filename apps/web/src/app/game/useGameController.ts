@@ -101,6 +101,8 @@ export interface HpState {
   recoveryCost: number | null;
 }
 
+const GATHERING_PAGE_SIZE = 8;
+
 export function useGameController({ isAuthenticated }: { isAuthenticated: boolean }) {
   const [activeScreen, setActiveScreen] = useState<Screen>('home');
   const [turns, setTurns] = useState(0);
@@ -161,6 +163,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     zoneId: string;
     zoneName: string;
     resourceType: string;
+    resourceTypeCategory: string;
     skillRequired: string;
     levelRequired: number;
     baseYield: number;
@@ -169,6 +172,26 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     sizeName: string;
     discoveredAt: string;
   }>>([]);
+  const [gatheringLoading, setGatheringLoading] = useState(false);
+  const [gatheringError, setGatheringError] = useState<string | null>(null);
+  const [gatheringPage, setGatheringPage] = useState(1);
+  const [gatheringZoneFilter, setGatheringZoneFilter] = useState('all');
+  const [gatheringResourceTypeFilter, setGatheringResourceTypeFilter] = useState('all');
+  const [gatheringPagination, setGatheringPagination] = useState({
+    page: 1,
+    pageSize: GATHERING_PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrevious: false,
+  });
+  const [gatheringFilters, setGatheringFilters] = useState<{
+    zones: Array<{ id: string; name: string }>;
+    resourceTypes: string[];
+  }>({
+    zones: [],
+    resourceTypes: [],
+  });
   const [craftingRecipes, setCraftingRecipes] = useState<Array<{
     id: string;
     skillType: string;
@@ -218,7 +241,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const loadAll = useCallback(async () => {
     setActionError(null);
 
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, nodesRes, hpRes] = await Promise.all([
+    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, pendingRes, hpRes] = await Promise.all([
       getTurns(),
       getSkills(),
       getZones(),
@@ -226,7 +249,6 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       getEquipment(),
       getCraftingRecipes(),
       getPendingEncounters(),
-      getGatheringNodes(),
       getHpState(),
     ]);
 
@@ -254,7 +276,6 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       );
     }
     if (recipesRes.data) setCraftingRecipes(recipesRes.data.recipes);
-    if (nodesRes.data) setGatheringNodes(nodesRes.data.nodes);
     if (pendingRes.data) setPendingEncounters(pendingRes.data.pendingEncounters);
   }, []);
 
@@ -339,8 +360,54 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }, [isAuthenticated, activeScreen, loadBestiary]);
 
   const loadGatheringNodes = useCallback(async () => {
-    const { data } = await getGatheringNodes(); // Load all player's discovered nodes
-    if (data) setGatheringNodes(data.nodes);
+    if (!isAuthenticated) return;
+
+    setGatheringLoading(true);
+    setGatheringError(null);
+
+    const { data, error } = await getGatheringNodes({
+      page: gatheringPage,
+      pageSize: GATHERING_PAGE_SIZE,
+      zoneId: gatheringZoneFilter === 'all' ? undefined : gatheringZoneFilter,
+      resourceType: gatheringResourceTypeFilter === 'all' ? undefined : gatheringResourceTypeFilter,
+    });
+
+    if (data) {
+      if (gatheringPage > data.pagination.totalPages) {
+        setGatheringPage(data.pagination.totalPages);
+        setGatheringLoading(false);
+        return;
+      }
+
+      setGatheringNodes(data.nodes);
+      setGatheringPagination(data.pagination);
+      setGatheringFilters(data.filters);
+    } else {
+      setGatheringNodes([]);
+      setGatheringError(error?.message ?? 'Failed to load gathering nodes');
+    }
+
+    setGatheringLoading(false);
+  }, [isAuthenticated, gatheringPage, gatheringZoneFilter, gatheringResourceTypeFilter]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (activeScreen !== 'gathering') return;
+    void loadGatheringNodes();
+  }, [isAuthenticated, activeScreen, loadGatheringNodes]);
+
+  const handleGatheringPageChange = useCallback((page: number) => {
+    setGatheringPage(page);
+  }, []);
+
+  const handleGatheringZoneFilterChange = useCallback((zoneId: string) => {
+    setGatheringZoneFilter(zoneId);
+    setGatheringPage(1);
+  }, []);
+
+  const handleGatheringResourceTypeFilterChange = useCallback((resourceType: string) => {
+    setGatheringResourceTypeFilter(resourceType);
+    setGatheringPage(1);
   }, []);
 
   const handleNavigate = useCallback((screen: string) => {
@@ -519,7 +586,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setGatheringLog((prev) => [...newLogs, ...prev]);
-      await loadAll();
+      await Promise.all([loadAll(), loadGatheringNodes()]);
     });
   };
 
@@ -670,6 +737,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     inventory,
     equipment,
     gatheringNodes,
+    gatheringLoading,
+    gatheringError,
+    gatheringPage,
+    gatheringPagination,
+    gatheringFilters,
+    gatheringZoneFilter,
+    gatheringResourceTypeFilter,
     craftingRecipes,
     explorationLog,
     gatheringLog,
@@ -693,6 +767,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleStartExploration,
     handleStartCombat,
     handleMine,
+    handleGatheringPageChange,
+    handleGatheringZoneFilterChange,
+    handleGatheringResourceTypeFilterChange,
     handleCraft,
     handleDestroyItem,
     handleRepairItem,

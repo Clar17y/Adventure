@@ -198,6 +198,7 @@ export async function getEquipment() {
         currentDurability: number | null;
         maxDurability: number | null;
         quantity: number;
+        bonusStats: Record<string, number> | null;
         createdAt: string;
         template: {
           id: string;
@@ -577,6 +578,7 @@ export async function getInventory() {
       currentDurability: number | null;
       maxDurability: number | null;
       quantity: number;
+      bonusStats: Record<string, number> | null;
       createdAt: string;
       template: {
         id: string;
@@ -684,10 +686,26 @@ export async function craft(recipeId: string, quantity: number = 1) {
     logId: string;
     turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
     crafted: { recipeId: string; resultTemplateId: string; quantity: number; craftedItemIds: string[] };
+    craftedItemDetails: Array<{ id: string; isCrit: boolean; bonusStat?: string; bonusValue?: number }>;
     xp: { skillType: string; xpAfterEfficiency: number; efficiency: number; leveledUp: boolean; newLevel: number; atDailyCap: boolean; newTotalXp: number; newDailyXpGained: number };
   }>('/api/v1/crafting/craft', {
     method: 'POST',
     body: JSON.stringify({ recipeId, quantity }),
+  });
+}
+
+export async function salvage(itemId: string) {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    salvage: {
+      salvagedItemId: string;
+      salvagedTemplateId: string;
+      returnedMaterials: Array<{ templateId: string; name: string; quantity: number }>;
+    };
+  }>('/api/v1/crafting/salvage', {
+    method: 'POST',
+    body: JSON.stringify({ itemId }),
   });
 }
 

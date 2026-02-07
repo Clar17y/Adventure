@@ -8,6 +8,7 @@ export interface EquipmentStats {
   armor: number;
   health: number;
   evasion: number;
+  luck: number;
 }
 
 export function isSkillType(value: string): value is SkillType {
@@ -47,18 +48,24 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
   let armor = 0;
   let health = 0;
   let evasion = 0;
+  let luck = 0;
 
   for (const slot of equipped) {
     const baseStats = slot.item?.template?.baseStats as Record<string, unknown> | null | undefined;
-    if (!baseStats) continue;
+    const bonusStats = slot.item?.bonusStats as Record<string, unknown> | null | undefined;
+    const statSources = [baseStats, bonusStats];
 
-    if (typeof baseStats.attack === 'number') attack += baseStats.attack;
-    if (typeof baseStats.armor === 'number') armor += baseStats.armor;
-    if (typeof baseStats.health === 'number') health += baseStats.health;
-    if (typeof baseStats.evasion === 'number') evasion += baseStats.evasion;
+    for (const stats of statSources) {
+      if (!stats) continue;
+      if (typeof stats.attack === 'number') attack += stats.attack;
+      if (typeof stats.armor === 'number') armor += stats.armor;
+      if (typeof stats.health === 'number') health += stats.health;
+      if (typeof stats.evasion === 'number') evasion += stats.evasion;
+      if (typeof stats.luck === 'number') luck += stats.luck;
+    }
   }
 
-  return { attack, armor, health, evasion };
+  return { attack, armor, health, evasion, luck };
 }
 
 export async function equipItem(

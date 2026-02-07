@@ -10,6 +10,7 @@ import { spendPlayerTurns } from '../services/turnBankService';
 import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
 import { getHpState, setHp, enterRecoveringState } from '../services/hpService';
+import { getEquipmentStats } from '../services/equipmentService';
 
 export const combatRouter = Router();
 
@@ -59,39 +60,6 @@ function pickWeighted<T extends { encounterWeight: number }>(items: T[]): T | nu
     if (roll <= 0) return item;
   }
   return items[items.length - 1] ?? null;
-}
-
-async function getEquipmentStats(playerId: string): Promise<{
-  attack: number;
-  armor: number;
-  health: number;
-  evasion: number;
-}> {
-  const equipped = await prisma.playerEquipment.findMany({
-    where: { playerId },
-    include: {
-      item: {
-        include: { template: true },
-      },
-    },
-  });
-
-  let attack = 0;
-  let armor = 0;
-  let health = 0;
-  let evasion = 0;
-
-  for (const slot of equipped) {
-    const baseStats = slot.item?.template?.baseStats as Record<string, unknown> | null | undefined;
-    if (!baseStats) continue;
-
-    if (typeof baseStats.attack === 'number') attack += baseStats.attack;
-    if (typeof baseStats.armor === 'number') armor += baseStats.armor;
-    if (typeof baseStats.health === 'number') health += baseStats.health;
-    if (typeof baseStats.evasion === 'number') evasion += baseStats.evasion;
-  }
-
-  return { attack, armor, health, evasion };
 }
 
 async function getMainHandAttackSkill(playerId: string): Promise<AttackSkill | null> {

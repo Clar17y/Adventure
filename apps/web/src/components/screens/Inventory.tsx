@@ -21,6 +21,7 @@ interface Item {
   equippedSlot?: string | null;
   durability?: { current: number; max: number } | null;
   baseStats?: Record<string, unknown>;
+  bonusStats?: Record<string, unknown> | null;
   requiredSkill?: string | null;
   requiredLevel?: number | null;
 }
@@ -28,6 +29,7 @@ interface Item {
 interface InventoryProps {
   items: Item[];
   onDrop?: (itemId: string) => void | Promise<void>;
+  onSalvage?: (itemId: string) => void | Promise<void>;
   onRepair?: (itemId: string) => void | Promise<void>;
   onEquip?: (itemId: string, slot: string) => void | Promise<void>;
   onUnequip?: (slot: string) => void | Promise<void>;
@@ -41,7 +43,22 @@ function prettySlot(slot: string) {
   return titleCaseFromSnake(slot);
 }
 
-export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: InventoryProps) {
+function prettyStatName(stat: string): string {
+  return stat
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (char) => char.toUpperCase())
+    .trim();
+}
+
+function statDisplay(stat: string) {
+  if (stat === 'attack') return { Icon: Sword, color: 'text-[var(--rpg-red)]', label: 'Attack' };
+  if (stat === 'armor') return { Icon: Shield, color: 'text-[var(--rpg-blue-light)]', label: 'Armor' };
+  if (stat === 'health') return { Icon: Heart, color: 'text-[var(--rpg-green-light)]', label: 'HP' };
+  if (stat === 'evasion') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Evasion' };
+  return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: prettyStatName(stat) };
+}
+
+export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequip }: InventoryProps) {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -50,8 +67,11 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
   const armor = numStat(stats.armor);
   const health = numStat(stats.health);
   const evasion = numStat(stats.evasion);
+  const bonusEntries = Object.entries(selectedItem?.bonusStats ?? {})
+    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] !== 0);
 
   const hasAnyStats = [attack, armor, health, evasion].some((v) => typeof v === 'number' && v !== 0);
+  const hasAnyBonusStats = bonusEntries.length > 0;
   const isRepairable = Boolean(selectedItem && ['weapon', 'armor'].includes(selectedItem.type));
   const isEquippable = Boolean(selectedItem?.slot && ['weapon', 'armor'].includes(selectedItem?.type ?? ''));
   const isEquipped = Boolean(selectedItem?.equippedSlot);
@@ -59,6 +79,7 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
   const canRepair = Boolean(onRepair && isRepairable);
   const canEquip = Boolean(onEquip && isEquippable && !isEquipped);
   const canUnequip = Boolean(onUnequip && isEquippable && isEquipped);
+  const canSalvage = Boolean(onSalvage && isRepairable && !isEquipped);
   const canDrop = Boolean(onDrop && !isEquipped);
 
   return (
@@ -146,7 +167,7 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
 
             <p className="text-sm text-[var(--rpg-text-secondary)] mb-4">{selectedItem.description}</p>
 
-            {(selectedItem.durability || hasAnyStats || selectedItem.requiredSkill) && (
+            {(selectedItem.durability || hasAnyStats || hasAnyBonusStats || selectedItem.requiredSkill) && (
               <div className="space-y-3 mb-4">
                 {selectedItem.durability && selectedItem.durability.max > 0 && (
                   <div>
@@ -199,6 +220,24 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
                   </div>
                 )}
 
+                {hasAnyBonusStats && (
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold text-[var(--rpg-gold)]">Critical Bonus</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {bonusEntries.map(([stat, value]) => {
+                        const { Icon, color, label } = statDisplay(stat);
+                        return (
+                          <div key={stat} className="flex items-center gap-2 text-sm">
+                            <Icon size={16} className={color} />
+                            <span className="text-[var(--rpg-text-secondary)]">{label}</span>
+                            <span className={`ml-auto font-mono ${color}`}>+{value}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {selectedItem.requiredSkill && (
                   <div className="text-xs text-[var(--rpg-text-secondary)]">
                     Requires {selectedItem.requiredSkill} level {selectedItem.requiredLevel ?? 1}
@@ -207,7 +246,7 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <PixelButton
                 variant="primary"
                 size="sm"
@@ -249,6 +288,25 @@ export function Inventory({ items, onDrop, onRepair, onEquip, onUnequip }: Inven
                 }}
               >
                 {selectedItem.equippedSlot ? 'Unequip' : 'Equip'}
+              </PixelButton>
+
+              <PixelButton
+                variant="secondary"
+                size="sm"
+                className="flex-1"
+                disabled={busy || !canSalvage}
+                onClick={async () => {
+                  if (!onSalvage) return;
+                  setBusy(true);
+                  try {
+                    await onSalvage(selectedItem.id);
+                    setSelectedItem(null);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Salvage
               </PixelButton>
 
               <PixelButton

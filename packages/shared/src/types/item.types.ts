@@ -20,6 +20,7 @@ export interface Item {
   currentDurability: number | null;
   maxDurability: number | null;
   quantity: number;
+  bonusStats: ItemStats | null;
   createdAt: Date;
 }
 

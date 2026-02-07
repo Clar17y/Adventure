@@ -30,6 +30,7 @@ model Player {
   equipment         PlayerEquipment[]
   items             Item[]
   bestiary          PlayerBestiary[]
+  bestiaryPrefixes  PlayerBestiaryPrefix[]
   activityLogs      ActivityLog[]
   pendingEncounters PendingEncounter[]
   refreshTokens     RefreshToken[]
@@ -180,6 +181,7 @@ model MobTemplate {
   zone       Zone             @relation(fields: [zoneId], references: [id])
   dropTables DropTable[]
   bestiary   PlayerBestiary[]
+  bestiaryPrefixes PlayerBestiaryPrefix[]
   pendingEncounters PendingEncounter[]
 
   @@map("mob_templates")
@@ -214,6 +216,20 @@ model PlayerBestiary {
 
   @@id([playerId, mobTemplateId])
   @@map("player_bestiary")
+}
+
+model PlayerBestiaryPrefix {
+  playerId      String   @map("player_id")
+  mobTemplateId String   @map("mob_template_id")
+  prefix        String   @db.VarChar(32)
+  kills         Int      @default(0)
+  firstSeenAt   DateTime @default(now()) @map("first_seen_at")
+
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  mobTemplate MobTemplate @relation(fields: [mobTemplateId], references: [id], onDelete: Cascade)
+
+  @@id([playerId, mobTemplateId, prefix])
+  @@map("player_bestiary_prefixes")
 }
 
 // =============================================================================
@@ -296,6 +312,7 @@ model PendingEncounter {
   playerId     String   @map("player_id")
   zoneId       String   @map("zone_id")
   mobTemplateId String  @map("mob_template_id")
+  mobPrefix    String?  @map("mob_prefix") @db.VarChar(32)
   turnOccurred Int      @map("turn_occurred")
   sourceLogId  String?  @map("source_log_id")
   createdAt    DateTime @default(now()) @map("created_at")

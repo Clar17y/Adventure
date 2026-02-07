@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { prisma } from '@adventure/database';
+import { getMobPrefixDefinition } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 
 export const bestiaryRouter = Router();
 
 bestiaryRouter.use(authenticate);
+const prismaAny = prisma as unknown as any;
 
 function rarityFromTier(tier: number): 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' {
   if (tier >= 5) return 'legendary';
@@ -22,7 +24,7 @@ bestiaryRouter.get('/', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
 
-    const [mobTemplates, progress] = await Promise.all([
+    const [mobTemplates, progress, prefixProgress] = await Promise.all([
       prisma.mobTemplate.findMany({
         include: {
           zone: { select: { id: true, name: true, difficulty: true } },
@@ -38,14 +40,31 @@ bestiaryRouter.get('/', async (req, res, next) => {
         where: { playerId },
         select: { mobTemplateId: true, kills: true },
       }),
+      prismaAny.playerBestiaryPrefix.findMany({
+        where: { playerId },
+        select: { mobTemplateId: true, prefix: true, kills: true },
+      }),
     ]);
 
     const killsByMobId = new Map<string, number>();
     for (const p of progress) killsByMobId.set(p.mobTemplateId, p.kills);
+    const prefixesByMobId = new Map<string, Array<{ prefix: string; displayName: string; kills: number }>>();
+    for (const prefixEntry of prefixProgress as Array<{ mobTemplateId: string; prefix: string; kills: number }>) {
+      const definition = getMobPrefixDefinition(prefixEntry.prefix);
+      const prefixEncounters = prefixesByMobId.get(prefixEntry.mobTemplateId) ?? [];
+      prefixEncounters.push({
+        prefix: prefixEntry.prefix,
+        displayName: definition?.displayName ?? prefixEntry.prefix,
+        kills: prefixEntry.kills,
+      });
+      prefixesByMobId.set(prefixEntry.mobTemplateId, prefixEncounters);
+    }
 
     res.json({
       mobs: mobTemplates.map((mob: typeof mobTemplates[number]) => {
         const kills = killsByMobId.get(mob.id) ?? 0;
+        const prefixEncounters = (prefixesByMobId.get(mob.id) ?? [])
+          .sort((a, b) => b.kills - a.kills || a.displayName.localeCompare(b.displayName));
         return {
           id: mob.id,
           name: mob.name,
@@ -66,6 +85,7 @@ bestiaryRouter.get('/', async (req, res, next) => {
             minQuantity: dt.minQuantity,
             maxQuantity: dt.maxQuantity,
           })),
+          prefixEncounters,
         };
       }),
     });

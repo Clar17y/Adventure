@@ -12,6 +12,11 @@ const IDS = {
     forestRat: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     wildBoar: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     forestWolf: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    forestSpider: 'dddddddd-1111-1111-1111-111111111111',
+    woodlandBandit: 'dddddddd-2222-2222-2222-222222222222',
+    forestBear: 'dddddddd-3333-3333-3333-333333333333',
+    darkTreant: 'dddddddd-4444-4444-4444-444444444444',
+    forestSprite: 'dddddddd-5555-5555-5555-555555555555',
   },
   items: {
     copperOre: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
@@ -25,6 +30,22 @@ const IDS = {
     healthPotion: 'abababab-6666-6666-6666-666666666666',
     oakShortbow: 'abababab-7777-7777-7777-777777777777',
     oakStaff: 'abababab-8888-8888-8888-888888888888',
+    ratTail: 'acacacac-1111-1111-1111-111111111111',
+    boarTusk: 'acacacac-2222-2222-2222-222222222222',
+    spiderSilk: 'acacacac-3333-3333-3333-333333333333',
+    banditsPouch: 'acacacac-4444-4444-4444-444444444444',
+    wolfPelt: 'acacacac-5555-5555-5555-555555555555',
+    wolfFang: 'acacacac-6666-6666-6666-666666666666',
+    bearClaw: 'acacacac-7777-7777-7777-777777777777',
+    ancientBark: 'acacacac-8888-8888-8888-888888888888',
+    spriteDust: 'acacacac-9999-9999-9999-999999999999',
+    copperDagger: 'adadadad-1111-1111-1111-111111111111',
+    boarTuskMace: 'adadadad-2222-2222-2222-222222222222',
+    spiderSilkRobe: 'adadadad-3333-3333-3333-333333333333',
+    wolfFangDagger: 'adadadad-4444-4444-4444-444444444444',
+    antivenomPotion: 'adadadad-5555-5555-5555-555555555555',
+    bearHideVest: 'adadadad-6666-6666-6666-666666666666',
+    ancientStaff: 'adadadad-7777-7777-7777-777777777777',
   },
   resourceNodes: {
     copperNodeForestEdge: '99999999-9999-9999-9999-999999999999',
@@ -38,10 +59,28 @@ const IDS = {
     ironOre: '11111111-dddd-dddd-dddd-dddddddddddd',
   },
   dropTables: {
+    ratTail: '12345678-5555-5555-5555-555555555555',
     ratCopper: '12345678-1111-1111-1111-111111111111',
+    boarTusk: '12345678-6666-6666-6666-666666666666',
     boarCopper: '12345678-2222-2222-2222-222222222222',
     boarSword: '12345678-3333-3333-3333-333333333333',
+    spiderSilk: '12345678-7777-7777-7777-777777777777',
+    spiderPotion: '12345678-8888-8888-8888-888888888888',
+    banditPouch: '12345678-9999-9999-9999-999999999999',
+    banditCopper: '12345679-1111-1111-1111-111111111111',
+    banditSword: '12345679-2222-2222-2222-222222222222',
+    wolfPelt: '12345679-3333-3333-3333-333333333333',
+    wolfFang: '12345679-4444-4444-4444-444444444444',
     wolfCap: '12345678-4444-4444-4444-444444444444',
+    bearClaw: '12345679-5555-5555-5555-555555555555',
+    bearPelt: '12345679-6666-6666-6666-666666666666',
+    bearPotion: '12345679-7777-7777-7777-777777777777',
+    treantBark: '12345679-8888-8888-8888-888888888888',
+    treantOak: '12345679-9999-9999-9999-999999999999',
+    treantMaple: '1234567a-1111-1111-1111-111111111111',
+    spriteDust: '1234567a-2222-2222-2222-222222222222',
+    spriteMoonpetal: '1234567a-3333-3333-3333-333333333333',
+    spritePotion: '1234567a-4444-4444-4444-444444444444',
   },
   recipes: {
     woodenSword: '77777777-7777-7777-7777-777777777777',
@@ -49,6 +88,13 @@ const IDS = {
     healthPotion: '66666666-2222-2222-2222-222222222222',
     oakShortbow: '66666666-3333-3333-3333-333333333333',
     oakStaff: '66666666-4444-4444-4444-444444444444',
+    copperDagger: '66666666-5555-5555-5555-555555555555',
+    boarTuskMace: '66666666-6666-6666-6666-666666666666',
+    spiderSilkRobe: '66666666-7777-7777-7777-777777777777',
+    wolfFangDagger: '66666666-8888-8888-8888-888888888888',
+    antivenomPotion: '66666666-9999-9999-9999-999999999999',
+    bearHideVest: '66666667-1111-1111-1111-111111111111',
+    ancientStaff: '66666667-2222-2222-2222-222222222222',
   },
 } as const;
 
@@ -266,6 +312,167 @@ async function seedMobs() {
       xpReward: 40,
       encounterWeight: 100,
       spellPattern: [],
+    },
+  });
+
+  await prisma.mobTemplate.upsert({
+    where: { id: IDS.mobs.forestSpider },
+    create: {
+      id: IDS.mobs.forestSpider,
+      name: 'Forest Spider',
+      zoneId: IDS.zones.forestEdge,
+      hp: 12,
+      attack: 10,
+      defence: 2,
+      evasion: 4,
+      damageMin: 1,
+      damageMax: 3,
+      xpReward: 8,
+      encounterWeight: 90,
+      spellPattern: [],
+    },
+    update: {
+      name: 'Forest Spider',
+      zoneId: IDS.zones.forestEdge,
+      hp: 12,
+      attack: 10,
+      defence: 2,
+      evasion: 4,
+      damageMin: 1,
+      damageMax: 3,
+      xpReward: 8,
+      encounterWeight: 90,
+      spellPattern: [],
+    },
+  });
+
+  await prisma.mobTemplate.upsert({
+    where: { id: IDS.mobs.woodlandBandit },
+    create: {
+      id: IDS.mobs.woodlandBandit,
+      name: 'Woodland Bandit',
+      zoneId: IDS.zones.forestEdge,
+      hp: 20,
+      attack: 11,
+      defence: 5,
+      evasion: 3,
+      damageMin: 2,
+      damageMax: 5,
+      xpReward: 15,
+      encounterWeight: 60,
+      spellPattern: [],
+    },
+    update: {
+      name: 'Woodland Bandit',
+      zoneId: IDS.zones.forestEdge,
+      hp: 20,
+      attack: 11,
+      defence: 5,
+      evasion: 3,
+      damageMin: 2,
+      damageMax: 5,
+      xpReward: 15,
+      encounterWeight: 60,
+      spellPattern: [],
+    },
+  });
+
+  await prisma.mobTemplate.upsert({
+    where: { id: IDS.mobs.forestBear },
+    create: {
+      id: IDS.mobs.forestBear,
+      name: 'Forest Bear',
+      zoneId: IDS.zones.deepForest,
+      hp: 50,
+      attack: 15,
+      defence: 15,
+      evasion: 2,
+      damageMin: 5,
+      damageMax: 10,
+      xpReward: 50,
+      encounterWeight: 70,
+      spellPattern: [],
+    },
+    update: {
+      name: 'Forest Bear',
+      zoneId: IDS.zones.deepForest,
+      hp: 50,
+      attack: 15,
+      defence: 15,
+      evasion: 2,
+      damageMin: 5,
+      damageMax: 10,
+      xpReward: 50,
+      encounterWeight: 70,
+      spellPattern: [],
+    },
+  });
+
+  await prisma.mobTemplate.upsert({
+    where: { id: IDS.mobs.darkTreant },
+    create: {
+      id: IDS.mobs.darkTreant,
+      name: 'Dark Treant',
+      zoneId: IDS.zones.deepForest,
+      hp: 60,
+      attack: 12,
+      defence: 20,
+      evasion: 0,
+      damageMin: 3,
+      damageMax: 7,
+      xpReward: 45,
+      encounterWeight: 50,
+      spellPattern: [],
+    },
+    update: {
+      name: 'Dark Treant',
+      zoneId: IDS.zones.deepForest,
+      hp: 60,
+      attack: 12,
+      defence: 20,
+      evasion: 0,
+      damageMin: 3,
+      damageMax: 7,
+      xpReward: 45,
+      encounterWeight: 50,
+      spellPattern: [],
+    },
+  });
+
+  await prisma.mobTemplate.upsert({
+    where: { id: IDS.mobs.forestSprite },
+    create: {
+      id: IDS.mobs.forestSprite,
+      name: 'Forest Sprite',
+      zoneId: IDS.zones.deepForest,
+      hp: 20,
+      attack: 14,
+      defence: 6,
+      evasion: 10,
+      damageMin: 3,
+      damageMax: 6,
+      xpReward: 35,
+      encounterWeight: 40,
+      spellPattern: [
+        { round: 3, action: "Nature's Wrath", damage: 8 },
+        { round: 6, action: 'Thorn Barrage', damage: 12 },
+      ],
+    },
+    update: {
+      name: 'Forest Sprite',
+      zoneId: IDS.zones.deepForest,
+      hp: 20,
+      attack: 14,
+      defence: 6,
+      evasion: 10,
+      damageMin: 3,
+      damageMax: 6,
+      xpReward: 35,
+      encounterWeight: 40,
+      spellPattern: [
+        { round: 3, action: "Nature's Wrath", damage: 8 },
+        { round: 6, action: 'Thorn Barrage', damage: 12 },
+      ],
     },
   });
 }
@@ -684,82 +891,429 @@ async function seedNewSkillItemTemplates() {
   });
 }
 
+async function seedMobLootAndCraftedItemTemplates() {
+  const templates: Array<{
+    id: string;
+    name: string;
+    itemType: string;
+    slot: string | null;
+    tier: number;
+    baseStats: Prisma.InputJsonValue;
+    requiredSkill: string | null;
+    requiredLevel: number;
+    maxDurability: number;
+    stackable: boolean;
+  }> = [
+    {
+      id: IDS.items.ratTail,
+      name: 'Rat Tail',
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.boarTusk,
+      name: 'Boar Tusk',
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.spiderSilk,
+      name: 'Spider Silk',
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.banditsPouch,
+      name: "Bandit's Pouch",
+      itemType: 'resource',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.wolfPelt,
+      name: 'Wolf Pelt',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.wolfFang,
+      name: 'Wolf Fang',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.bearClaw,
+      name: 'Bear Claw',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.ancientBark,
+      name: 'Ancient Bark',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.spriteDust,
+      name: 'Sprite Dust',
+      itemType: 'resource',
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.copperDagger,
+      name: 'Copper Dagger',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 1,
+      baseStats: { attack: 8 },
+      requiredSkill: 'melee',
+      requiredLevel: 3,
+      maxDurability: 100,
+      stackable: false,
+    },
+    {
+      id: IDS.items.boarTuskMace,
+      name: 'Boar Tusk Mace',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 1,
+      baseStats: { attack: 10 },
+      requiredSkill: 'melee',
+      requiredLevel: 5,
+      maxDurability: 110,
+      stackable: false,
+    },
+    {
+      id: IDS.items.spiderSilkRobe,
+      name: 'Spider Silk Robe',
+      itemType: 'armor',
+      slot: 'chest',
+      tier: 2,
+      baseStats: { armor: 4, evasion: 3 },
+      requiredSkill: null,
+      requiredLevel: 5,
+      maxDurability: 90,
+      stackable: false,
+    },
+    {
+      id: IDS.items.wolfFangDagger,
+      name: 'Wolf Fang Dagger',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 2,
+      baseStats: { attack: 12 },
+      requiredSkill: 'melee',
+      requiredLevel: 8,
+      maxDurability: 110,
+      stackable: false,
+    },
+    {
+      id: IDS.items.antivenomPotion,
+      name: 'Antivenom Potion',
+      itemType: 'consumable',
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.bearHideVest,
+      name: 'Bear Hide Vest',
+      itemType: 'armor',
+      slot: 'chest',
+      tier: 2,
+      baseStats: { armor: 8 },
+      requiredSkill: null,
+      requiredLevel: 10,
+      maxDurability: 120,
+      stackable: false,
+    },
+    {
+      id: IDS.items.ancientStaff,
+      name: 'Ancient Staff',
+      itemType: 'weapon',
+      slot: 'main_hand',
+      tier: 2,
+      baseStats: { magicPower: 12 },
+      requiredSkill: 'magic',
+      requiredLevel: 10,
+      maxDurability: 110,
+      stackable: false,
+    },
+  ];
+
+  for (const template of templates) {
+    await prisma.itemTemplate.upsert({
+      where: { id: template.id },
+      create: template,
+      update: template,
+    });
+  }
+}
+
 async function seedDropTables() {
-  await prisma.dropTable.upsert({
-    where: { id: IDS.dropTables.ratCopper },
-    create: {
+  const entries: Array<{
+    id: string;
+    mobTemplateId: string;
+    itemTemplateId: string;
+    dropChance: string;
+    minQuantity: number;
+    maxQuantity: number;
+  }> = [
+    {
+      id: IDS.dropTables.ratTail,
+      mobTemplateId: IDS.mobs.forestRat,
+      itemTemplateId: IDS.items.ratTail,
+      dropChance: '0.60',
+      minQuantity: 1,
+      maxQuantity: 2,
+    },
+    {
       id: IDS.dropTables.ratCopper,
       mobTemplateId: IDS.mobs.forestRat,
       itemTemplateId: IDS.items.copperOre,
-      dropChance: new Prisma.Decimal('0.50'),
+      dropChance: '0.50',
       minQuantity: 1,
       maxQuantity: 3,
     },
-    update: {
-      mobTemplateId: IDS.mobs.forestRat,
-      itemTemplateId: IDS.items.copperOre,
-      dropChance: new Prisma.Decimal('0.50'),
+    {
+      id: IDS.dropTables.boarTusk,
+      mobTemplateId: IDS.mobs.wildBoar,
+      itemTemplateId: IDS.items.boarTusk,
+      dropChance: '0.55',
       minQuantity: 1,
-      maxQuantity: 3,
+      maxQuantity: 2,
     },
-  });
-
-  await prisma.dropTable.upsert({
-    where: { id: IDS.dropTables.boarCopper },
-    create: {
+    {
       id: IDS.dropTables.boarCopper,
       mobTemplateId: IDS.mobs.wildBoar,
       itemTemplateId: IDS.items.copperOre,
-      dropChance: new Prisma.Decimal('0.30'),
+      dropChance: '0.30',
       minQuantity: 1,
       maxQuantity: 2,
     },
-    update: {
-      mobTemplateId: IDS.mobs.wildBoar,
-      itemTemplateId: IDS.items.copperOre,
-      dropChance: new Prisma.Decimal('0.30'),
-      minQuantity: 1,
-      maxQuantity: 2,
-    },
-  });
-
-  await prisma.dropTable.upsert({
-    where: { id: IDS.dropTables.boarSword },
-    create: {
+    {
       id: IDS.dropTables.boarSword,
       mobTemplateId: IDS.mobs.wildBoar,
       itemTemplateId: IDS.items.woodenSword,
-      dropChance: new Prisma.Decimal('0.10'),
+      dropChance: '0.10',
       minQuantity: 1,
       maxQuantity: 1,
     },
-    update: {
-      mobTemplateId: IDS.mobs.wildBoar,
+    {
+      id: IDS.dropTables.spiderSilk,
+      mobTemplateId: IDS.mobs.forestSpider,
+      itemTemplateId: IDS.items.spiderSilk,
+      dropChance: '0.60',
+      minQuantity: 1,
+      maxQuantity: 3,
+    },
+    {
+      id: IDS.dropTables.spiderPotion,
+      mobTemplateId: IDS.mobs.forestSpider,
+      itemTemplateId: IDS.items.minorHealthPotion,
+      dropChance: '0.08',
+      minQuantity: 1,
+      maxQuantity: 1,
+    },
+    {
+      id: IDS.dropTables.banditPouch,
+      mobTemplateId: IDS.mobs.woodlandBandit,
+      itemTemplateId: IDS.items.banditsPouch,
+      dropChance: '0.50',
+      minQuantity: 1,
+      maxQuantity: 1,
+    },
+    {
+      id: IDS.dropTables.banditCopper,
+      mobTemplateId: IDS.mobs.woodlandBandit,
+      itemTemplateId: IDS.items.copperOre,
+      dropChance: '0.25',
+      minQuantity: 2,
+      maxQuantity: 4,
+    },
+    {
+      id: IDS.dropTables.banditSword,
+      mobTemplateId: IDS.mobs.woodlandBandit,
       itemTemplateId: IDS.items.woodenSword,
-      dropChance: new Prisma.Decimal('0.10'),
+      dropChance: '0.06',
       minQuantity: 1,
       maxQuantity: 1,
     },
-  });
-
-  await prisma.dropTable.upsert({
-    where: { id: IDS.dropTables.wolfCap },
-    create: {
+    {
+      id: IDS.dropTables.wolfPelt,
+      mobTemplateId: IDS.mobs.forestWolf,
+      itemTemplateId: IDS.items.wolfPelt,
+      dropChance: '0.55',
+      minQuantity: 1,
+      maxQuantity: 2,
+    },
+    {
+      id: IDS.dropTables.wolfFang,
+      mobTemplateId: IDS.mobs.forestWolf,
+      itemTemplateId: IDS.items.wolfFang,
+      dropChance: '0.35',
+      minQuantity: 1,
+      maxQuantity: 2,
+    },
+    {
       id: IDS.dropTables.wolfCap,
       mobTemplateId: IDS.mobs.forestWolf,
       itemTemplateId: IDS.items.leatherCap,
-      dropChance: new Prisma.Decimal('0.12'),
+      dropChance: '0.12',
       minQuantity: 1,
       maxQuantity: 1,
     },
-    update: {
-      mobTemplateId: IDS.mobs.forestWolf,
-      itemTemplateId: IDS.items.leatherCap,
-      dropChance: new Prisma.Decimal('0.12'),
+    {
+      id: IDS.dropTables.bearClaw,
+      mobTemplateId: IDS.mobs.forestBear,
+      itemTemplateId: IDS.items.bearClaw,
+      dropChance: '0.50',
+      minQuantity: 1,
+      maxQuantity: 3,
+    },
+    {
+      id: IDS.dropTables.bearPelt,
+      mobTemplateId: IDS.mobs.forestBear,
+      itemTemplateId: IDS.items.wolfPelt,
+      dropChance: '0.20',
+      minQuantity: 1,
+      maxQuantity: 2,
+    },
+    {
+      id: IDS.dropTables.bearPotion,
+      mobTemplateId: IDS.mobs.forestBear,
+      itemTemplateId: IDS.items.healthPotion,
+      dropChance: '0.06',
       minQuantity: 1,
       maxQuantity: 1,
     },
-  });
+    {
+      id: IDS.dropTables.treantBark,
+      mobTemplateId: IDS.mobs.darkTreant,
+      itemTemplateId: IDS.items.ancientBark,
+      dropChance: '0.60',
+      minQuantity: 2,
+      maxQuantity: 4,
+    },
+    {
+      id: IDS.dropTables.treantOak,
+      mobTemplateId: IDS.mobs.darkTreant,
+      itemTemplateId: IDS.items.oakLog,
+      dropChance: '0.30',
+      minQuantity: 2,
+      maxQuantity: 5,
+    },
+    {
+      id: IDS.dropTables.treantMaple,
+      mobTemplateId: IDS.mobs.darkTreant,
+      itemTemplateId: IDS.items.mapleLog,
+      dropChance: '0.15',
+      minQuantity: 1,
+      maxQuantity: 3,
+    },
+    {
+      id: IDS.dropTables.spriteDust,
+      mobTemplateId: IDS.mobs.forestSprite,
+      itemTemplateId: IDS.items.spriteDust,
+      dropChance: '0.55',
+      minQuantity: 1,
+      maxQuantity: 3,
+    },
+    {
+      id: IDS.dropTables.spriteMoonpetal,
+      mobTemplateId: IDS.mobs.forestSprite,
+      itemTemplateId: IDS.items.moonpetal,
+      dropChance: '0.25',
+      minQuantity: 1,
+      maxQuantity: 2,
+    },
+    {
+      id: IDS.dropTables.spritePotion,
+      mobTemplateId: IDS.mobs.forestSprite,
+      itemTemplateId: IDS.items.minorHealthPotion,
+      dropChance: '0.10',
+      minQuantity: 1,
+      maxQuantity: 1,
+    },
+  ];
+
+  for (const entry of entries) {
+    await prisma.dropTable.upsert({
+      where: { id: entry.id },
+      create: {
+        id: entry.id,
+        mobTemplateId: entry.mobTemplateId,
+        itemTemplateId: entry.itemTemplateId,
+        dropChance: new Prisma.Decimal(entry.dropChance),
+        minQuantity: entry.minQuantity,
+        maxQuantity: entry.maxQuantity,
+      },
+      update: {
+        mobTemplateId: entry.mobTemplateId,
+        itemTemplateId: entry.itemTemplateId,
+        dropChance: new Prisma.Decimal(entry.dropChance),
+        minQuantity: entry.minQuantity,
+        maxQuantity: entry.maxQuantity,
+      },
+    });
+  }
 }
 
 async function seedRecipes() {
@@ -889,6 +1443,195 @@ async function seedRecipes() {
       xpReward: 35,
     },
   });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.copperDagger },
+    create: {
+      id: IDS.recipes.copperDagger,
+      skillType: 'weaponsmithing',
+      requiredLevel: 3,
+      resultTemplateId: IDS.items.copperDagger,
+      turnCost: 40,
+      materials: [
+        { templateId: IDS.items.copperOre, quantity: 8 },
+        { templateId: IDS.items.ratTail, quantity: 3 },
+      ],
+      xpReward: 30,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 3,
+      resultTemplateId: IDS.items.copperDagger,
+      turnCost: 40,
+      materials: [
+        { templateId: IDS.items.copperOre, quantity: 8 },
+        { templateId: IDS.items.ratTail, quantity: 3 },
+      ],
+      xpReward: 30,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.boarTuskMace },
+    create: {
+      id: IDS.recipes.boarTuskMace,
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.boarTuskMace,
+      turnCost: 55,
+      materials: [
+        { templateId: IDS.items.boarTusk, quantity: 5 },
+        { templateId: IDS.items.oakLog, quantity: 5 },
+      ],
+      xpReward: 40,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.boarTuskMace,
+      turnCost: 55,
+      materials: [
+        { templateId: IDS.items.boarTusk, quantity: 5 },
+        { templateId: IDS.items.oakLog, quantity: 5 },
+      ],
+      xpReward: 40,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.spiderSilkRobe },
+    create: {
+      id: IDS.recipes.spiderSilkRobe,
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.spiderSilkRobe,
+      turnCost: 60,
+      materials: [
+        { templateId: IDS.items.spiderSilk, quantity: 10 },
+        { templateId: IDS.items.forestSage, quantity: 3 },
+      ],
+      xpReward: 40,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.spiderSilkRobe,
+      turnCost: 60,
+      materials: [
+        { templateId: IDS.items.spiderSilk, quantity: 10 },
+        { templateId: IDS.items.forestSage, quantity: 3 },
+      ],
+      xpReward: 40,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.wolfFangDagger },
+    create: {
+      id: IDS.recipes.wolfFangDagger,
+      skillType: 'weaponsmithing',
+      requiredLevel: 8,
+      resultTemplateId: IDS.items.wolfFangDagger,
+      turnCost: 70,
+      materials: [
+        { templateId: IDS.items.wolfFang, quantity: 6 },
+        { templateId: IDS.items2.ironOre, quantity: 4 },
+      ],
+      xpReward: 55,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 8,
+      resultTemplateId: IDS.items.wolfFangDagger,
+      turnCost: 70,
+      materials: [
+        { templateId: IDS.items.wolfFang, quantity: 6 },
+        { templateId: IDS.items2.ironOre, quantity: 4 },
+      ],
+      xpReward: 55,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.antivenomPotion },
+    create: {
+      id: IDS.recipes.antivenomPotion,
+      skillType: 'alchemy',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.antivenomPotion,
+      turnCost: 30,
+      materials: [
+        { templateId: IDS.items.spiderSilk, quantity: 4 },
+        { templateId: IDS.items.forestSage, quantity: 3 },
+      ],
+      xpReward: 30,
+    },
+    update: {
+      skillType: 'alchemy',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.antivenomPotion,
+      turnCost: 30,
+      materials: [
+        { templateId: IDS.items.spiderSilk, quantity: 4 },
+        { templateId: IDS.items.forestSage, quantity: 3 },
+      ],
+      xpReward: 30,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.bearHideVest },
+    create: {
+      id: IDS.recipes.bearHideVest,
+      skillType: 'weaponsmithing',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.bearHideVest,
+      turnCost: 80,
+      materials: [
+        { templateId: IDS.items.wolfPelt, quantity: 8 },
+        { templateId: IDS.items.bearClaw, quantity: 4 },
+      ],
+      xpReward: 65,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.bearHideVest,
+      turnCost: 80,
+      materials: [
+        { templateId: IDS.items.wolfPelt, quantity: 8 },
+        { templateId: IDS.items.bearClaw, quantity: 4 },
+      ],
+      xpReward: 65,
+    },
+  });
+
+  await prisma.craftingRecipe.upsert({
+    where: { id: IDS.recipes.ancientStaff },
+    create: {
+      id: IDS.recipes.ancientStaff,
+      skillType: 'weaponsmithing',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.ancientStaff,
+      turnCost: 85,
+      materials: [
+        { templateId: IDS.items.ancientBark, quantity: 6 },
+        { templateId: IDS.items.spriteDust, quantity: 4 },
+      ],
+      xpReward: 70,
+    },
+    update: {
+      skillType: 'weaponsmithing',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.ancientStaff,
+      turnCost: 85,
+      materials: [
+        { templateId: IDS.items.ancientBark, quantity: 6 },
+        { templateId: IDS.items.spriteDust, quantity: 4 },
+      ],
+      xpReward: 70,
+    },
+  });
 }
 
 async function main() {
@@ -898,6 +1641,7 @@ async function main() {
   await seedItemTemplates();
   await seedItemTemplates2();
   await seedNewSkillItemTemplates();
+  await seedMobLootAndCraftedItemTemplates();
   await seedMobs();
   await seedResourceNodes();
   await seedDropTables();

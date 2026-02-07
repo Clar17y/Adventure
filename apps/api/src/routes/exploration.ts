@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
-import { estimateExploration, simulateExploration, validateExplorationTurns } from '@adventure/game-engine';
+import { estimateExploration, rollMobPrefix, simulateExploration, validateExplorationTurns } from '@adventure/game-engine';
+import { getMobPrefixDefinition } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns } from '../services/turnBankService';
@@ -119,6 +120,8 @@ explorationRouter.post('/start', async (req, res, next) => {
       turnOccurred: number;
       mobTemplateId: string;
       mobName: string;
+      mobPrefix: string | null;
+      mobDisplayName: string;
     }> = [];
 
     const resourceDiscoveries: Array<{
@@ -134,10 +137,15 @@ explorationRouter.post('/start', async (req, res, next) => {
       if (outcome.type === 'mob_encounter' && mobTemplates.length > 0) {
         const mob = pickWeighted(mobTemplates, 'encounterWeight') as typeof mobTemplates[number] | null;
         if (mob) {
+          const mobPrefix = rollMobPrefix();
+          const prefixDefinition = getMobPrefixDefinition(mobPrefix);
+          const mobDisplayName = prefixDefinition ? `${prefixDefinition.displayName} ${mob.name}` : mob.name;
           mobEncounters.push({
             turnOccurred: outcome.turnOccurred,
             mobTemplateId: mob.id,
             mobName: mob.name,
+            mobPrefix,
+            mobDisplayName,
           });
         }
       }
@@ -193,6 +201,7 @@ explorationRouter.post('/start', async (req, res, next) => {
             playerId,
             zoneId: body.zoneId,
             mobTemplateId: m.mobTemplateId,
+            mobPrefix: m.mobPrefix,
             turnOccurred: m.turnOccurred,
             sourceLogId: explorationLog.id,
             expiresAt: new Date(Date.now() + PENDING_ENCOUNTER_TTL_SECONDS * 1000),

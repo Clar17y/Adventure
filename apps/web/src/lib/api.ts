@@ -235,6 +235,11 @@ export async function getBestiary() {
         minQuantity: number;
         maxQuantity: number;
       }>;
+      prefixEncounters: Array<{
+        prefix: string;
+        displayName: string;
+        kills: number;
+      }>;
     }>;
   }>('/api/v1/bestiary');
 }
@@ -353,6 +358,8 @@ export async function startExploration(zoneId: string, turns: number) {
       turnOccurred: number;
       mobTemplateId: string;
       mobName: string;
+      mobPrefix: string | null;
+      mobDisplayName: string;
       createdAt: string;
       expiresAt: string;
     }>;
@@ -409,6 +416,8 @@ export interface CombatResultResponse {
   zoneName: string;
   mobTemplateId: string;
   mobName: string;
+  mobPrefix: string | null;
+  mobDisplayName: string;
   pendingEncounterId: string | null;
   attackSkill: 'melee' | 'ranged' | 'magic';
   outcome: CombatOutcomeResponse;
@@ -430,6 +439,8 @@ export interface CombatResponse {
   combat: {
     zoneId: string;
     mobTemplateId: string;
+    mobPrefix: string | null;
+    mobDisplayName: string;
     pendingEncounterId: string | null;
     outcome: CombatOutcomeResponse;
     playerMaxHp: number;
@@ -452,6 +463,7 @@ export interface CombatHistoryListItemResponse {
   zoneName: string | null;
   mobTemplateId: string | null;
   mobName: string | null;
+  mobDisplayName: string | null;
   outcome: string | null;
   roundCount: number;
   xpGained: number;
@@ -512,6 +524,8 @@ export interface PendingEncountersResponse {
     zoneName: string;
     mobTemplateId: string;
     mobName: string;
+    mobPrefix: string | null;
+    mobDisplayName: string;
     turnOccurred: number;
     createdAt: string;
     expiresAt: string;

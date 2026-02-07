@@ -42,6 +42,8 @@ export interface PendingEncounter {
   zoneName: string;
   mobTemplateId: string;
   mobName: string;
+  mobPrefix: string | null;
+  mobDisplayName: string;
   turnOccurred: number;
   createdAt: string;
   expiresAt: string;
@@ -65,6 +67,8 @@ export interface LastCombatLogEntry {
 }
 
 export interface LastCombat {
+  mobPrefix: string | null;
+  mobDisplayName: string;
   outcome: string;
   playerMaxHp: number;
   mobMaxHp: number;
@@ -253,6 +257,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       dropRate: number;
       minQuantity: number;
       maxQuantity: number;
+    }>;
+    prefixEncounters: Array<{
+      prefix: string;
+      displayName: string;
+      kills: number;
     }>;
   }>>([]);
   const [bestiaryLoading, setBestiaryLoading] = useState(false);
@@ -568,6 +577,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
       setLastCombat({
+        mobPrefix: data.combat.mobPrefix,
+        mobDisplayName: data.combat.mobDisplayName,
         outcome: data.combat.outcome,
         playerMaxHp: data.combat.playerMaxHp,
         mobMaxHp: data.combat.mobMaxHp,

@@ -7,6 +7,7 @@ import { BookOpen, X, MapPin, Sword, Shield, Heart } from 'lucide-react';
 import Image from 'next/image';
 import { uiIconSrc } from '@/lib/assets';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
+import { getMobPrefixDefinition } from '@adventure/shared';
 
 interface MonsterDrop {
   name: string;
@@ -30,6 +31,11 @@ interface Monster {
   drops: MonsterDrop[];
   zones: string[];
   description: string;
+  prefixEncounters: Array<{
+    prefix: string;
+    displayName: string;
+    kills: number;
+  }>;
 }
 
 interface BestiaryProps {
@@ -48,6 +54,26 @@ export function Bestiary({ monsters }: BestiaryProps) {
     showDefence: killCount >= 10,
     showDrops: killCount >= 3,
   });
+
+  const formatMultiplier = (value: number) => `${Number(value.toFixed(2))}x`;
+
+  const getPrefixEffectsText = (prefixKey: string) => {
+    const definition = getMobPrefixDefinition(prefixKey);
+    if (!definition) return 'Unknown effects';
+
+    const effects: string[] = [];
+    if (definition.statMultipliers.hp !== undefined) effects.push(`HP ${formatMultiplier(definition.statMultipliers.hp)}`);
+    if (definition.statMultipliers.attack !== undefined) effects.push(`ATK ${formatMultiplier(definition.statMultipliers.attack)}`);
+    if (definition.statMultipliers.defence !== undefined) effects.push(`DEF ${formatMultiplier(definition.statMultipliers.defence)}`);
+    if (definition.statMultipliers.evasion !== undefined) effects.push(`EVA ${formatMultiplier(definition.statMultipliers.evasion)}`);
+    if (definition.statMultipliers.damageMin !== undefined || definition.statMultipliers.damageMax !== undefined) {
+      const min = formatMultiplier(definition.statMultipliers.damageMin ?? 1);
+      const max = formatMultiplier(definition.statMultipliers.damageMax ?? 1);
+      effects.push(`DMG ${min}-${max}`);
+    }
+
+    return effects.length > 0 ? effects.join(' | ') : 'No stat changes';
+  };
 
   return (
     <div className="space-y-4">
@@ -272,6 +298,36 @@ export function Bestiary({ monsters }: BestiaryProps) {
                   </div>
                 </div>
               )}
+
+              <div className="mb-4">
+                <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm mb-2">Variants</h4>
+                {selectedMonster.prefixEncounters.length === 0 ? (
+                  <div className="text-xs text-[var(--rpg-text-secondary)]">No prefix variants encountered yet.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedMonster.prefixEncounters.map((variant) => {
+                      const showName = variant.kills >= 1;
+                      const showEffects = variant.kills >= 3;
+                      return (
+                        <div
+                          key={`${selectedMonster.id}-${variant.prefix}`}
+                          className="rounded border border-[var(--rpg-border)] bg-[var(--rpg-background)] p-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className={`text-sm ${showName ? 'text-[var(--rpg-text-primary)]' : 'text-[var(--rpg-text-secondary)]'}`}>
+                              {showName ? variant.displayName : '??? Variant'}
+                            </div>
+                            <div className="text-xs text-[var(--rpg-gold)] font-mono">x{variant.kills}</div>
+                          </div>
+                          <div className="text-xs text-[var(--rpg-text-secondary)] mt-1">
+                            {showEffects ? getPrefixEffectsText(variant.prefix) : 'Defeat this variant 3+ times to reveal effects.'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               <PixelButton variant="secondary" className="w-full" onClick={() => setSelectedMonster(null)}>
                 Close

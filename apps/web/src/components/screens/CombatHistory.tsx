@@ -194,7 +194,7 @@ export function CombatHistory() {
     if (!selectedEntry || !selectedDetail) return '';
     return formatCombatShareText({
       outcome: formatOutcome(selectedDetail.outcome),
-      mobName: selectedEntry.mobName ?? 'Unknown Mob',
+      mobName: selectedDetail.mobDisplayName ?? selectedEntry.mobDisplayName ?? selectedEntry.mobName ?? 'Unknown Mob',
       zoneName: selectedEntry.zoneName ?? 'Unknown Zone',
       createdAt: fullTimestamp(selectedEntry.createdAt),
       playerMaxHp: selectedDetail.playerMaxHp,
@@ -309,7 +309,7 @@ export function CombatHistory() {
                   <div className="text-sm text-[var(--rpg-text-primary)] font-semibold truncate">
                     <span className={outcomeColor(entry.outcome)}>{outcomeIcon(entry.outcome)}</span>
                     {' '}
-                    {entry.mobName ?? 'Unknown Mob'}
+                    {entry.mobDisplayName ?? entry.mobName ?? 'Unknown Mob'}
                   </div>
                   <div className={`text-xs font-semibold ${outcomeColor(entry.outcome)}`}>
                     {formatOutcome(entry.outcome)}
@@ -340,7 +340,7 @@ export function CombatHistory() {
         <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-[var(--rpg-text-primary)] font-semibold">
-              {selectedEntry.mobName ?? 'Combat'} Log
+              {selectedDetail?.mobDisplayName ?? selectedEntry.mobDisplayName ?? selectedEntry.mobName ?? 'Combat'} Log
             </div>
             <div className="flex items-center gap-2">
               <button

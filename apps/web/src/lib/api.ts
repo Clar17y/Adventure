@@ -463,6 +463,7 @@ export interface CombatHistoryListItemResponse {
   zoneName: string | null;
   mobTemplateId: string | null;
   mobName: string | null;
+  mobDisplayName: string | null;
   outcome: string | null;
   roundCount: number;
   xpGained: number;

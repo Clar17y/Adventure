@@ -557,6 +557,7 @@ interface CombatHistoryListRow {
   zoneName: string | null;
   mobTemplateId: string | null;
   mobName: string | null;
+  mobDisplayName: string | null;
   outcome: string | null;
   xpGained: number;
   roundCount: number;
@@ -604,6 +605,7 @@ combatRouter.get('/logs', async (req, res, next) => {
         Prisma.sql`(
           ("result"->>'zoneName') ILIKE ${pattern}
           OR ("result"->>'mobName') ILIKE ${pattern}
+          OR ("result"->>'mobDisplayName') ILIKE ${pattern}
         )`
       );
     }
@@ -619,6 +621,7 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'zoneName') AS "zoneName",
             ("result"->>'mobTemplateId') AS "mobTemplateId",
             ("result"->>'mobName') AS "mobName",
+            COALESCE(("result"->>'mobDisplayName'), ("result"->>'mobName')) AS "mobDisplayName",
             ("result"->>'outcome') AS "outcome",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
             COALESCE((
@@ -645,6 +648,7 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'zoneName') AS "zoneName",
             ("result"->>'mobTemplateId') AS "mobTemplateId",
             ("result"->>'mobName') AS "mobName",
+            COALESCE(("result"->>'mobDisplayName'), ("result"->>'mobName')) AS "mobDisplayName",
             ("result"->>'outcome') AS "outcome",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
             COALESCE((
@@ -712,6 +716,7 @@ combatRouter.get('/logs', async (req, res, next) => {
         zoneName: row.zoneName,
         mobTemplateId: row.mobTemplateId,
         mobName: row.mobName,
+        mobDisplayName: row.mobDisplayName ?? row.mobName,
         outcome: row.outcome,
         roundCount: row.roundCount,
         xpGained: row.xpGained,

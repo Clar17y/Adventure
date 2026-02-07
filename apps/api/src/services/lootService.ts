@@ -10,7 +10,8 @@ function randomIntInclusive(min: number, max: number): number {
 
 export async function rollAndGrantLoot(
   playerId: string,
-  mobTemplateId: string
+  mobTemplateId: string,
+  dropChanceMultiplier = 1
 ): Promise<LootDrop[]> {
   const entries = await prisma.dropTable.findMany({
     where: { mobTemplateId },
@@ -20,7 +21,7 @@ export async function rollAndGrantLoot(
   const drops: LootDrop[] = [];
 
   for (const entry of entries) {
-    const chance = entry.dropChance.toNumber();
+    const chance = Math.min(1, Math.max(0, entry.dropChance.toNumber() * dropChanceMultiplier));
     if (chance <= 0) continue;
 
     if (Math.random() >= chance) continue;

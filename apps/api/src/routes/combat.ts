@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
-import { buildPlayerCombatStats, runCombat, calculateFleeResult } from '@adventure/game-engine';
-import { COMBAT_CONSTANTS, type LootDrop, type MobTemplate, type SkillType } from '@adventure/shared';
+import { applyMobPrefix, buildPlayerCombatStats, runCombat, calculateFleeResult, rollMobPrefix } from '@adventure/game-engine';
+import { COMBAT_CONSTANTS, getMobPrefixDefinition, type LootDrop, type MobTemplate, type SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { rollAndGrantLoot } from '../services/lootService';
@@ -163,16 +163,22 @@ combatRouter.get('/pending', async (req, res, next) => {
     const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
     res.json({
-      pendingEncounters: pending.map((p: any) => ({
-        encounterId: p.id,
-        zoneId: p.zoneId,
-        zoneName: p.zone.name,
-        mobTemplateId: p.mobTemplateId,
-        mobName: p.mobTemplate.name,
-        turnOccurred: p.turnOccurred,
-        createdAt: p.createdAt.toISOString(),
-        expiresAt: p.expiresAt.toISOString(),
-      })),
+      pendingEncounters: pending.map((p: any) => {
+        const prefixDefinition = getMobPrefixDefinition(p.mobPrefix);
+        const mobDisplayName = prefixDefinition ? `${prefixDefinition.displayName} ${p.mobTemplate.name}` : p.mobTemplate.name;
+        return {
+          encounterId: p.id,
+          zoneId: p.zoneId,
+          zoneName: p.zone.name,
+          mobTemplateId: p.mobTemplateId,
+          mobName: p.mobTemplate.name,
+          mobPrefix: p.mobPrefix ?? null,
+          mobDisplayName,
+          turnOccurred: p.turnOccurred,
+          createdAt: p.createdAt.toISOString(),
+          expiresAt: p.expiresAt.toISOString(),
+        };
+      }),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -237,12 +243,13 @@ combatRouter.post('/start', async (req, res, next) => {
 
     let zoneId = body.zoneId ?? null;
     let mobTemplateId = body.mobTemplateId ?? null;
+    let mobPrefix = null as string | null;
     let consumedPendingEncounterId = null as null | string;
 
     if (body.pendingEncounterId) {
       const pending = await prismaAny.pendingEncounter.findFirst({
         where: { id: body.pendingEncounterId, playerId },
-        select: { id: true, zoneId: true, mobTemplateId: true, expiresAt: true },
+        select: { id: true, zoneId: true, mobTemplateId: true, mobPrefix: true, expiresAt: true },
       });
 
       if (!pending) {
@@ -257,6 +264,7 @@ combatRouter.post('/start', async (req, res, next) => {
       consumedPendingEncounterId = pending.id;
       zoneId = pending.zoneId;
       mobTemplateId = pending.mobTemplateId;
+      mobPrefix = pending.mobPrefix ?? null;
     }
 
     if (!zoneId) {
@@ -285,6 +293,10 @@ combatRouter.post('/start', async (req, res, next) => {
       mob = picked as unknown as MobTemplate & { spellPattern: unknown };
     }
 
+    if (!body.pendingEncounterId) {
+      mobPrefix = rollMobPrefix();
+    }
+
     const turnSpend = await spendPlayerTurns(playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
 
     const requestedAttackSkill: AttackSkill | null = body.attackSkill ?? null;
@@ -310,10 +322,14 @@ combatRouter.post('/start', async (req, res, next) => {
       equipmentStats
     );
 
-    const combatResult = runCombat(playerStats, {
+    const baseMob: MobTemplate = {
       ...mob,
       spellPattern: Array.isArray(mob.spellPattern) ? (mob.spellPattern as MobTemplate['spellPattern']) : [],
-    });
+    };
+    const prefixedMob = applyMobPrefix(baseMob, mobPrefix);
+    mobPrefix = prefixedMob.mobPrefix;
+
+    const combatResult = runCombat(playerStats, prefixedMob);
 
     let loot: LootDrop[] = [];
     let xpGrant = null as null | Awaited<ReturnType<typeof grantSkillXp>>;
@@ -333,13 +349,13 @@ combatRouter.post('/start', async (req, res, next) => {
     if (combatResult.outcome === 'victory') {
       // Update HP to remaining amount after combat
       await setHp(playerId, combatResult.playerHpRemaining);
-      loot = await rollAndGrantLoot(playerId, mob.id);
+      loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.dropChanceMultiplier);
       xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
     } else if (combatResult.outcome === 'defeat') {
       // Player lost - calculate flee outcome based on evasion vs mob level
       fleeResult = calculateFleeResult({
         evasionLevel: evasionLevel,
-        mobLevel: mob.level,
+        mobLevel: prefixedMob.level,
         maxHp: hpState.maxHp,
         currentGold: 0, // TODO: implement gold system
       });
@@ -354,14 +370,33 @@ combatRouter.post('/start', async (req, res, next) => {
     const lootWithNames = await enrichLootWithNames(loot);
 
     await prisma.playerBestiary.upsert({
-      where: { playerId_mobTemplateId: { playerId, mobTemplateId: mob.id } },
+      where: { playerId_mobTemplateId: { playerId, mobTemplateId: prefixedMob.id } },
       create: {
         playerId,
-        mobTemplateId: mob.id,
+        mobTemplateId: prefixedMob.id,
         kills: combatResult.outcome === 'victory' ? 1 : 0,
       },
       update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
     });
+
+    if (mobPrefix) {
+      await prismaAny.playerBestiaryPrefix.upsert({
+        where: {
+          playerId_mobTemplateId_prefix: {
+            playerId,
+            mobTemplateId: prefixedMob.id,
+            prefix: mobPrefix,
+          },
+        },
+        create: {
+          playerId,
+          mobTemplateId: prefixedMob.id,
+          prefix: mobPrefix,
+          kills: combatResult.outcome === 'victory' ? 1 : 0,
+        },
+        update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
+      });
+    }
 
     const combatLog = await prisma.activityLog.create({
       data: {
@@ -371,8 +406,10 @@ combatRouter.post('/start', async (req, res, next) => {
         result: {
           zoneId,
           zoneName: zone.name,
-          mobTemplateId: mob.id,
-          mobName: mob.name,
+          mobTemplateId: prefixedMob.id,
+          mobName: baseMob.name,
+          mobPrefix,
+          mobDisplayName: prefixedMob.mobDisplayName,
           pendingEncounterId: consumedPendingEncounterId,
           attackSkill,
           outcome: combatResult.outcome,
@@ -417,7 +454,9 @@ combatRouter.post('/start', async (req, res, next) => {
       turns: turnSpend,
       combat: {
         zoneId,
-        mobTemplateId: mob.id,
+        mobTemplateId: prefixedMob.id,
+        mobPrefix,
+        mobDisplayName: prefixedMob.mobDisplayName,
         pendingEncounterId: consumedPendingEncounterId,
         attackSkill,
         outcome: combatResult.outcome,

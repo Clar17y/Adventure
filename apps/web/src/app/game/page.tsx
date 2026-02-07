@@ -437,6 +437,7 @@ export default function GamePage() {
               stats: m.stats,
               zones: m.zones,
               description: m.description,
+              prefixEncounters: m.prefixEncounters,
               drops: m.drops.map((d) => ({
                 name: d.item.name,
                 imageSrc: itemImageSrc(d.item.name, d.item.itemType),

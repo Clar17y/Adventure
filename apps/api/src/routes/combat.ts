@@ -25,6 +25,7 @@ type LootDropWithName = LootDrop & { itemName: string | null };
 const lootDropWithNameSchema = z.object({
   itemTemplateId: z.string().min(1),
   quantity: z.number().int().min(1),
+  rarity: z.enum(['common', 'uncommon', 'rare', 'epic', 'legendary']).optional(),
   itemName: z.string().nullable().optional(),
 });
 
@@ -349,7 +350,7 @@ combatRouter.post('/start', async (req, res, next) => {
     if (combatResult.outcome === 'victory') {
       // Update HP to remaining amount after combat
       await setHp(playerId, combatResult.playerHpRemaining);
-      loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.dropChanceMultiplier);
+      loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
       xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
     } else if (combatResult.outcome === 'defeat') {
       // Player lost - calculate flee outcome based on evasion vs mob level
@@ -522,7 +523,12 @@ interface CombatHistoryCountRow {
 }
 
 async function enrichLootWithNames(
-  loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>
+  loot: Array<{
+    itemTemplateId: string;
+    quantity: number;
+    rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+    itemName?: string | null;
+  }>
 ): Promise<LootDropWithName[]> {
   if (loot.length === 0) return [];
 
@@ -546,6 +552,7 @@ async function enrichLootWithNames(
   return loot.map((drop) => ({
     itemTemplateId: drop.itemTemplateId,
     quantity: drop.quantity,
+    rarity: drop.rarity,
     itemName: drop.itemName ?? templateNameById.get(drop.itemTemplateId) ?? null,
   }));
 }

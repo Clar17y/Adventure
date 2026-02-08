@@ -5,7 +5,7 @@ import { PixelCard } from '@/components/PixelCard';
 import { ItemCard } from '@/components/ItemCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
-import { Heart, Shield, Sword, X, Zap } from 'lucide-react';
+import { Crosshair, Heart, Shield, Sword, X, Zap } from 'lucide-react';
 import { titleCaseFromSnake } from '@/lib/format';
 
 interface Item {
@@ -54,7 +54,8 @@ function statDisplay(stat: string) {
   if (stat === 'attack') return { Icon: Sword, color: 'text-[var(--rpg-red)]', label: 'Attack' };
   if (stat === 'armor') return { Icon: Shield, color: 'text-[var(--rpg-blue-light)]', label: 'Armor' };
   if (stat === 'health') return { Icon: Heart, color: 'text-[var(--rpg-green-light)]', label: 'HP' };
-  if (stat === 'evasion') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Evasion' };
+  if (stat === 'dodge' || stat === 'evasion') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Dodge' };
+  if (stat === 'accuracy') return { Icon: Crosshair, color: 'text-[var(--rpg-blue-light)]', label: 'Accuracy' };
   return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: prettyStatName(stat) };
 }
 
@@ -66,11 +67,12 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
   const attack = numStat(stats.attack);
   const armor = numStat(stats.armor);
   const health = numStat(stats.health);
-  const evasion = numStat(stats.evasion);
+  const dodge = numStat(stats.dodge) ?? numStat(stats.evasion);
+  const accuracy = numStat(stats.accuracy);
   const bonusEntries = Object.entries(selectedItem?.bonusStats ?? {})
     .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] !== 0);
 
-  const hasAnyStats = [attack, armor, health, evasion].some((v) => typeof v === 'number' && v !== 0);
+  const hasAnyStats = [attack, armor, health, dodge, accuracy].some((v) => typeof v === 'number' && v !== 0);
   const hasAnyBonusStats = bonusEntries.length > 0;
   const isRepairable = Boolean(selectedItem && ['weapon', 'armor'].includes(selectedItem.type));
   const isEquippable = Boolean(selectedItem?.slot && ['weapon', 'armor'].includes(selectedItem?.type ?? ''));
@@ -210,11 +212,18 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                         <span className="ml-auto font-mono text-[var(--rpg-green-light)]">+{health}</span>
                       </div>
                     )}
-                    {typeof evasion === 'number' && evasion !== 0 && (
+                    {typeof dodge === 'number' && dodge !== 0 && (
                       <div className="flex items-center gap-2 text-sm">
                         <Zap size={16} className="text-[var(--rpg-gold)]" />
-                        <span className="text-[var(--rpg-text-secondary)]">Evasion</span>
-                        <span className="ml-auto font-mono text-[var(--rpg-gold)]">+{evasion}</span>
+                        <span className="text-[var(--rpg-text-secondary)]">Dodge</span>
+                        <span className="ml-auto font-mono text-[var(--rpg-gold)]">+{dodge}</span>
+                      </div>
+                    )}
+                    {typeof accuracy === 'number' && accuracy !== 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Crosshair size={16} className="text-[var(--rpg-blue-light)]" />
+                        <span className="text-[var(--rpg-text-secondary)]">Accuracy</span>
+                        <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">+{accuracy}</span>
                       </div>
                     )}
                   </div>
@@ -222,7 +231,7 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
 
                 {hasAnyBonusStats && (
                   <div className="space-y-1">
-                    <div className="text-xs font-semibold text-[var(--rpg-gold)]">Critical Bonus</div>
+                    <div className="text-xs font-semibold text-[var(--rpg-gold)]">Bonus Stats</div>
                     <div className="grid grid-cols-2 gap-2">
                       {bonusEntries.map(([stat, value]) => {
                         const { Icon, color, label } = statDisplay(stat);

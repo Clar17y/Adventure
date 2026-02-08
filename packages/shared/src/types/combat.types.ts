@@ -1,3 +1,5 @@
+import type { ItemRarity } from './item.types';
+
 export interface MobTemplate {
   id: string;
   name: string;
@@ -41,6 +43,9 @@ export interface CombatLogEntry {
   evaded?: boolean;
   message: string;
   attackModifier?: number;
+  accuracyModifier?: number;
+  targetDodge?: number;
+  targetEvasion?: number;
   targetDefence?: number;
   rawDamage?: number;
   armorReduction?: number;
@@ -77,6 +82,7 @@ export interface CombatResult {
 export interface LootDrop {
   itemTemplateId: string;
   quantity: number;
+  rarity?: ItemRarity;
 }
 
 export interface DurabilityLoss {
@@ -88,7 +94,9 @@ export interface CombatantStats {
   hp: number;
   maxHp: number;
   attack: number;
+  accuracy: number;
   defence: number;
+  dodge: number;
   evasion: number;
   damageMin: number;
   damageMax: number;

@@ -5,9 +5,10 @@ import { AppError } from '../middleware/errorHandler';
 
 export interface EquipmentStats {
   attack: number;
+  accuracy: number;
   armor: number;
   health: number;
-  evasion: number;
+  dodge: number;
   luck: number;
 }
 
@@ -45,9 +46,10 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
   });
 
   let attack = 0;
+  let accuracy = 0;
   let armor = 0;
   let health = 0;
-  let evasion = 0;
+  let dodge = 0;
   let luck = 0;
 
   for (const slot of equipped) {
@@ -58,14 +60,20 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
     for (const stats of statSources) {
       if (!stats) continue;
       if (typeof stats.attack === 'number') attack += stats.attack;
+      if (typeof stats.accuracy === 'number') accuracy += stats.accuracy;
       if (typeof stats.armor === 'number') armor += stats.armor;
       if (typeof stats.health === 'number') health += stats.health;
-      if (typeof stats.evasion === 'number') evasion += stats.evasion;
+      if (typeof stats.dodge === 'number') {
+        dodge += stats.dodge;
+      } else if (typeof stats.evasion === 'number') {
+        // Legacy compatibility for existing gear rolls/templates.
+        dodge += stats.evasion;
+      }
       if (typeof stats.luck === 'number') luck += stats.luck;
     }
   }
 
-  return { attack, armor, health, evasion, luck };
+  return { attack, accuracy, armor, health, dodge, luck };
 }
 
 export async function equipItem(

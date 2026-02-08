@@ -65,7 +65,7 @@ export function Bestiary({ monsters }: BestiaryProps) {
     if (definition.statMultipliers.hp !== undefined) effects.push(`HP ${formatMultiplier(definition.statMultipliers.hp)}`);
     if (definition.statMultipliers.attack !== undefined) effects.push(`ATK ${formatMultiplier(definition.statMultipliers.attack)}`);
     if (definition.statMultipliers.defence !== undefined) effects.push(`DEF ${formatMultiplier(definition.statMultipliers.defence)}`);
-    if (definition.statMultipliers.evasion !== undefined) effects.push(`EVA ${formatMultiplier(definition.statMultipliers.evasion)}`);
+    if (definition.statMultipliers.evasion !== undefined) effects.push(`DOD ${formatMultiplier(definition.statMultipliers.evasion)}`);
     if (definition.statMultipliers.damageMin !== undefined || definition.statMultipliers.damageMax !== undefined) {
       const min = formatMultiplier(definition.statMultipliers.damageMin ?? 1);
       const max = formatMultiplier(definition.statMultipliers.damageMax ?? 1);

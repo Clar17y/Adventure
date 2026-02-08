@@ -4,6 +4,8 @@ import {
   craft,
   destroyInventoryItem,
   equip,
+  forgeReroll,
+  forgeUpgrade,
   getBestiary,
   getCraftingRecipes,
   getEquipment,
@@ -33,6 +35,7 @@ export type Screen =
   | 'zones'
   | 'bestiary'
   | 'crafting'
+  | 'forge'
   | 'gathering'
   | 'rest';
 
@@ -58,6 +61,9 @@ export interface LastCombatLogEntry {
   damage?: number;
   evaded?: boolean;
   attackModifier?: number;
+  accuracyModifier?: number;
+  targetDodge?: number;
+  targetEvasion?: number;
   targetDefence?: number;
   rawDamage?: number;
   armorReduction?: number;
@@ -67,6 +73,7 @@ export interface LastCombatLogEntry {
 }
 
 export interface LastCombat {
+  mobTemplateId: string;
   mobPrefix: string | null;
   mobDisplayName: string;
   outcome: string;
@@ -75,7 +82,12 @@ export interface LastCombat {
   log: LastCombatLogEntry[];
   rewards: {
     xp: number;
-    loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>;
+    loot: Array<{
+      itemTemplateId: string;
+      quantity: number;
+      rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+      itemName?: string | null;
+    }>;
     skillXp: {
       skillType: string;
       xpGained: number;
@@ -126,6 +138,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [inventory, setInventory] = useState<Array<{
     id: string;
     quantity: number;
+    rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
     currentDurability: number | null;
     maxDurability: number | null;
     bonusStats: Record<string, number> | null;
@@ -148,6 +161,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     itemId: string | null;
     item: null | {
       id: string;
+      rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
       currentDurability: number | null;
       maxDurability: number | null;
       bonusStats: Record<string, number> | null;
@@ -307,6 +321,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           item: e.item
             ? {
                 id: e.item.id,
+                rarity: e.item.rarity,
                 currentDurability: e.item.currentDurability,
                 maxDurability: e.item.maxDurability,
                 bonusStats: e.item.bonusStats ?? null,
@@ -406,7 +421,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && activeScreen === 'bestiary') {
+    if (isAuthenticated && (activeScreen === 'bestiary' || activeScreen === 'combat')) {
       void loadBestiary();
     }
   }, [isAuthenticated, activeScreen, loadBestiary]);
@@ -488,7 +503,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
   const getActiveTab = () => {
     if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
-    if (['explore', 'gathering', 'crafting'].includes(activeScreen)) return 'explore';
+    if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
     if (['combat'].includes(activeScreen)) return 'combat';
     return 'profile';
@@ -496,10 +511,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatStatName = (stat: string) =>
-    stat
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, (char) => char.toUpperCase())
-      .trim();
+    stat === 'evasion'
+      ? 'Dodge'
+      : stat
+          .replace(/([A-Z])/g, ' $1')
+          .replace(/^./, (char) => char.toUpperCase())
+          .trim();
 
   const currentZone =
     zones.find((z) => z.id === activeZoneId) ??
@@ -577,6 +594,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
       setLastCombat({
+        mobTemplateId: data.combat.mobTemplateId,
         mobPrefix: data.combat.mobPrefix,
         mobDisplayName: data.combat.mobDisplayName,
         outcome: data.combat.outcome,
@@ -609,7 +627,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         ]);
       }
 
-      await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters()]);
+      await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters(), loadBestiary()]);
     });
   };
 
@@ -757,6 +775,68 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     });
   };
 
+  const handleForgeUpgrade = async (itemId: string, sacrificialItemId: string) => {
+    await runAction('forge_upgrade', async () => {
+      const res = await forgeUpgrade(itemId, sacrificialItemId);
+      const data = res.data;
+      if (!data) {
+        setActionError(res.error?.message ?? 'Forge upgrade failed');
+        return;
+      }
+
+      setTurns(data.turns.currentTurns);
+      const fromLabel = data.forge.fromRarity.charAt(0).toUpperCase() + data.forge.fromRarity.slice(1);
+      const toLabel = data.forge.toRarity.charAt(0).toUpperCase() + data.forge.toRarity.slice(1);
+      const chancePct = (data.forge.successChance * 100).toFixed(1);
+
+      if (data.forge.success) {
+        setCraftingLog((prev) => [
+          {
+            timestamp: nowStamp(),
+            type: 'success',
+            message: `Forge success: ${fromLabel} -> ${toLabel} (${chancePct}% chance). Sacrificial item consumed.`,
+          },
+          ...prev,
+        ]);
+      } else {
+        setCraftingLog((prev) => [
+          {
+            timestamp: nowStamp(),
+            type: 'info',
+            message: `Forge failed at ${fromLabel} (${chancePct}% chance). Target and sacrifice consumed.`,
+          },
+          ...prev,
+        ]);
+      }
+
+      await loadAll();
+    });
+  };
+
+  const handleForgeReroll = async (itemId: string, sacrificialItemId: string) => {
+    await runAction('forge_reroll', async () => {
+      const res = await forgeReroll(itemId, sacrificialItemId);
+      const data = res.data;
+      if (!data) {
+        setActionError(res.error?.message ?? 'Forge reroll failed');
+        return;
+      }
+
+      setTurns(data.turns.currentTurns);
+      const rarityLabel = data.forge.rarity.charAt(0).toUpperCase() + data.forge.rarity.slice(1);
+      setCraftingLog((prev) => [
+        {
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Re-rolled ${rarityLabel} item bonus stats. Sacrificial duplicate consumed.`,
+        },
+        ...prev,
+      ]);
+
+      await loadAll();
+    });
+  };
+
   const handleDestroyItem = async (itemId: string) => {
     await runAction('destroy', async () => {
       const res = await destroyInventoryItem(itemId);
@@ -900,6 +980,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handlePendingEncounterSortChange,
     handleCraft,
     handleSalvageItem,
+    handleForgeUpgrade,
+    handleForgeReroll,
     handleDestroyItem,
     handleRepairItem,
     handleEquipItem,

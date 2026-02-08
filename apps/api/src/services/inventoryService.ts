@@ -37,10 +37,11 @@ export async function addStackableItem(
     data: {
       ownerId: playerId,
       templateId: itemTemplateId,
+      rarity: 'common',
       quantity,
       maxDurability: null,
       currentDurability: null,
-    },
+    } as any,
     select: { id: true, quantity: true },
   });
   return { itemId: created.id, quantity: created.quantity };

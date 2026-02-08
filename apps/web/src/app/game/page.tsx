@@ -14,6 +14,7 @@ import { Skills } from '@/components/screens/Skills';
 import { ZoneMap } from '@/components/screens/ZoneMap';
 import { Bestiary } from '@/components/screens/Bestiary';
 import { Crafting } from '@/components/screens/Crafting';
+import { Forge } from '@/components/screens/Forge';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { rarityFromTier } from '@/lib/rarity';
@@ -207,6 +208,8 @@ export default function GamePage() {
     handlePendingEncounterSortChange,
     handleCraft,
     handleSalvageItem,
+    handleForgeUpgrade,
+    handleForgeReroll,
     handleDestroyItem,
     handleRepairItem,
     handleEquipItem,
@@ -280,7 +283,7 @@ export default function GamePage() {
               name: item.template.name,
               imageSrc: itemImageSrc(item.template.name, item.template.itemType),
               quantity: item.quantity,
-              rarity: rarityFromTier(item.template.tier),
+              rarity: item.rarity,
               description: item.template.itemType,
               type: item.template.itemType,
               slot: item.template.slot,
@@ -321,7 +324,7 @@ export default function GamePage() {
                       id: e.item!.id,
                       name: template.name,
                       imageSrc: itemImageSrc(template.name, template.itemType),
-                      rarity: rarityFromTier(template.tier),
+                      rarity: e.item!.rarity,
                       durability: cur,
                       maxDurability: max,
                       baseStats: template.baseStats,
@@ -341,7 +344,7 @@ export default function GamePage() {
                   id: item.id,
                   name: item.template.name,
                   imageSrc: itemImageSrc(item.template.name, item.template.itemType),
-                  rarity: rarityFromTier(item.template.tier),
+                  rarity: item.rarity,
                   slot: item.template.slot as string,
                   equippedSlot: item.equippedSlot,
                   durability,
@@ -355,7 +358,8 @@ export default function GamePage() {
               let attack = 0;
               let defence = 0;
               let hp = 0;
-              let evasion = 0;
+              let dodge = 0;
+              let accuracy = 0;
               for (const e of equipment) {
                 const base = e.item?.template?.baseStats as Record<string, unknown> | undefined;
                 const bonus = e.item?.bonusStats ?? undefined;
@@ -363,16 +367,20 @@ export default function GamePage() {
                   if (typeof base.attack === 'number') attack += base.attack;
                   if (typeof base.armor === 'number') defence += base.armor;
                   if (typeof base.health === 'number') hp += base.health;
-                  if (typeof base.evasion === 'number') evasion += base.evasion;
+                  if (typeof base.dodge === 'number') dodge += base.dodge;
+                  else if (typeof base.evasion === 'number') dodge += base.evasion;
+                  if (typeof base.accuracy === 'number') accuracy += base.accuracy;
                 }
                 if (bonus) {
                   if (typeof bonus.attack === 'number') attack += bonus.attack;
                   if (typeof bonus.armor === 'number') defence += bonus.armor;
                   if (typeof bonus.health === 'number') hp += bonus.health;
-                  if (typeof bonus.evasion === 'number') evasion += bonus.evasion;
+                  if (typeof bonus.dodge === 'number') dodge += bonus.dodge;
+                  else if (typeof bonus.evasion === 'number') dodge += bonus.evasion;
+                  if (typeof bonus.accuracy === 'number') accuracy += bonus.accuracy;
                 }
               }
-              return { attack, defence, hp, evasion };
+              return { attack, defence, hp, dodge, accuracy };
             })()}
           />
         );
@@ -496,6 +504,36 @@ export default function GamePage() {
             />
           </div>
         );
+      case 'forge':
+        return (
+          <Forge
+            items={inventory
+              .filter((item) => ['weapon', 'armor'].includes(item.template.itemType) && item.quantity === 1)
+              .map((item) => ({
+                id: item.id,
+                templateId: item.template.id,
+                name: item.template.name,
+                imageSrc: itemImageSrc(item.template.name, item.template.itemType),
+                rarity: item.rarity,
+                type: item.template.itemType,
+                equippedSlot: item.equippedSlot,
+                baseStats: item.template.baseStats,
+                bonusStats: item.bonusStats ?? null,
+              }))}
+            equippedLuck={equipment.reduce((sum, slot) => {
+              const base = slot.item?.template?.baseStats as Record<string, unknown> | undefined;
+              const bonus = slot.item?.bonusStats as Record<string, unknown> | undefined;
+              const baseLuck = typeof base?.luck === 'number' ? base.luck : 0;
+              const bonusLuck = typeof bonus?.luck === 'number' ? bonus.luck : 0;
+              return sum + baseLuck + bonusLuck;
+            }, 0)}
+            activityLog={craftingLog}
+            onUpgrade={handleForgeUpgrade}
+            onReroll={handleForgeReroll}
+            isRecovering={hpState.isRecovering}
+            recoveryCost={hpState.recoveryCost}
+          />
+        );
       case 'gathering':
         return (
           <div className="space-y-3">
@@ -569,6 +607,7 @@ export default function GamePage() {
             pendingClockMs={pendingClockMs}
             busyAction={busyAction}
             lastCombat={lastCombat}
+            bestiaryMobs={bestiaryMobs.map((mob) => ({ id: mob.id, isDiscovered: mob.isDiscovered }))}
             onStartCombat={handleStartCombat}
             onPendingEncounterPageChange={handlePendingEncounterPageChange}
             onPendingEncounterZoneFilterChange={handlePendingEncounterZoneFilterChange}
@@ -635,6 +674,7 @@ export default function GamePage() {
               { id: 'explore', label: 'Explore' },
               { id: 'gathering', label: 'Gathering' },
               { id: 'crafting', label: 'Crafting' },
+              { id: 'forge', label: 'Forge' },
             ].map((tab) => (
               <button
                 key={tab.id}

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
-import { Heart, Shield, Sword, X, Zap } from 'lucide-react';
+import { Crosshair, Heart, Shield, Sword, X, Zap } from 'lucide-react';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
 
@@ -46,7 +46,8 @@ interface EquipmentProps {
     attack: number;
     defence: number;
     hp: number;
-    evasion: number;
+    dodge: number;
+    accuracy: number;
   };
 }
 
@@ -64,10 +65,19 @@ function totalStatValue(
   bonusStats: Record<string, unknown> | null | undefined,
   key: string
 ): number {
+  if (key === 'dodge') {
+    const baseDodge = statValue(baseStats, 'dodge');
+    const bonusDodge = statValue(bonusStats ?? undefined, 'dodge');
+    if (baseDodge !== 0 || bonusDodge !== 0) return baseDodge + bonusDodge;
+
+    // Legacy compatibility for old templates/rolls that still use `evasion`.
+    return statValue(baseStats, 'evasion') + statValue(bonusStats ?? undefined, 'evasion');
+  }
   return statValue(baseStats, key) + statValue(bonusStats ?? undefined, key);
 }
 
 function prettyStatName(stat: string): string {
+  if (stat === 'evasion') return 'Dodge';
   return stat
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, (char) => char.toUpperCase())
@@ -293,12 +303,21 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                           </span>
                         </div>
                       )}
-                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'evasion') !== 0 && (
+                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'dodge') !== 0 && (
                         <div className="flex items-center gap-2">
                           <Zap size={16} className="text-[var(--rpg-gold)]" />
-                          <span className="text-[var(--rpg-text-secondary)]">Evasion</span>
+                          <span className="text-[var(--rpg-text-secondary)]">Dodge</span>
                           <span className="ml-auto font-mono text-[var(--rpg-gold)]">
-                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'evasion')}
+                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'dodge')}
+                          </span>
+                        </div>
+                      )}
+                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'accuracy') !== 0 && (
+                        <div className="flex items-center gap-2">
+                          <Crosshair size={16} className="text-[var(--rpg-blue-light)]" />
+                          <span className="text-[var(--rpg-text-secondary)]">Accuracy</span>
+                          <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">
+                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'accuracy')}
                           </span>
                         </div>
                       )}
@@ -311,7 +330,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
 
                       return (
                         <div className="mt-2 border-t border-[var(--rpg-border)] pt-2">
-                          <div className="text-xs font-semibold text-[var(--rpg-gold)] mb-1">Critical Bonus</div>
+                          <div className="text-xs font-semibold text-[var(--rpg-gold)] mb-1">Bonus Stats</div>
                           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono">
                             {bonusEntries.map(([stat, value]) => (
                               <span key={stat} className="text-[var(--rpg-green-light)]">
@@ -340,18 +359,21 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                       const currentAttack = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'attack');
                       const currentArmor = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'armor');
                       const currentHealth = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'health');
-                      const currentEvasion = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'evasion');
+                      const currentDodge = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'dodge');
+                      const currentAccuracy = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'accuracy');
 
                       const nextAttack = totalStatValue(item.baseStats, item.bonusStats, 'attack');
                       const nextArmor = totalStatValue(item.baseStats, item.bonusStats, 'armor');
                       const nextHealth = totalStatValue(item.baseStats, item.bonusStats, 'health');
-                      const nextEvasion = totalStatValue(item.baseStats, item.bonusStats, 'evasion');
+                      const nextDodge = totalStatValue(item.baseStats, item.bonusStats, 'dodge');
+                      const nextAccuracy = totalStatValue(item.baseStats, item.bonusStats, 'accuracy');
 
                       const diffs = [
                         { key: 'Attack', diff: nextAttack - currentAttack },
                         { key: 'Armor', diff: nextArmor - currentArmor },
                         { key: 'HP', diff: nextHealth - currentHealth },
-                        { key: 'Evasion', diff: nextEvasion - currentEvasion },
+                        { key: 'Dodge', diff: nextDodge - currentDodge },
+                        { key: 'Accuracy', diff: nextAccuracy - currentAccuracy },
                       ].filter((d) => d.diff !== 0);
 
                       const isEquippedHere = item.equippedSlot === activeSlotId;
@@ -493,8 +515,18 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
               <Zap size={20} color="var(--rpg-gold)" />
             </div>
             <div>
-              <div className="text-xs text-[var(--rpg-text-secondary)]">Evasion</div>
-              <div className="text-2xl font-bold text-[var(--rpg-gold)] font-mono">{stats.evasion}%</div>
+              <div className="text-xs text-[var(--rpg-text-secondary)]">Dodge</div>
+              <div className="text-2xl font-bold text-[var(--rpg-gold)] font-mono">{stats.dodge}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center">
+              <Crosshair size={20} color="var(--rpg-blue-light)" />
+            </div>
+            <div>
+              <div className="text-xs text-[var(--rpg-text-secondary)]">Accuracy</div>
+              <div className="text-2xl font-bold text-[var(--rpg-blue-light)] font-mono">{stats.accuracy}</div>
             </div>
           </div>
         </div>

@@ -22,21 +22,47 @@ describe('calculateCritChance', () => {
 });
 
 describe('getEligibleBonusStats', () => {
-  it('returns weapon stat pool', () => {
+  it('returns template-aware weapon pool (primary lane + utility)', () => {
+    expect(getEligibleBonusStats('weapon', { attack: 8 })).toEqual([
+      'attack',
+      'dodge',
+      'accuracy',
+      'luck',
+    ]);
+    expect(getEligibleBonusStats('weapon', { rangedPower: 8 })).toEqual([
+      'rangedPower',
+      'dodge',
+      'accuracy',
+      'luck',
+    ]);
+    expect(getEligibleBonusStats('weapon', { magicPower: 8 })).toEqual([
+      'magicPower',
+      'dodge',
+      'accuracy',
+      'luck',
+    ]);
     expect(getEligibleBonusStats('weapon')).toEqual([
       'attack',
       'magicPower',
       'rangedPower',
-      'evasion',
+      'dodge',
+      'accuracy',
       'luck',
     ]);
   });
 
-  it('returns armor stat pool', () => {
+  it('returns armor pool (defensive lane + utility)', () => {
     expect(getEligibleBonusStats('armor')).toEqual([
       'armor',
       'health',
-      'evasion',
+      'dodge',
+      'accuracy',
+      'luck',
+    ]);
+    expect(getEligibleBonusStats('armor', { armor: 5 })).toEqual([
+      'armor',
+      'dodge',
+      'accuracy',
       'luck',
     ]);
   });
@@ -48,14 +74,14 @@ describe('getEligibleBonusStats', () => {
 });
 
 describe('rollBonusStat', () => {
-  it('rolls stat from available base-stat pool and computes percentage bonus', () => {
+  it('rolls stat from eligible pool and computes percentage bonus', () => {
     const result = rollBonusStat(
-      ['attack', 'magicPower', 'rangedPower', 'evasion', 'luck'],
+      ['attack', 'magicPower', 'rangedPower', 'dodge', 'luck'],
       { attack: 50, luck: 10 },
       { statRoll: 0.7, bonusPercentRoll: 0.5 }
     );
 
-    expect(result).toEqual({ stat: 'luck', value: 2 });
+    expect(result).toEqual({ stat: 'dodge', value: 1 });
   });
 
   it('guarantees minimum bonus even for low or missing base stat', () => {
@@ -91,7 +117,7 @@ describe('calculateCraftingCrit', () => {
       requiredLevel: 5,
       luckStat: 10,
       itemType: 'weapon',
-      baseStats: { attack: 50, evasion: 20 },
+      baseStats: { attack: 50, dodge: 20 },
     }, {
       critRoll: 0.01,
       statRoll: 0.9,
@@ -100,7 +126,7 @@ describe('calculateCraftingCrit', () => {
 
     expect(result.isCrit).toBe(true);
     expect(result.critChance).toBeCloseTo(0.27);
-    expect(result.bonusStat).toBe('evasion');
-    expect(result.bonusValue).toBe(4);
+    expect(result.bonusStat).toBe('luck');
+    expect(result.bonusValue).toBe(1);
   });
 });

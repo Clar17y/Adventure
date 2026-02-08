@@ -20,24 +20,18 @@ export function rollDamage(min: number, max: number): number {
 export function doesAttackHit(
   attackRoll: number,
   attackBonus: number,
-  targetDefence: number
+  accuracyBonus: number,
+  targetDodge: number,
+  targetEvasion: number
 ): boolean {
   // Natural 20 always hits
   if (attackRoll === 20) return true;
   // Natural 1 always misses
   if (attackRoll === 1) return false;
 
-  const totalAttack = attackRoll + attackBonus;
-  const hitThreshold = 10 + targetDefence;
+  const totalAttack = attackRoll + attackBonus + accuracyBonus;
+  const hitThreshold = 10 + targetDodge + Math.floor(Math.max(0, targetEvasion) / 2);
   return totalAttack >= hitThreshold;
-}
-
-/**
- * Check if target evades the attack.
- */
-export function doesTargetEvade(evasionChance: number): boolean {
-  const roll = Math.random() * 100;
-  return roll < evasionChance;
 }
 
 /**
@@ -85,14 +79,16 @@ export function buildPlayerCombatStats(
   currentHp: number,
   maxHp: number,
   skillLevels: { attack: number; defence: number; vitality: number; evasion: number },
-  equipmentStats: { attack: number; armor: number; health: number; evasion: number }
+  equipmentStats: { attack: number; accuracy: number; armor: number; health: number; dodge: number }
 ): CombatantStats {
   return {
     hp: Math.min(currentHp, maxHp),
     maxHp,
     attack: skillLevels.attack + equipmentStats.attack,
+    accuracy: Math.floor(skillLevels.attack / 2) + equipmentStats.accuracy,
     defence: skillLevels.defence + equipmentStats.armor,
-    evasion: skillLevels.evasion + equipmentStats.evasion,
+    dodge: equipmentStats.dodge,
+    evasion: skillLevels.evasion,
     damageMin: 1 + Math.floor(skillLevels.attack / 5),
     damageMax: 5 + Math.floor(skillLevels.attack / 2),
     speed: Math.floor(skillLevels.evasion / 10),

@@ -7,4 +7,5 @@ export { Skills } from './Skills';
 export { ZoneMap } from './ZoneMap';
 export { Bestiary } from './Bestiary';
 export { Crafting } from './Crafting';
+export { Forge } from './Forge';
 export { Gathering } from './Gathering';

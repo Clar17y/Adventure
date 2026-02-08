@@ -179,6 +179,63 @@ export const CRAFTING_CONSTANTS = {
 } as const;
 
 // =============================================================================
+// ITEM RARITY
+// =============================================================================
+
+export const ITEM_RARITY_CONSTANTS = {
+  ORDER: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
+
+  BONUS_SLOTS_BY_RARITY: {
+    common: 0,
+    uncommon: 1,
+    rare: 2,
+    epic: 3,
+    legendary: 4,
+  },
+
+  DROP_WEIGHT_BY_RARITY: {
+    common: 650,
+    uncommon: 250,
+    rare: 80,
+    epic: 18,
+    legendary: 2,
+  },
+
+  DROP_WEIGHT_SHIFT_PER_LEVEL_ABOVE_ONE: 2,
+
+  DROP_WEIGHT_SHIFT_DISTRIBUTION: {
+    uncommon: 2,
+    rare: 1.2,
+    epic: 0.6,
+    legendary: 0.2,
+  },
+
+  UPGRADE_SUCCESS_BY_RARITY: {
+    common: 0.6,
+    uncommon: 0.35,
+    rare: 0.15,
+    epic: 0.05,
+  },
+
+  UPGRADE_TURN_COST_BY_RARITY: {
+    common: 100,
+    uncommon: 250,
+    rare: 500,
+    epic: 1000,
+  },
+
+  REROLL_TURN_COST_BY_RARITY: {
+    uncommon: 75,
+    rare: 150,
+    epic: 300,
+    legendary: 600,
+  },
+
+  FORGE_LUCK_SUCCESS_BONUS_PER_POINT: 0.001,
+  FORGE_LUCK_SUCCESS_BONUS_CAP: 0.1,
+} as const;
+
+// =============================================================================
 // HP & HEALTH
 // =============================================================================
 

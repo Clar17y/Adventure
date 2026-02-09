@@ -1,6 +1,6 @@
 import { Prisma, prisma } from '@adventure/database';
 import { rollBonusStatsForRarity, rollDropRarity } from '@adventure/game-engine';
-import type { ItemStats, ItemType, LootDrop } from '@adventure/shared';
+import type { EquipmentSlot, ItemStats, ItemType, LootDrop } from '@adventure/shared';
 import { addStackableItem } from './inventoryService';
 
 function randomIntInclusive(min: number, max: number): number {
@@ -48,11 +48,13 @@ export async function rollAndGrantLoot(
       const rarity = isEquipment
         ? rollDropRarity(mobLevel, dropChanceMultiplier)
         : 'common';
+      const templateSlot = entry.itemTemplate.slot as EquipmentSlot | null;
       const bonusStats = isEquipment
         ? rollBonusStatsForRarity({
             itemType,
             rarity,
             baseStats: templateBaseStats,
+            slot: templateSlot,
           })
         : null;
 

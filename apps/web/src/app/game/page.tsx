@@ -360,6 +360,8 @@ export default function GamePage() {
               let hp = 0;
               let dodge = 0;
               let accuracy = 0;
+              let critChance = 0;
+              let critDamage = 0;
               for (const e of equipment) {
                 const base = e.item?.template?.baseStats as Record<string, unknown> | undefined;
                 const bonus = e.item?.bonusStats ?? undefined;
@@ -370,6 +372,8 @@ export default function GamePage() {
                   if (typeof base.dodge === 'number') dodge += base.dodge;
                   else if (typeof base.evasion === 'number') dodge += base.evasion;
                   if (typeof base.accuracy === 'number') accuracy += base.accuracy;
+                  if (typeof base.critChance === 'number') critChance += base.critChance;
+                  if (typeof base.critDamage === 'number') critDamage += base.critDamage;
                 }
                 if (bonus) {
                   if (typeof bonus.attack === 'number') attack += bonus.attack;
@@ -378,9 +382,11 @@ export default function GamePage() {
                   if (typeof bonus.dodge === 'number') dodge += bonus.dodge;
                   else if (typeof bonus.evasion === 'number') dodge += bonus.evasion;
                   if (typeof bonus.accuracy === 'number') accuracy += bonus.accuracy;
+                  if (typeof bonus.critChance === 'number') critChance += bonus.critChance;
+                  if (typeof bonus.critDamage === 'number') critDamage += bonus.critDamage;
                 }
               }
-              return { attack, defence, hp, dodge, accuracy };
+              return { attack, defence, hp, dodge, accuracy, critChance, critDamage };
             })()}
           />
         );

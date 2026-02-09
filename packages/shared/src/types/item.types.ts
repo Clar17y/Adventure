@@ -39,6 +39,8 @@ export interface ItemStats {
   // Legacy field kept for compatibility; treat as dodge in combat/stat aggregation.
   evasion?: number;
   luck?: number;
+  critChance?: number;  // flat bonus to base 5% (e.g., 0.04 = +4%)
+  critDamage?: number;  // flat bonus to base 1.5x (e.g., 0.15 → 1.65x)
 }
 
 export interface DropTableEntry {

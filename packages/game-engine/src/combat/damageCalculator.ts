@@ -37,31 +37,35 @@ export function doesAttackHit(
 /**
  * Check if attack is a critical hit.
  */
-export function isCriticalHit(): boolean {
-  return Math.random() < COMBAT_CONSTANTS.CRIT_CHANCE;
+export function isCriticalHit(bonusCritChance = 0): boolean {
+  return Math.random() < (COMBAT_CONSTANTS.CRIT_CHANCE + bonusCritChance);
 }
 
 /**
  * Calculate final damage after armor reduction.
+ * Returns { damage, actualMultiplier } so callers can log the actual crit multiplier used.
  */
 export function calculateFinalDamage(
   rawDamage: number,
   armor: number,
-  isCrit: boolean
-): number {
+  isCrit: boolean,
+  bonusCritDamage = 0
+): { damage: number; actualMultiplier: number } {
   let damage = rawDamage;
+  const actualMultiplier = isCrit ? COMBAT_CONSTANTS.CRIT_MULTIPLIER + bonusCritDamage : 1;
 
-  // Apply crit multiplier
   if (isCrit) {
-    damage = Math.floor(damage * COMBAT_CONSTANTS.CRIT_MULTIPLIER);
+    damage = Math.floor(damage * actualMultiplier);
   }
 
   // Apply armor reduction (diminishing returns)
   const reduction = armor / (armor + 100);
   damage = Math.floor(damage * (1 - reduction));
 
-  // Minimum damage
-  return Math.max(COMBAT_CONSTANTS.MIN_DAMAGE, damage);
+  return {
+    damage: Math.max(COMBAT_CONSTANTS.MIN_DAMAGE, damage),
+    actualMultiplier,
+  };
 }
 
 /**
@@ -73,13 +77,12 @@ export function rollInitiative(speed: number): number {
 
 /**
  * Build combatant stats from player equipment and skills.
- * This is a placeholder - actual implementation will aggregate from equipment.
  */
 export function buildPlayerCombatStats(
   currentHp: number,
   maxHp: number,
   skillLevels: { attack: number; defence: number; vitality: number; evasion: number },
-  equipmentStats: { attack: number; accuracy: number; armor: number; health: number; dodge: number }
+  equipmentStats: { attack: number; accuracy: number; armor: number; health: number; dodge: number; critChance?: number; critDamage?: number }
 ): CombatantStats {
   return {
     hp: Math.min(currentHp, maxHp),
@@ -92,5 +95,7 @@ export function buildPlayerCombatStats(
     damageMin: 1 + Math.floor(skillLevels.attack / 5),
     damageMax: 5 + Math.floor(skillLevels.attack / 2),
     speed: Math.floor(skillLevels.evasion / 10),
+    critChance: equipmentStats.critChance ?? 0,
+    critDamage: equipmentStats.critDamage ?? 0,
   };
 }

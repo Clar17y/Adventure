@@ -50,6 +50,7 @@ export interface CombatLogEntry {
   rawDamage?: number;
   armorReduction?: number;
   isCritical?: boolean;
+  critMultiplier?: number;
   playerHpAfter?: number;
   mobHpAfter?: number;
 }
@@ -101,4 +102,6 @@ export interface CombatantStats {
   damageMin: number;
   damageMax: number;
   speed: number;
+  critChance?: number;
+  critDamage?: number;
 }

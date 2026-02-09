@@ -22,7 +22,7 @@ describe('calculateCritChance', () => {
 });
 
 describe('getEligibleBonusStats', () => {
-  it('returns template-aware weapon pool (primary lane + utility)', () => {
+  it('returns template-aware weapon pool (primary lane + utility) without slot', () => {
     expect(getEligibleBonusStats('weapon', { attack: 8 })).toEqual([
       'attack',
       'dodge',
@@ -51,7 +51,7 @@ describe('getEligibleBonusStats', () => {
     ]);
   });
 
-  it('returns armor pool (defensive lane + utility)', () => {
+  it('returns armor pool (defensive lane + utility) without slot', () => {
     expect(getEligibleBonusStats('armor')).toEqual([
       'armor',
       'health',
@@ -70,6 +70,53 @@ describe('getEligibleBonusStats', () => {
   it('returns empty pool for non-equipment types', () => {
     expect(getEligibleBonusStats('resource')).toEqual([]);
     expect(getEligibleBonusStats('consumable')).toEqual([]);
+  });
+
+  it('returns slot-aware pool for main_hand', () => {
+    const pool = getEligibleBonusStats('weapon', { attack: 8 }, 'main_hand');
+    expect(pool).toEqual([
+      'attack', 'critChance', 'critDamage',
+      'accuracy', 'luck',
+    ]);
+  });
+
+  it('main_hand filters offensive stats by baseStats, keeps crit always', () => {
+    const pool = getEligibleBonusStats('weapon', { magicPower: 5 }, 'main_hand');
+    expect(pool).toEqual([
+      'magicPower', 'critChance', 'critDamage',
+      'accuracy', 'luck',
+    ]);
+  });
+
+  it('main_hand with no offensive baseStats falls back to all offensive', () => {
+    const pool = getEligibleBonusStats('weapon', {}, 'main_hand');
+    expect(pool).toEqual([
+      'attack', 'magicPower', 'rangedPower', 'critChance', 'critDamage',
+      'accuracy', 'luck',
+    ]);
+  });
+
+  it('returns slot-aware pool for gloves', () => {
+    const pool = getEligibleBonusStats('armor', { armor: 5 }, 'gloves');
+    expect(pool).toEqual([
+      'critChance', 'accuracy',
+      'attack', 'luck',
+    ]);
+  });
+
+  it('returns slot-aware pool for chest', () => {
+    const pool = getEligibleBonusStats('armor', { armor: 10, health: 5 }, 'chest');
+    expect(pool).toEqual(['armor', 'health', 'luck']);
+  });
+
+  it('returns slot-aware pool for ring', () => {
+    const pool = getEligibleBonusStats('armor', {}, 'ring');
+    expect(pool).toEqual(['luck', 'accuracy', 'dodge']);
+  });
+
+  it('returns slot-aware pool for off_hand', () => {
+    const pool = getEligibleBonusStats('armor', {}, 'off_hand');
+    expect(pool).toEqual(['armor', 'dodge', 'health', 'luck']);
   });
 });
 
@@ -90,6 +137,25 @@ describe('rollBonusStat', () => {
 
     expect(withZero).toEqual({ stat: 'attack', value: 1 });
     expect(withMissing).toEqual({ stat: 'attack', value: 1 });
+  });
+
+  it('rolls critChance within fixed range (0.03-0.05)', () => {
+    const low = rollBonusStat(['critChance'], {}, { statRoll: 0, bonusPercentRoll: 0 });
+    expect(low).toEqual({ stat: 'critChance', value: 0.03 });
+
+    const high = rollBonusStat(['critChance'], {}, { statRoll: 0, bonusPercentRoll: 0.999 });
+    expect(high!.stat).toBe('critChance');
+    expect(high!.value).toBeCloseTo(0.05, 2);
+    expect(high!.value).toBeLessThanOrEqual(0.05);
+  });
+
+  it('rolls critDamage within fixed range (0.10-0.20)', () => {
+    const low = rollBonusStat(['critDamage'], {}, { statRoll: 0, bonusPercentRoll: 0 });
+    expect(low).toEqual({ stat: 'critDamage', value: 0.10 });
+
+    const mid = rollBonusStat(['critDamage'], {}, { statRoll: 0, bonusPercentRoll: 0.5 });
+    expect(mid!.stat).toBe('critDamage');
+    expect(mid!.value).toBeCloseTo(0.15, 2);
   });
 });
 
@@ -128,5 +194,25 @@ describe('calculateCraftingCrit', () => {
     expect(result.critChance).toBeCloseTo(0.27);
     expect(result.bonusStat).toBe('luck');
     expect(result.bonusValue).toBe(1);
+  });
+
+  it('uses slot-aware pool when slot provided', () => {
+    const result = calculateCraftingCrit({
+      skillLevel: 25,
+      requiredLevel: 5,
+      luckStat: 10,
+      itemType: 'weapon',
+      baseStats: { attack: 50 },
+      slot: 'main_hand',
+    }, {
+      critRoll: 0.01,
+      statRoll: 0, // first in pool = attack
+      bonusPercentRoll: 0.5,
+    });
+
+    expect(result.isCrit).toBe(true);
+    // main_hand pool with attack baseStats: [attack, critChance, critDamage, accuracy, luck]
+    expect(result.bonusStat).toBe('attack');
+    expect(result.bonusValue).toBeGreaterThan(0);
   });
 });

@@ -68,6 +68,7 @@ export interface LastCombatLogEntry {
   rawDamage?: number;
   armorReduction?: number;
   isCritical?: boolean;
+  critMultiplier?: number;
   playerHpAfter?: number;
   mobHpAfter?: number;
 }
@@ -510,13 +511,18 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const formatStatName = (stat: string) =>
-    stat === 'evasion'
-      ? 'Dodge'
-      : stat
-          .replace(/([A-Z])/g, ' $1')
-          .replace(/^./, (char) => char.toUpperCase())
-          .trim();
+  const PERCENT_STATS = new Set(['critChance', 'critDamage']);
+  const formatStatName = (stat: string) => {
+    if (stat === 'evasion') return 'Dodge';
+    if (stat === 'critChance') return 'Crit Chance';
+    if (stat === 'critDamage') return 'Crit Damage';
+    return stat
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, (char) => char.toUpperCase())
+      .trim();
+  };
+  const formatStatValue = (stat: string, value: number) =>
+    PERCENT_STATS.has(stat) ? `${Math.round(value * 100)}%` : String(value);
 
   const currentZone =
     zones.find((z) => z.id === activeZoneId) ??
@@ -719,7 +725,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         newLogs.push({
           timestamp,
           type: 'success',
-          message: `Critical craft! +${detail.bonusValue} ${formatStatName(detail.bonusStat)}.`,
+          message: `Critical craft! +${formatStatValue(detail.bonusStat, detail.bonusValue)} ${formatStatName(detail.bonusStat)}.`,
         });
       }
 

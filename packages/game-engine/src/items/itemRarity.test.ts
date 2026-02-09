@@ -129,4 +129,69 @@ describe('itemRarity', () => {
       })
     ).toBeNull();
   });
+
+  it('uses slot-aware pool when slot is provided', () => {
+    const rolled = rollBonusStatsForRarity({
+      itemType: 'weapon',
+      rarity: 'legendary',
+      baseStats: { attack: 20 },
+      slot: 'main_hand',
+      statRolls: [0, 0, 0, 0],
+      bonusPercentRolls: [0.5, 0.5, 0.5, 0.5],
+    });
+
+    expect(rolled).not.toBeNull();
+    // First stat in main_hand pool with attack baseStats is 'attack'
+    expect(rolled!.attack).toBeGreaterThan(0);
+  });
+
+  it('main_hand can roll critChance and critDamage', () => {
+    // Pool: [attack, critChance, critDamage, accuracy, luck] (5 stats)
+    // statRoll 0.2 => index 1 = critChance
+    const rolled = rollBonusStatsForRarity({
+      itemType: 'weapon',
+      rarity: 'uncommon',
+      baseStats: { attack: 20 },
+      slot: 'main_hand',
+      statRolls: [0.2],
+      bonusPercentRolls: [0.5],
+    });
+
+    expect(rolled).not.toBeNull();
+    expect(rolled!.critChance).toBeGreaterThanOrEqual(0.03);
+    expect(rolled!.critChance).toBeLessThanOrEqual(0.05);
+  });
+
+  it('gloves can roll critChance', () => {
+    // Pool: [critChance, accuracy, attack, luck] (4 stats)
+    // statRoll 0 => index 0 = critChance
+    const rolled = rollBonusStatsForRarity({
+      itemType: 'armor',
+      rarity: 'uncommon',
+      baseStats: { armor: 5 },
+      slot: 'gloves',
+      statRolls: [0],
+      bonusPercentRolls: [0.5],
+    });
+
+    expect(rolled).not.toBeNull();
+    expect(rolled!.critChance).toBeGreaterThanOrEqual(0.03);
+    expect(rolled!.critChance).toBeLessThanOrEqual(0.05);
+  });
+
+  it('chest cannot roll critChance or critDamage', () => {
+    // Pool: [armor, health, luck] - no crit stats
+    const rolled = rollBonusStatsForRarity({
+      itemType: 'armor',
+      rarity: 'legendary',
+      baseStats: { armor: 10, health: 5 },
+      slot: 'chest',
+      statRolls: [0, 0.33, 0.66, 0.99],
+      bonusPercentRolls: [0.5, 0.5, 0.5, 0.5],
+    });
+
+    expect(rolled).not.toBeNull();
+    expect(rolled!.critChance).toBeUndefined();
+    expect(rolled!.critDamage).toBeUndefined();
+  });
 });

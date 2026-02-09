@@ -48,6 +48,8 @@ interface EquipmentProps {
     hp: number;
     dodge: number;
     accuracy: number;
+    critChance: number;
+    critDamage: number;
   };
 }
 
@@ -76,12 +78,21 @@ function totalStatValue(
   return statValue(baseStats, key) + statValue(bonusStats ?? undefined, key);
 }
 
+const PERCENT_STATS = new Set(['critChance', 'critDamage']);
+
 function prettyStatName(stat: string): string {
   if (stat === 'evasion') return 'Dodge';
+  if (stat === 'critChance') return 'Crit Chance';
+  if (stat === 'critDamage') return 'Crit Damage';
   return stat
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, (char) => char.toUpperCase())
     .trim();
+}
+
+function formatStatValue(stat: string, value: number): string {
+  if (PERCENT_STATS.has(stat)) return `${Math.round(value * 100)}%`;
+  return String(value);
 }
 
 function prettySlot(slot: string) {
@@ -334,7 +345,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono">
                             {bonusEntries.map(([stat, value]) => (
                               <span key={stat} className="text-[var(--rpg-green-light)]">
-                                +{value} {prettyStatName(stat)}
+                                +{formatStatValue(stat, value)} {prettyStatName(stat)}
                               </span>
                             ))}
                           </div>
@@ -529,6 +540,26 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
               <div className="text-2xl font-bold text-[var(--rpg-blue-light)] font-mono">{stats.accuracy}</div>
             </div>
           </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center">
+              <Zap size={20} color="var(--rpg-gold)" />
+            </div>
+            <div>
+              <div className="text-xs text-[var(--rpg-text-secondary)]">Crit Chance</div>
+              <div className="text-2xl font-bold text-[var(--rpg-gold)] font-mono">{Math.round((0.05 + stats.critChance) * 100)}%</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center">
+              <Zap size={20} color="var(--rpg-gold)" />
+            </div>
+            <div>
+              <div className="text-xs text-[var(--rpg-text-secondary)]">Crit Damage</div>
+              <div className="text-2xl font-bold text-[var(--rpg-gold)] font-mono">{Math.round((1.5 + stats.critDamage) * 100)}%</div>
+            </div>
+          </div>
         </div>
       </PixelCard>
 
@@ -577,7 +608,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs font-mono">
                             {bonusEntries.map(([stat, value]) => (
                               <span key={stat} className="text-[var(--rpg-green-light)]">
-                                +{value} {prettyStatName(stat)}
+                                +{formatStatValue(stat, value)} {prettyStatName(stat)}
                               </span>
                             ))}
                           </div>

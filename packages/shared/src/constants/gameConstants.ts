@@ -39,6 +39,27 @@ export const COMBAT_CONSTANTS = {
   ENCOUNTER_TURN_COST: 50,
 } as const;
 
+export const CRIT_STAT_CONSTANTS = {
+  FIXED_RANGE_BONUS_STATS: {
+    critChance: { min: 0.03, max: 0.05 },
+    critDamage: { min: 0.10, max: 0.20 },
+  },
+} as const;
+
+export const SLOT_STAT_POOLS: Record<string, { primary: string[]; utility: string[] }> = {
+  main_hand: { primary: ['attack', 'magicPower', 'rangedPower', 'critChance', 'critDamage'], utility: ['accuracy', 'luck'] },
+  off_hand: { primary: ['armor', 'dodge'], utility: ['health', 'luck'] },
+  head: { primary: ['armor', 'health'], utility: ['accuracy', 'luck'] },
+  chest: { primary: ['armor', 'health'], utility: ['luck'] },
+  legs: { primary: ['armor', 'health'], utility: ['dodge', 'luck'] },
+  boots: { primary: ['dodge', 'armor'], utility: ['luck'] },
+  gloves: { primary: ['critChance', 'accuracy', 'critDamage'], utility: ['attack', 'luck'] },
+  neck: { primary: ['health', 'luck'], utility: ['accuracy'] },
+  belt: { primary: ['armor', 'health'], utility: ['luck'] },
+  ring: { primary: ['luck', 'accuracy', 'critChance', 'critDamage'], utility: ['dodge'] },
+  charm: { primary: ['luck', 'accuracy', 'dodge', 'critChance', 'critDamage'], utility: ['health'] },
+};
+
 export const COMBAT_XP_CONSTANTS = {
   DEFENCE_XP_PER_HIT_TAKEN: 1,
   EVASION_XP_PER_DODGE: 1,

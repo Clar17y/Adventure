@@ -1,5 +1,13 @@
 import { COMBAT_CONSTANTS, CombatantStats } from '@adventure/shared';
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function finiteOrFallback(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
 /**
  * Roll a d20 (1-20).
  */
@@ -38,7 +46,12 @@ export function doesAttackHit(
  * Check if attack is a critical hit.
  */
 export function isCriticalHit(bonusCritChance = 0): boolean {
-  return Math.random() < (COMBAT_CONSTANTS.CRIT_CHANCE + bonusCritChance);
+  const totalCritChance = finiteOrFallback(
+    COMBAT_CONSTANTS.CRIT_CHANCE + finiteOrFallback(bonusCritChance, 0),
+    COMBAT_CONSTANTS.CRIT_CHANCE
+  );
+  const clampedCritChance = clamp(totalCritChance, 0, 1);
+  return Math.random() < clampedCritChance;
 }
 
 /**
@@ -52,7 +65,12 @@ export function calculateFinalDamage(
   bonusCritDamage = 0
 ): { damage: number; actualMultiplier: number } {
   let damage = rawDamage;
-  const actualMultiplier = isCrit ? COMBAT_CONSTANTS.CRIT_MULTIPLIER + bonusCritDamage : 1;
+  const totalCritMultiplier = finiteOrFallback(
+    COMBAT_CONSTANTS.CRIT_MULTIPLIER + finiteOrFallback(bonusCritDamage, 0),
+    COMBAT_CONSTANTS.CRIT_MULTIPLIER
+  );
+  const clampedCritMultiplier = Math.max(0, totalCritMultiplier);
+  const actualMultiplier = isCrit ? clampedCritMultiplier : 1;
 
   if (isCrit) {
     damage = Math.floor(damage * actualMultiplier);

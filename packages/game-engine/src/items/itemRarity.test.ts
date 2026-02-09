@@ -163,7 +163,7 @@ describe('itemRarity', () => {
   });
 
   it('gloves can roll critChance', () => {
-    // Pool: [critChance, accuracy, attack, luck] (4 stats)
+    // Pool: [critChance, accuracy, critDamage, attack, luck] (5 stats)
     // statRoll 0 => index 0 = critChance
     const rolled = rollBonusStatsForRarity({
       itemType: 'armor',
@@ -171,6 +171,40 @@ describe('itemRarity', () => {
       baseStats: { armor: 5 },
       slot: 'gloves',
       statRolls: [0],
+      bonusPercentRolls: [0.5],
+    });
+
+    expect(rolled).not.toBeNull();
+    expect(rolled!.critChance).toBeGreaterThanOrEqual(0.03);
+    expect(rolled!.critChance).toBeLessThanOrEqual(0.05);
+  });
+
+  it('ring can roll critDamage', () => {
+    // Pool: [luck, accuracy, critChance, critDamage, dodge] (5 stats)
+    // statRoll 0.7 => index 3 = critDamage
+    const rolled = rollBonusStatsForRarity({
+      itemType: 'armor',
+      rarity: 'uncommon',
+      baseStats: {},
+      slot: 'ring',
+      statRolls: [0.7],
+      bonusPercentRolls: [0.5],
+    });
+
+    expect(rolled).not.toBeNull();
+    expect(rolled!.critDamage).toBeGreaterThanOrEqual(0.10);
+    expect(rolled!.critDamage).toBeLessThanOrEqual(0.20);
+  });
+
+  it('charm can roll critChance', () => {
+    // Pool: [luck, accuracy, dodge, critChance, critDamage, health] (6 stats)
+    // statRoll 0.66 => index 3 = critChance
+    const rolled = rollBonusStatsForRarity({
+      itemType: 'armor',
+      rarity: 'uncommon',
+      baseStats: {},
+      slot: 'charm',
+      statRolls: [0.66],
       bonusPercentRolls: [0.5],
     });
 

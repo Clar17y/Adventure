@@ -5,14 +5,12 @@ import { estimateExploration, rollMobPrefix, simulateExploration, validateExplor
 import { getMobPrefixDefinition } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
-import { spendPlayerTurns } from '../services/turnBankService';
+import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { getHpState } from '../services/hpService';
 
 export const explorationRouter = Router();
 
 explorationRouter.use(authenticate);
-
-const prismaAny = prisma as unknown as any;
 const PENDING_ENCOUNTER_TTL_SECONDS = (() => {
   const raw = process.env.PENDING_ENCOUNTER_TTL_SECONDS ?? '3600';
   const parsed = Number.parseInt(raw, 10);
@@ -105,8 +103,6 @@ explorationRouter.post('/start', async (req, res, next) => {
       throw new AppError(404, 'Zone not found', 'NOT_FOUND');
     }
 
-    const turnSpend = await spendPlayerTurns(playerId, body.turns);
-
     const outcomes = simulateExploration(body.turns, true);
 
     const mobTemplates = await prisma.mobTemplate.findMany({
@@ -124,9 +120,8 @@ explorationRouter.post('/start', async (req, res, next) => {
       mobDisplayName: string;
     }> = [];
 
-    const resourceDiscoveries: Array<{
+    const pendingResourceDiscoveries: Array<{
       turnOccurred: number;
-      playerNodeId: string;
       resourceNodeId: string;
       resourceType: string;
       capacity: number;
@@ -157,17 +152,8 @@ explorationRouter.post('/start', async (req, res, next) => {
           const capacity = randomCapacity(nodeTemplate.minCapacity, nodeTemplate.maxCapacity);
           const sizeName = getNodeSizeName(capacity, nodeTemplate.maxCapacity);
 
-          const playerNode = await prisma.playerResourceNode.create({
-            data: {
-              playerId,
-              resourceNodeId: nodeTemplate.id,
-              remainingCapacity: capacity,
-            },
-          });
-
-          resourceDiscoveries.push({
+          pendingResourceDiscoveries.push({
             turnOccurred: outcome.turnOccurred,
-            playerNodeId: playerNode.id,
             resourceNodeId: nodeTemplate.id,
             resourceType: nodeTemplate.resourceType,
             capacity,
@@ -177,42 +163,87 @@ explorationRouter.post('/start', async (req, res, next) => {
       }
     }
 
-    const explorationLog = await prisma.activityLog.create({
-      data: {
-        playerId,
-        activityType: 'exploration',
-        turnsSpent: body.turns,
-        result: {
-          zoneId: body.zoneId,
-          zoneName: zone.name,
-          outcomes,
-          mobEncounters,
-          resourceDiscoveries,
-          hiddenCaches: outcomes.filter(o => o.type === 'hidden_cache'),
-          zoneExitDiscovered: outcomes.some(o => o.type === 'zone_exit'),
-        } as unknown as Prisma.InputJsonValue,
-      },
-    });
+    const hiddenCaches = outcomes.filter((o) => o.type === 'hidden_cache');
+    const zoneExitDiscovered = outcomes.some((o) => o.type === 'zone_exit');
 
-    const pendingEncounters = await Promise.all(
-      mobEncounters.map((m) =>
-        prismaAny.pendingEncounter.create({
+    const { turnSpend, explorationLogId, resourceDiscoveries, pendingEncounters } = await prisma.$transaction(async (tx) => {
+      const txAny = tx as unknown as any;
+      const spent = await spendPlayerTurnsTx(tx, playerId, body.turns);
+
+      const createdResourceDiscoveries: Array<{
+        turnOccurred: number;
+        playerNodeId: string;
+        resourceNodeId: string;
+        resourceType: string;
+        capacity: number;
+        sizeName: string;
+      }> = [];
+
+      for (const discovery of pendingResourceDiscoveries) {
+        const playerNode = await tx.playerResourceNode.create({
           data: {
             playerId,
-            zoneId: body.zoneId,
-            mobTemplateId: m.mobTemplateId,
-            mobPrefix: m.mobPrefix,
-            turnOccurred: m.turnOccurred,
-            sourceLogId: explorationLog.id,
-            expiresAt: new Date(Date.now() + PENDING_ENCOUNTER_TTL_SECONDS * 1000),
+            resourceNodeId: discovery.resourceNodeId,
+            remainingCapacity: discovery.capacity,
           },
-          select: { id: true, createdAt: true, expiresAt: true },
-        })
-      )
-    );
+          select: { id: true },
+        });
+
+        createdResourceDiscoveries.push({
+          turnOccurred: discovery.turnOccurred,
+          playerNodeId: playerNode.id,
+          resourceNodeId: discovery.resourceNodeId,
+          resourceType: discovery.resourceType,
+          capacity: discovery.capacity,
+          sizeName: discovery.sizeName,
+        });
+      }
+
+      const explorationLog = await tx.activityLog.create({
+        data: {
+          playerId,
+          activityType: 'exploration',
+          turnsSpent: body.turns,
+          result: {
+            zoneId: body.zoneId,
+            zoneName: zone.name,
+            outcomes,
+            mobEncounters,
+            resourceDiscoveries: createdResourceDiscoveries,
+            hiddenCaches,
+            zoneExitDiscovered,
+          } as unknown as Prisma.InputJsonValue,
+        },
+        select: { id: true },
+      });
+
+      const createdPending = await Promise.all(
+        mobEncounters.map((m) =>
+          txAny.pendingEncounter.create({
+            data: {
+              playerId,
+              zoneId: body.zoneId,
+              mobTemplateId: m.mobTemplateId,
+              mobPrefix: m.mobPrefix,
+              turnOccurred: m.turnOccurred,
+              sourceLogId: explorationLog.id,
+              expiresAt: new Date(Date.now() + PENDING_ENCOUNTER_TTL_SECONDS * 1000),
+            },
+            select: { id: true, createdAt: true, expiresAt: true },
+          })
+        )
+      );
+
+      return {
+        turnSpend: spent,
+        explorationLogId: explorationLog.id,
+        resourceDiscoveries: createdResourceDiscoveries,
+        pendingEncounters: createdPending,
+      };
+    });
 
     res.json({
-      logId: explorationLog.id,
+      logId: explorationLogId,
       zone: {
         id: zone.id,
         name: zone.name,
@@ -229,8 +260,8 @@ explorationRouter.post('/start', async (req, res, next) => {
         expiresAt: pendingEncounters[idx]!.expiresAt.toISOString(),
       })),
       resourceDiscoveries,
-      hiddenCaches: outcomes.filter(o => o.type === 'hidden_cache'),
-      zoneExitDiscovered: outcomes.some(o => o.type === 'zone_exit'),
+      hiddenCaches,
+      zoneExitDiscovered,
     });
   } catch (err) {
     next(err);

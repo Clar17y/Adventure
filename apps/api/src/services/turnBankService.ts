@@ -1,4 +1,4 @@
-import { prisma } from '@adventure/database';
+import { Prisma, prisma } from '@adventure/database';
 import { calculateCurrentTurns, calculateTimeToCapMs, spendTurns } from '@adventure/game-engine';
 import { AppError } from '../middleware/errorHandler';
 
@@ -33,7 +33,15 @@ export interface SpendTurnsResult {
   timeToCapMs: number | null;
 }
 
-export async function spendPlayerTurns(
+interface TurnBankClient {
+  turnBank: {
+    findUnique: Prisma.TransactionClient['turnBank']['findUnique'];
+    updateMany: Prisma.TransactionClient['turnBank']['updateMany'];
+  };
+}
+
+async function spendPlayerTurnsWithClient(
+  client: TurnBankClient,
   playerId: string,
   amount: number,
   now: Date = new Date()
@@ -42,34 +50,64 @@ export async function spendPlayerTurns(
     throw new AppError(400, 'Turn spend amount must be a positive integer', 'INVALID_TURNS');
   }
 
-  const turnBank = await prisma.turnBank.findUnique({ where: { playerId } });
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const turnBank = await client.turnBank.findUnique({ where: { playerId } });
 
-  if (!turnBank) {
-    throw new AppError(404, 'Turn bank not found', 'NOT_FOUND');
-  }
+    if (!turnBank) {
+      throw new AppError(404, 'Turn bank not found', 'NOT_FOUND');
+    }
 
-  const previousTurns = calculateCurrentTurns(turnBank.currentTurns, turnBank.lastRegenAt, now);
-  const newBalance = spendTurns(previousTurns, amount);
+    const previousTurns = calculateCurrentTurns(turnBank.currentTurns, turnBank.lastRegenAt, now);
+    const newBalance = spendTurns(previousTurns, amount);
 
-  if (newBalance === null) {
-    throw new AppError(400, 'Insufficient turns', 'INSUFFICIENT_TURNS');
-  }
+    if (newBalance === null) {
+      throw new AppError(400, 'Insufficient turns', 'INSUFFICIENT_TURNS');
+    }
 
-  const updated = await prisma.turnBank.update({
-    where: { playerId },
-    data: {
+    const updated = await client.turnBank.updateMany({
+      where: {
+        playerId,
+        currentTurns: turnBank.currentTurns,
+        lastRegenAt: turnBank.lastRegenAt,
+      },
+      data: {
+        currentTurns: newBalance,
+        lastRegenAt: now,
+      },
+    });
+
+    if (updated.count !== 1) {
+      continue;
+    }
+
+    const timeToCapMs = calculateTimeToCapMs(newBalance);
+
+    return {
+      previousTurns,
+      spent: amount,
       currentTurns: newBalance,
-      lastRegenAt: now,
-    },
-  });
+      lastRegenAt: now.toISOString(),
+      timeToCapMs,
+    };
+  }
 
-  const timeToCapMs = calculateTimeToCapMs(newBalance);
+  throw new AppError(409, 'Turn bank state changed; try again', 'TURN_STATE_CHANGED');
+}
 
-  return {
-    previousTurns,
-    spent: amount,
-    currentTurns: newBalance,
-    lastRegenAt: updated.lastRegenAt.toISOString(),
-    timeToCapMs,
-  };
+export async function spendPlayerTurns(
+  playerId: string,
+  amount: number,
+  now: Date = new Date()
+): Promise<SpendTurnsResult> {
+  return spendPlayerTurnsWithClient(prisma, playerId, amount, now);
+}
+
+export async function spendPlayerTurnsTx(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  amount: number,
+  now: Date = new Date()
+): Promise<SpendTurnsResult> {
+  return spendPlayerTurnsWithClient(tx, playerId, amount, now);
 }

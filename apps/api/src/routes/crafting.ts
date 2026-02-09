@@ -25,8 +25,12 @@ import {
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { getEquipmentStats } from '../services/equipmentService';
-import { spendPlayerTurns } from '../services/turnBankService';
-import { addStackableItem, consumeItemsByTemplate, getTotalQuantityByTemplate } from '../services/inventoryService';
+import { spendPlayerTurnsTx } from '../services/turnBankService';
+import {
+  addStackableItemTx,
+  consumeItemsByTemplateTx,
+  getTotalQuantityByTemplate,
+} from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
 
@@ -294,12 +298,15 @@ craftingRouter.post('/craft', async (req, res, next) => {
     }
 
     const totalTurnCost = recipe.turnCost * quantity;
-    const turnSpend = await spendPlayerTurns(playerId, totalTurnCost);
+    const turnSpend = await prisma.$transaction(async (tx) => {
+      const spent = await spendPlayerTurnsTx(tx, playerId, totalTurnCost);
 
-    // Consume materials
-    for (const mat of materials) {
-      await consumeItemsByTemplate(playerId, mat.templateId, mat.quantity * quantity);
-    }
+      for (const mat of materials) {
+        await consumeItemsByTemplateTx(tx, playerId, mat.templateId, mat.quantity * quantity);
+      }
+
+      return spent;
+    });
 
     // Create result items (stack where possible)
     const craftedItemIds: string[] = [];
@@ -507,8 +514,20 @@ craftingRouter.post('/forge/upgrade', async (req, res, next) => {
       action: 'upgrade',
     });
 
-    const turnSpend = await spendPlayerTurns(playerId, upgradeCost);
-    await prisma.item.delete({ where: { id: sacrificial.id } });
+    const turnSpend = await prisma.$transaction(async (tx) => {
+      const spent = await spendPlayerTurnsTx(tx, playerId, upgradeCost);
+      const consumed = await tx.item.deleteMany({
+        where: {
+          id: sacrificial.id,
+          ownerId: playerId,
+          quantity: 1,
+        },
+      });
+      if (consumed.count !== 1) {
+        throw new AppError(409, 'Sacrificial item is no longer available', 'FORGE_SACRIFICE_UNAVAILABLE');
+      }
+      return spent;
+    });
     const equipmentStats = await getEquipmentStats(playerId);
     const successChance = calculateForgeUpgradeSuccessChance(currentRarity, equipmentStats.luck);
     if (successChance === null) {
@@ -714,8 +733,20 @@ craftingRouter.post('/forge/reroll', async (req, res, next) => {
     }
     const templateBaseStats = item.template.baseStats as ItemStats | null | undefined;
 
-    const turnSpend = await spendPlayerTurns(playerId, rerollCost);
-    await prisma.item.delete({ where: { id: sacrificial.id } });
+    const turnSpend = await prisma.$transaction(async (tx) => {
+      const spent = await spendPlayerTurnsTx(tx, playerId, rerollCost);
+      const consumed = await tx.item.deleteMany({
+        where: {
+          id: sacrificial.id,
+          ownerId: playerId,
+          quantity: 1,
+        },
+      });
+      if (consumed.count !== 1) {
+        throw new AppError(409, 'Sacrificial item is no longer available', 'FORGE_SACRIFICE_UNAVAILABLE');
+      }
+      return spent;
+    });
     const rerolledBonusStats = rollBonusStatsForRarity({
       itemType,
       rarity,
@@ -816,65 +847,78 @@ craftingRouter.post('/salvage', async (req, res, next) => {
       throw new AppError(400, 'No salvageable materials for this item', 'NOT_SALVAGEABLE');
     }
 
-    const turnSpend = await spendPlayerTurns(playerId, CRAFTING_CONSTANTS.SALVAGE_TURN_COST);
-
     const materialTemplates = await prisma.itemTemplate.findMany({
       where: { id: { in: refundedMaterials.map((material) => material.templateId) } },
       select: { id: true, name: true, itemType: true, stackable: true, maxDurability: true },
     });
     const templateById = new Map(materialTemplates.map((template) => [template.id, template]));
 
-    const returned: Array<{
-      templateId: string;
-      name: string;
-      quantity: number;
-      itemIds: string[];
-    }> = [];
+    const { turnSpend, returned } = await prisma.$transaction(async (tx) => {
+      const spent = await spendPlayerTurnsTx(tx, playerId, CRAFTING_CONSTANTS.SALVAGE_TURN_COST);
 
-    for (const material of refundedMaterials) {
-      const template = templateById.get(material.templateId);
-      if (!template) {
-        throw new AppError(400, 'Recipe references invalid material template', 'INVALID_RECIPE');
+      const consumed = await tx.item.deleteMany({
+        where: {
+          id: item.id,
+          ownerId: playerId,
+          quantity: 1,
+        },
+      });
+      if (consumed.count !== 1) {
+        throw new AppError(409, 'Item is no longer available to salvage', 'SALVAGE_ITEM_UNAVAILABLE');
       }
 
-      if (template.stackable) {
-        const stack = await addStackableItem(playerId, material.templateId, material.quantity);
-        returned.push({
+      const minted: Array<{
+        templateId: string;
+        name: string;
+        quantity: number;
+        itemIds: string[];
+      }> = [];
+
+      for (const material of refundedMaterials) {
+        const template = templateById.get(material.templateId);
+        if (!template) {
+          throw new AppError(400, 'Recipe references invalid material template', 'INVALID_RECIPE');
+        }
+
+        if (template.stackable) {
+          const stack = await addStackableItemTx(tx, playerId, material.templateId, material.quantity);
+          minted.push({
+            templateId: material.templateId,
+            name: template.name,
+            quantity: material.quantity,
+            itemIds: [stack.itemId],
+          });
+          continue;
+        }
+
+        const createdIds: string[] = [];
+        const needsDurability = template.itemType === 'weapon' || template.itemType === 'armor';
+        const maxDurability = needsDurability ? template.maxDurability : null;
+        for (let i = 0; i < material.quantity; i++) {
+          const created = await tx.item.create({
+            data: {
+              ownerId: playerId,
+              templateId: material.templateId,
+              rarity: 'common',
+              quantity: 1,
+              maxDurability,
+              currentDurability: maxDurability,
+            } as any,
+            select: { id: true },
+          });
+          createdIds.push(created.id);
+        }
+
+        minted.push({
           templateId: material.templateId,
           name: template.name,
           quantity: material.quantity,
-          itemIds: [stack.itemId],
+          itemIds: createdIds,
         });
-        continue;
       }
 
-      const createdIds: string[] = [];
-      const needsDurability = template.itemType === 'weapon' || template.itemType === 'armor';
-      const maxDurability = needsDurability ? template.maxDurability : null;
-      for (let i = 0; i < material.quantity; i++) {
-        const created = await prisma.item.create({
-          data: {
-            ownerId: playerId,
-            templateId: material.templateId,
-            rarity: 'common',
-            quantity: 1,
-            maxDurability,
-            currentDurability: maxDurability,
-          } as any,
-          select: { id: true },
-        });
-        createdIds.push(created.id);
-      }
-
-      returned.push({
-        templateId: material.templateId,
-        name: template.name,
-        quantity: material.quantity,
-        itemIds: createdIds,
-      });
-    }
-
-    await prisma.item.delete({ where: { id: item.id } });
+      return { turnSpend: spent, returned: minted };
+    });
 
     const log = await prisma.activityLog.create({
       data: {

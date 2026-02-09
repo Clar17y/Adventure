@@ -6,7 +6,7 @@ import { COMBAT_CONSTANTS, getMobPrefixDefinition, type LootDrop, type MobTempla
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { rollAndGrantLoot } from '../services/lootService';
-import { spendPlayerTurns } from '../services/turnBankService';
+import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
 import { getHpState, setHp, enterRecoveringState } from '../services/hpService';
@@ -298,7 +298,34 @@ combatRouter.post('/start', async (req, res, next) => {
       mobPrefix = rollMobPrefix();
     }
 
-    const turnSpend = await spendPlayerTurns(playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
+    const turnSpend = await prisma.$transaction(async (tx) => {
+      const spent = await spendPlayerTurnsTx(tx, playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
+
+      if (consumedPendingEncounterId) {
+        const txAny = tx as unknown as any;
+        const now = new Date();
+        const consumed = await txAny.pendingEncounter.deleteMany({
+          where: {
+            id: consumedPendingEncounterId,
+            playerId,
+            expiresAt: { gt: now },
+          },
+        });
+        if (consumed.count !== 1) {
+          const pending = await txAny.pendingEncounter.findFirst({
+            where: { id: consumedPendingEncounterId, playerId },
+            select: { expiresAt: true },
+          });
+          if (pending && pending.expiresAt && pending.expiresAt <= now) {
+            await txAny.pendingEncounter.deleteMany({ where: { id: consumedPendingEncounterId, playerId } });
+            throw new AppError(410, 'Pending encounter expired', 'ENCOUNTER_EXPIRED');
+          }
+          throw new AppError(409, 'Pending encounter is no longer available', 'PENDING_ENCOUNTER_UNAVAILABLE');
+        }
+      }
+
+      return spent;
+    });
 
     const requestedAttackSkill: AttackSkill | null = body.attackSkill ?? null;
     const mainHandAttackSkill = await getMainHandAttackSkill(playerId);
@@ -443,12 +470,6 @@ combatRouter.post('/start', async (req, res, next) => {
         } as unknown as Prisma.InputJsonValue,
       },
     });
-
-    if (consumedPendingEncounterId) {
-      await prismaAny.pendingEncounter
-        .delete({ where: { id: consumedPendingEncounterId } })
-        .catch(() => null);
-    }
 
     res.json({
       logId: combatLog.id,

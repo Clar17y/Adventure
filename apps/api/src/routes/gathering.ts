@@ -4,8 +4,8 @@ import { Prisma, prisma } from '@adventure/database';
 import { GATHERING_CONSTANTS, GATHERING_SKILLS, type SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
-import { spendPlayerTurns } from '../services/turnBankService';
-import { addStackableItem } from '../services/inventoryService';
+import { spendPlayerTurnsTx } from '../services/turnBankService';
+import { addStackableItemTx } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
 
@@ -246,27 +246,41 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     const turnsSpent = actions * GATHERING_CONSTANTS.BASE_TURN_COST;
     const totalYield = Math.min(actions * yieldPerAction, playerNode.remainingCapacity);
 
-    const turnSpend = await spendPlayerTurns(playerId, turnsSpent);
-
-    // Deplete the node
     const newCapacity = playerNode.remainingCapacity - totalYield;
     const nodeDepleted = newCapacity <= 0;
 
-    if (nodeDepleted) {
-      // Remove the depleted node
-      await prisma.playerResourceNode.delete({
-        where: { id: playerNode.id },
-      });
-    } else {
-      // Update remaining capacity
-      await prisma.playerResourceNode.update({
-        where: { id: playerNode.id },
-        data: { remainingCapacity: newCapacity },
-      });
-    }
-
     const resourceTemplateId = await getResourceTemplateId(template.resourceType);
-    const stack = await addStackableItem(playerId, resourceTemplateId, totalYield);
+    const { turnSpend, stack } = await prisma.$transaction(async (tx) => {
+      const spent = await spendPlayerTurnsTx(tx, playerId, turnsSpent);
+
+      if (nodeDepleted) {
+        const depleted = await tx.playerResourceNode.deleteMany({
+          where: {
+            id: playerNode.id,
+            playerId,
+            remainingCapacity: playerNode.remainingCapacity,
+          },
+        });
+        if (depleted.count !== 1) {
+          throw new AppError(409, 'Resource node state changed; try again', 'NODE_STATE_CHANGED');
+        }
+      } else {
+        const updated = await tx.playerResourceNode.updateMany({
+          where: {
+            id: playerNode.id,
+            playerId,
+            remainingCapacity: playerNode.remainingCapacity,
+          },
+          data: { remainingCapacity: newCapacity },
+        });
+        if (updated.count !== 1) {
+          throw new AppError(409, 'Resource node state changed; try again', 'NODE_STATE_CHANGED');
+        }
+      }
+
+      const minedStack = await addStackableItemTx(tx, playerId, resourceTemplateId, totalYield);
+      return { turnSpend: spent, stack: minedStack };
+    });
 
     // XP: 5 XP per action
     const rawXp = actions * 5;

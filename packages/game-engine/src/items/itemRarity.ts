@@ -1,5 +1,6 @@
 import {
   ITEM_RARITY_CONSTANTS,
+  type EquipmentSlot,
   type ItemRarity,
   type ItemStats,
   type ItemType,
@@ -18,6 +19,7 @@ export interface RollBonusStatsForRarityInput {
   itemType: ItemType;
   rarity: ItemRarity;
   baseStats: ItemStats | null | undefined;
+  slot?: EquipmentSlot | null;
   statRolls?: number[];
   bonusPercentRolls?: number[];
 }
@@ -143,7 +145,7 @@ export function rollBonusStatsForRarity(input: RollBonusStatsForRarityInput): It
   const slotCount = getBonusSlotCount(input.rarity);
   if (slotCount <= 0) return null;
 
-  const statPool = getEligibleBonusStats(input.itemType, input.baseStats);
+  const statPool = getEligibleBonusStats(input.itemType, input.baseStats, input.slot);
   if (statPool.length === 0) return null;
 
   const targetSlots = slotCount;

@@ -1,4 +1,11 @@
-import { CRAFTING_CONSTANTS, type ItemStats, type ItemType } from '@adventure/shared';
+import {
+  CRAFTING_CONSTANTS,
+  CRIT_STAT_CONSTANTS,
+  SLOT_STAT_POOLS,
+  type EquipmentSlot,
+  type ItemStats,
+  type ItemType,
+} from '@adventure/shared';
 
 export type CraftingCritStat = keyof ItemStats;
 
@@ -8,6 +15,7 @@ export interface CalculateCraftingCritInput {
   luckStat: number;
   itemType: ItemType;
   baseStats: ItemStats | null | undefined;
+  slot?: EquipmentSlot | null;
 }
 
 export interface CraftingCritRolls {
@@ -52,26 +60,55 @@ export function calculateCritChance(
   );
 }
 
+function hasPositiveBase(baseStats: ItemStats | null | undefined, stat: string): boolean {
+  const value = baseStats?.[stat as keyof ItemStats];
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+const OFFENSIVE_STATS = new Set(['attack', 'magicPower', 'rangedPower']);
+
+function filterSlotPool(
+  pool: string[],
+  baseStats: ItemStats | null | undefined,
+  slot: string
+): CraftingCritStat[] {
+  if (slot !== 'main_hand') return pool as CraftingCritStat[];
+
+  // For main_hand: filter offensive stats by baseStats > 0, keep everything else
+  const offensiveInPool = pool.filter((s) => OFFENSIVE_STATS.has(s));
+  const nonOffensiveInPool = pool.filter((s) => !OFFENSIVE_STATS.has(s));
+  const filteredOffensive = offensiveInPool.filter((s) => hasPositiveBase(baseStats, s));
+  const offensive = filteredOffensive.length > 0 ? filteredOffensive : offensiveInPool;
+  return [...offensive, ...nonOffensiveInPool] as CraftingCritStat[];
+}
+
 export function getEligibleBonusStats(
   itemType: ItemType,
-  baseStats?: ItemStats | null | undefined
+  baseStats?: ItemStats | null | undefined,
+  slot?: EquipmentSlot | null
 ): CraftingCritStat[] {
+  if (itemType !== 'weapon' && itemType !== 'armor') return [];
+
+  // Slot-aware path
+  if (slot && SLOT_STAT_POOLS[slot]) {
+    const { primary, utility } = SLOT_STAT_POOLS[slot]!;
+    return [
+      ...filterSlotPool(primary, baseStats, slot),
+      ...filterSlotPool(utility, baseStats, slot),
+    ];
+  }
+
+  // Fallback: legacy behavior (no slot provided)
   const utility: CraftingCritStat[] = ['dodge', 'accuracy', 'luck'];
 
   if (itemType === 'weapon') {
     const offensive: CraftingCritStat[] = ['attack', 'magicPower', 'rangedPower'];
-    const primary = offensive.filter((stat) => {
-      const value = baseStats?.[stat];
-      return typeof value === 'number' && Number.isFinite(value) && value > 0;
-    });
+    const primary = offensive.filter((stat) => hasPositiveBase(baseStats, stat));
     return [...(primary.length > 0 ? primary : offensive), ...utility];
   }
   if (itemType === 'armor') {
     const defensive: CraftingCritStat[] = ['armor', 'health'];
-    const primary = defensive.filter((stat) => {
-      const value = baseStats?.[stat];
-      return typeof value === 'number' && Number.isFinite(value) && value > 0;
-    });
+    const primary = defensive.filter((stat) => hasPositiveBase(baseStats, stat));
     return [...(primary.length > 0 ? primary : defensive), ...utility];
   }
   return [];
@@ -93,6 +130,15 @@ export function rollBonusStat(
   const statIndex = Math.floor(randomUnit(rolls?.statRoll) * eligibleStats.length);
   const stat = eligibleStats[statIndex]!;
 
+  // Fixed-range crit stats (critChance, critDamage)
+  const fixedRange = CRIT_STAT_CONSTANTS.FIXED_RANGE_BONUS_STATS[stat as keyof typeof CRIT_STAT_CONSTANTS.FIXED_RANGE_BONUS_STATS];
+  if (fixedRange) {
+    const unit = randomUnit(rolls?.bonusPercentRoll);
+    const value = Math.round((fixedRange.min + unit * (fixedRange.max - fixedRange.min)) * 100) / 100;
+    return { stat, value };
+  }
+
+  // Standard % of base logic
   const baseValueRaw = baseStats?.[stat];
   const baseValue = typeof baseValueRaw === 'number' && Number.isFinite(baseValueRaw)
     ? Math.max(0, baseValueRaw)
@@ -109,7 +155,7 @@ export function calculateCraftingCrit(
   rolls?: CraftingCritRolls
 ): CraftingCritResult {
   const critChance = calculateCritChance(input.skillLevel, input.requiredLevel, input.luckStat);
-  const eligibleStats = getEligibleBonusStats(input.itemType, input.baseStats);
+  const eligibleStats = getEligibleBonusStats(input.itemType, input.baseStats, input.slot);
 
   if (eligibleStats.length === 0) {
     return {

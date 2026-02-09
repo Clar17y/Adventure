@@ -391,6 +391,7 @@ export interface CombatLogEntryResponse {
   rawDamage?: number;
   armorReduction?: number;
   isCritical?: boolean;
+  critMultiplier?: number;
   playerHpAfter?: number;
   mobHpAfter?: number;
 }

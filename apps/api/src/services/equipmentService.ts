@@ -10,6 +10,8 @@ export interface EquipmentStats {
   health: number;
   dodge: number;
   luck: number;
+  critChance: number;
+  critDamage: number;
 }
 
 export function isSkillType(value: string): value is SkillType {
@@ -51,6 +53,8 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
   let health = 0;
   let dodge = 0;
   let luck = 0;
+  let critChance = 0;
+  let critDamage = 0;
 
   for (const slot of equipped) {
     const baseStats = slot.item?.template?.baseStats as Record<string, unknown> | null | undefined;
@@ -70,10 +74,12 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
         dodge += stats.evasion;
       }
       if (typeof stats.luck === 'number') luck += stats.luck;
+      if (typeof stats.critChance === 'number') critChance += stats.critChance;
+      if (typeof stats.critDamage === 'number') critDamage += stats.critDamage;
     }
   }
 
-  return { attack, accuracy, armor, health, dodge, luck };
+  return { attack, accuracy, armor, health, dodge, luck, critChance, critDamage };
 }
 
 export async function equipItem(

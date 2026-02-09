@@ -179,9 +179,9 @@ function executePlayerAttack(
 
   // Calculate damage
   const rawDamage = rollDamage(playerStats.damageMin, playerStats.damageMax);
-  const crit = isCriticalHit();
-  const finalDamage = calculateFinalDamage(rawDamage, mobStats.defence, crit);
-  const armorReduction = Math.floor(rawDamage * (crit ? 1.5 : 1) * computeArmorReduction(mobStats.defence));
+  const crit = isCriticalHit(playerStats.critChance ?? 0);
+  const { damage: finalDamage, actualMultiplier } = calculateFinalDamage(rawDamage, mobStats.defence, crit, playerStats.critDamage ?? 0);
+  const armorReduction = Math.floor(rawDamage * actualMultiplier * computeArmorReduction(mobStats.defence));
 
   state.mobHp -= finalDamage;
 
@@ -200,6 +200,7 @@ function executePlayerAttack(
     rawDamage,
     armorReduction,
     isCritical: crit,
+    ...(crit ? { critMultiplier: actualMultiplier } : {}),
     message: `You strike the ${mobName} for ${finalDamage} damage!${critText}`,
     ...hpSnapshot(state),
   });
@@ -272,11 +273,11 @@ function executeMobAttack(
   // Mob hits player - defence event
   counters.defenceEvents++;
 
-  // Calculate damage
+  // Calculate damage — mobs use base crit (5% / 1.5x), no gear bonuses
   const rawDamage = rollDamage(mobStats.damageMin, mobStats.damageMax);
-  const crit = isCriticalHit();
-  const finalDamage = calculateFinalDamage(rawDamage, playerStats.defence, crit);
-  const armorReduction = Math.floor(rawDamage * (crit ? 1.5 : 1) * computeArmorReduction(playerStats.defence));
+  const crit = isCriticalHit(0);
+  const { damage: finalDamage, actualMultiplier: mobCritMultiplier } = calculateFinalDamage(rawDamage, playerStats.defence, crit, 0);
+  const armorReduction = Math.floor(rawDamage * mobCritMultiplier * computeArmorReduction(playerStats.defence));
 
   state.playerHp -= finalDamage;
 
@@ -295,6 +296,7 @@ function executeMobAttack(
     rawDamage,
     armorReduction,
     isCritical: crit,
+    ...(crit ? { critMultiplier: mobCritMultiplier } : {}),
     message: `The ${mob.name} hits you for ${finalDamage} damage!${critText}`,
     ...hpSnapshot(state),
   });

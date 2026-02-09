@@ -110,7 +110,7 @@ export function CombatLogEntry({
           {entry.rawDamage !== undefined && entry.damage !== undefined && (
             <div>
               {(() => {
-                const critMultiplier = entry.isCritical ? 1.5 : 1;
+                const critMultiplier = entry.isCritical ? (entry.critMultiplier ?? 1.5) : 1;
                 const preMitigation = Math.floor(entry.rawDamage * critMultiplier);
                 const mitigated = Math.max(0, preMitigation - entry.damage);
 
@@ -126,7 +126,7 @@ export function CombatLogEntry({
                 return (
                   <>
                     Damage: {entry.rawDamage} raw
-                    {entry.isCritical && ' × 1.5 crit'}
+                    {entry.isCritical && ` × ${critMultiplier} crit`}
                     {' = '}{preMitigation} pre-mitigation
                     {' → '}{entry.damage} final
                     {mitigationLabel}

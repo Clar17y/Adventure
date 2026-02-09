@@ -43,11 +43,20 @@ function prettySlot(slot: string) {
   return titleCaseFromSnake(slot);
 }
 
+const PERCENT_STATS = new Set(['critChance', 'critDamage']);
+
 function prettyStatName(stat: string): string {
+  if (stat === 'critChance') return 'Crit Chance';
+  if (stat === 'critDamage') return 'Crit Damage';
   return stat
     .replace(/([A-Z])/g, ' $1')
     .replace(/^./, (char) => char.toUpperCase())
     .trim();
+}
+
+function formatStatValue(stat: string, value: number): string {
+  if (PERCENT_STATS.has(stat)) return `${Math.round(value * 100)}%`;
+  return String(value);
 }
 
 function statDisplay(stat: string) {
@@ -56,6 +65,8 @@ function statDisplay(stat: string) {
   if (stat === 'health') return { Icon: Heart, color: 'text-[var(--rpg-green-light)]', label: 'HP' };
   if (stat === 'dodge' || stat === 'evasion') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Dodge' };
   if (stat === 'accuracy') return { Icon: Crosshair, color: 'text-[var(--rpg-blue-light)]', label: 'Accuracy' };
+  if (stat === 'critChance') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Crit Chance' };
+  if (stat === 'critDamage') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Crit Damage' };
   return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: prettyStatName(stat) };
 }
 
@@ -239,7 +250,7 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                           <div key={stat} className="flex items-center gap-2 text-sm">
                             <Icon size={16} className={color} />
                             <span className="text-[var(--rpg-text-secondary)]">{label}</span>
-                            <span className={`ml-auto font-mono ${color}`}>+{value}</span>
+                            <span className={`ml-auto font-mono ${color}`}>+{formatStatValue(stat, value)}</span>
                           </div>
                         );
                       })}

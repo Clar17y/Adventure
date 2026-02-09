@@ -7,6 +7,7 @@ import {
   CRAFTING_SKILLS,
   GATHERING_SKILLS,
   type CraftingMaterial,
+  type EquipmentSlot,
   type ItemRarity,
   type ItemStats,
   type ItemType,
@@ -357,6 +358,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
       const equipStats = await getEquipmentStats(playerId);
       const templateBaseStats = recipe.resultTemplate.baseStats as ItemStats | null | undefined;
 
+      const templateSlot = (recipe.resultTemplate.slot as EquipmentSlot | null) ?? undefined;
       for (let i = 0; i < quantity; i++) {
         const critResult = calculateCraftingCrit({
           skillLevel,
@@ -364,6 +366,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
           luckStat: equipStats.luck,
           itemType,
           baseStats: templateBaseStats,
+          slot: templateSlot,
         });
         const rarity: ItemRarity = (itemType === 'weapon' || itemType === 'armor') && critResult.isCrit
           ? 'uncommon'
@@ -372,6 +375,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
           itemType,
           rarity,
           baseStats: templateBaseStats,
+          slot: templateSlot,
         });
         const bonusStats = rolledBonusStats
           ? (rolledBonusStats as Prisma.InputJsonObject)
@@ -543,7 +547,8 @@ craftingRouter.post('/forge/upgrade', async (req, res, next) => {
     const templateBaseStats = item.template.baseStats as ItemStats | null | undefined;
 
     if (success) {
-      const eligibleStats = getEligibleBonusStats(itemType, templateBaseStats);
+      const upgradeSlot = (item.template.slot as EquipmentSlot | null) ?? undefined;
+      const eligibleStats = getEligibleBonusStats(itemType, templateBaseStats, upgradeSlot);
       if (eligibleStats.length === 0) {
         throw new AppError(400, 'No eligible bonus stats for this item', 'INVALID_ITEM');
       }
@@ -747,10 +752,12 @@ craftingRouter.post('/forge/reroll', async (req, res, next) => {
       }
       return spent;
     });
+    const rerollSlot = (item.template.slot as EquipmentSlot | null) ?? undefined;
     const rerolledBonusStats = rollBonusStatsForRarity({
       itemType,
       rarity,
       baseStats: templateBaseStats,
+      slot: rerollSlot,
     });
 
     await prisma.item.update({

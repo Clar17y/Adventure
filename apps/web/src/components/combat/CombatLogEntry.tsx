@@ -21,12 +21,42 @@ interface CombatLogEntryProps {
   entry: LastCombatLogEntry;
   playerMaxHp?: number;
   mobMaxHp?: number;
+  showDetailedBreakdown?: boolean;
 }
 
-export function CombatLogEntry({ entry, playerMaxHp, mobMaxHp }: CombatLogEntryProps) {
+function resolveHitOutcome(entry: LastCombatLogEntry): {
+  result: 'Hit' | 'Miss';
+  threshold: number;
+  evasionContribution: number;
+} | null {
+  if (entry.roll === undefined || entry.attackModifier === undefined || entry.targetDodge === undefined) {
+    return null;
+  }
+
+  const evasionContribution = Math.floor((entry.targetEvasion ?? 0) / 2);
+  const threshold = 10 + entry.targetDodge + evasionContribution;
+  const total = entry.roll + entry.attackModifier + (entry.accuracyModifier ?? 0);
+
+  if (entry.roll === 1) {
+    return { result: 'Miss', threshold, evasionContribution };
+  }
+  if (entry.roll === 20) {
+    return { result: 'Hit', threshold, evasionContribution };
+  }
+
+  return { result: total >= threshold ? 'Hit' : 'Miss', threshold, evasionContribution };
+}
+
+export function CombatLogEntry({
+  entry,
+  playerMaxHp,
+  mobMaxHp,
+  showDetailedBreakdown = true,
+}: CombatLogEntryProps) {
   const [expanded, setExpanded] = useState(false);
   const icon = getActionIcon(entry);
   const hasDetails = entry.attackModifier !== undefined || entry.rawDamage !== undefined;
+  const hitOutcome = resolveHitOutcome(entry);
 
   const isPlayerAction = entry.actor === 'player';
   const actorColor = isPlayerAction ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]';
@@ -64,18 +94,45 @@ export function CombatLogEntry({ entry, playerMaxHp, mobMaxHp }: CombatLogEntryP
       {/* Expanded details */}
       {expanded && hasDetails && (
         <div className="pl-9 pb-1 text-xs text-[var(--rpg-text-secondary)] space-y-0.5">
-          {entry.roll !== undefined && entry.attackModifier !== undefined && entry.targetDefence !== undefined && (
+          {hitOutcome && (
             <div>
-              Roll: {entry.roll} + {entry.attackModifier} ATK vs {10 + entry.targetDefence} (10 + {entry.targetDefence} DEF)
-              {' → '}{(entry.roll + entry.attackModifier) >= (10 + entry.targetDefence) || entry.roll === 20 ? 'Hit' : 'Miss'}
+              Roll: {entry.roll} + {entry.attackModifier} ATK
+              {entry.accuracyModifier !== undefined ? ` + ${entry.accuracyModifier} ACC` : ''}
+              {' vs '}
+              {showDetailedBreakdown
+                ? `${hitOutcome.threshold} (10 + ${entry.targetDodge} DOD + ${hitOutcome.evasionContribution} EVA)`
+                : `${hitOutcome.threshold} (target avoid)`}
+              {' => '}{hitOutcome.result}
+              {entry.roll === 1 ? ' (Nat 1 auto-miss)' : ''}
+              {entry.roll === 20 ? ' (Nat 20 auto-hit)' : ''}
             </div>
           )}
           {entry.rawDamage !== undefined && entry.damage !== undefined && (
             <div>
-              Damage: {entry.rawDamage} raw
-              {entry.isCritical && ' × 1.5 crit'}
-              {entry.armorReduction !== undefined && entry.armorReduction > 0 && ` − ${entry.armorReduction} armor`}
-              {' = '}{entry.damage} final
+              {(() => {
+                const critMultiplier = entry.isCritical ? 1.5 : 1;
+                const preMitigation = Math.floor(entry.rawDamage * critMultiplier);
+                const mitigated = Math.max(0, preMitigation - entry.damage);
+
+                let mitigationLabel = '';
+                if (entry.targetDefence !== undefined) {
+                  mitigationLabel = showDetailedBreakdown
+                    ? mitigated > 0
+                      ? ` (-${mitigated} defence)`
+                      : ' (defence)'
+                    : ' (defence)';
+                }
+
+                return (
+                  <>
+                    Damage: {entry.rawDamage} raw
+                    {entry.isCritical && ' × 1.5 crit'}
+                    {' = '}{preMitigation} pre-mitigation
+                    {' → '}{entry.damage} final
+                    {mitigationLabel}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

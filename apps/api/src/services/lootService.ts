@@ -1,5 +1,6 @@
-import { prisma } from '@adventure/database';
-import type { LootDrop } from '@adventure/shared';
+import { Prisma, prisma } from '@adventure/database';
+import { rollBonusStatsForRarity, rollDropRarity } from '@adventure/game-engine';
+import type { ItemStats, ItemType, LootDrop } from '@adventure/shared';
 import { addStackableItem } from './inventoryService';
 
 function randomIntInclusive(min: number, max: number): number {
@@ -11,6 +12,7 @@ function randomIntInclusive(min: number, max: number): number {
 export async function rollAndGrantLoot(
   playerId: string,
   mobTemplateId: string,
+  mobLevel: number,
   dropChanceMultiplier = 1
 ): Promise<LootDrop[]> {
   const entries = await prisma.dropTable.findMany({
@@ -21,7 +23,7 @@ export async function rollAndGrantLoot(
   const drops: LootDrop[] = [];
 
   for (const entry of entries) {
-    const chance = Math.min(1, Math.max(0, entry.dropChance.toNumber() * dropChanceMultiplier));
+    const chance = Math.min(1, Math.max(0, entry.dropChance.toNumber()));
     if (chance <= 0) continue;
 
     if (Math.random() >= chance) continue;
@@ -29,26 +31,45 @@ export async function rollAndGrantLoot(
     const quantity = randomIntInclusive(entry.minQuantity, entry.maxQuantity);
     if (quantity <= 0) continue;
 
-    drops.push({ itemTemplateId: entry.itemTemplateId, quantity });
-
     // Create/merge item instances
     if (entry.itemTemplate.stackable) {
       await addStackableItem(playerId, entry.itemTemplateId, quantity);
+      drops.push({ itemTemplateId: entry.itemTemplateId, quantity, rarity: 'common' });
       continue;
     }
 
-    const needsDurability = entry.itemTemplate.itemType === 'weapon' || entry.itemTemplate.itemType === 'armor';
+    const itemType = entry.itemTemplate.itemType as ItemType;
+    const isEquipment = itemType === 'weapon' || itemType === 'armor';
+    const needsDurability = isEquipment;
     const maxDurability = needsDurability ? entry.itemTemplate.maxDurability : null;
+    const templateBaseStats = entry.itemTemplate.baseStats as ItemStats | null | undefined;
 
-    await prisma.item.create({
-      data: {
-        ownerId: playerId,
-        templateId: entry.itemTemplateId,
-        quantity,
-        maxDurability,
-        currentDurability: maxDurability,
-      },
-    });
+    for (let i = 0; i < quantity; i++) {
+      const rarity = isEquipment
+        ? rollDropRarity(mobLevel, dropChanceMultiplier)
+        : 'common';
+      const bonusStats = isEquipment
+        ? rollBonusStatsForRarity({
+            itemType,
+            rarity,
+            baseStats: templateBaseStats,
+          })
+        : null;
+
+      await prisma.item.create({
+        data: {
+          ownerId: playerId,
+          templateId: entry.itemTemplateId,
+          rarity,
+          quantity: 1,
+          maxDurability,
+          currentDurability: maxDurability,
+          bonusStats: bonusStats ? (bonusStats as Prisma.InputJsonObject) : undefined,
+        } as any,
+      });
+
+      drops.push({ itemTemplateId: entry.itemTemplateId, quantity: 1, rarity });
+    }
   }
 
   return drops;

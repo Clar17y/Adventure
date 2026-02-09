@@ -195,6 +195,7 @@ export async function getEquipment() {
         id: string;
         templateId: string;
         ownerId: string;
+        rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
         currentDurability: number | null;
         maxDurability: number | null;
         quantity: number;
@@ -383,6 +384,9 @@ export interface CombatLogEntryResponse {
   damage?: number;
   evaded?: boolean;
   attackModifier?: number;
+  accuracyModifier?: number;
+  targetDodge?: number;
+  targetEvasion?: number;
   targetDefence?: number;
   rawDamage?: number;
   armorReduction?: number;
@@ -426,7 +430,12 @@ export interface CombatResultResponse {
   log: CombatLogEntryResponse[];
   rewards: {
     xp: number;
-    loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>;
+    loot: Array<{
+      itemTemplateId: string;
+      quantity: number;
+      rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+      itemName?: string | null;
+    }>;
     durabilityLost: Array<{ itemId: string; amount: number }>;
     skillXp: SkillXpGrantResponse | null;
     secondarySkillXp: SecondarySkillXpResponse;
@@ -449,7 +458,12 @@ export interface CombatResponse {
   };
   rewards: {
     xp: number;
-    loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>;
+    loot: Array<{
+      itemTemplateId: string;
+      quantity: number;
+      rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+      itemName?: string | null;
+    }>;
     durabilityLost: Array<{ itemId: string; amount: number }>;
     skillXp: SkillXpGrantResponse | null;
     secondarySkillXp: SecondarySkillXpResponse;
@@ -589,6 +603,7 @@ export async function getInventory() {
       id: string;
       templateId: string;
       ownerId: string;
+      rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
       currentDurability: number | null;
       maxDurability: number | null;
       quantity: number;
@@ -700,7 +715,13 @@ export async function craft(recipeId: string, quantity: number = 1) {
     logId: string;
     turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
     crafted: { recipeId: string; resultTemplateId: string; quantity: number; craftedItemIds: string[] };
-    craftedItemDetails: Array<{ id: string; isCrit: boolean; bonusStat?: string; bonusValue?: number }>;
+    craftedItemDetails: Array<{
+      id: string;
+      isCrit: boolean;
+      rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+      bonusStat?: string;
+      bonusValue?: number;
+    }>;
     xp: { skillType: string; xpAfterEfficiency: number; efficiency: number; leveledUp: boolean; newLevel: number; atDailyCap: boolean; newTotalXp: number; newDailyXpGained: number };
   }>('/api/v1/crafting/craft', {
     method: 'POST',
@@ -720,6 +741,46 @@ export async function salvage(itemId: string) {
   }>('/api/v1/crafting/salvage', {
     method: 'POST',
     body: JSON.stringify({ itemId }),
+  });
+}
+
+export async function forgeUpgrade(itemId: string, sacrificialItemId: string) {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    forge: {
+      action: 'upgrade';
+      success: boolean;
+      destroyed: boolean;
+      itemId: string;
+      fromRarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+      toRarity: 'uncommon' | 'rare' | 'epic' | 'legendary';
+      successChance: number;
+      roll: number;
+      sacrificialItemId: string;
+      bonusStats?: Record<string, number> | null;
+    };
+  }>('/api/v1/crafting/forge/upgrade', {
+    method: 'POST',
+    body: JSON.stringify({ itemId, sacrificialItemId }),
+  });
+}
+
+export async function forgeReroll(itemId: string, sacrificialItemId: string) {
+  return fetchApi<{
+    logId: string;
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    forge: {
+      action: 'reroll';
+      success: true;
+      itemId: string;
+      rarity: 'uncommon' | 'rare' | 'epic' | 'legendary';
+      sacrificialItemId: string;
+      bonusStats: Record<string, number> | null;
+    };
+  }>('/api/v1/crafting/forge/reroll', {
+    method: 'POST',
+    body: JSON.stringify({ itemId, sacrificialItemId }),
   });
 }
 

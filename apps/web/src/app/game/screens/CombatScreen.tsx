@@ -34,6 +34,7 @@ interface CombatScreenProps {
   pendingClockMs: number;
   busyAction: string | null;
   lastCombat: LastCombat | null;
+  bestiaryMobs: Array<{ id: string; isDiscovered: boolean }>;
   onStartCombat: (pendingEncounterId: string) => void | Promise<void>;
   onPendingEncounterPageChange: (page: number) => void;
   onPendingEncounterZoneFilterChange: (zoneId: string) => void;
@@ -55,6 +56,7 @@ export function CombatScreen({
   pendingClockMs,
   busyAction,
   lastCombat,
+  bestiaryMobs,
   onStartCombat,
   onPendingEncounterPageChange,
   onPendingEncounterZoneFilterChange,
@@ -68,6 +70,9 @@ export function CombatScreen({
   // Mob max HP comes from combat payload (supports wounded monster starts later).
   const playerMaxHp = hpState.maxHp;
   const mobMaxHp = lastCombat ? resolveMobMaxHp(lastCombat.log, lastCombat.mobMaxHp) : undefined;
+  const isLastCombatMobDiscovered = lastCombat
+    ? bestiaryMobs.find((mob) => mob.id === lastCombat.mobTemplateId)?.isDiscovered ?? false
+    : false;
 
   const outcomeLabel = lastCombat?.outcome === 'victory'
     ? 'Victory'
@@ -277,6 +282,7 @@ export function CombatScreen({
                     entry={entry}
                     playerMaxHp={playerMaxHp}
                     mobMaxHp={mobMaxHp}
+                    showDetailedBreakdown={isLastCombatMobDiscovered}
                   />
                 ))}
               </div>

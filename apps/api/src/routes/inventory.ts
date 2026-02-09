@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@adventure/database';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
-import { spendPlayerTurns } from '../services/turnBankService';
+import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { DURABILITY_CONSTANTS } from '@adventure/shared';
 
 export const inventoryRouter = Router();
@@ -109,58 +109,66 @@ inventoryRouter.post('/repair', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = repairSchema.parse(req.body);
-
-    const item = await prisma.item.findUnique({
-      where: { id: body.itemId },
-      include: { template: true },
-    });
-
-    if (!item || item.ownerId !== playerId) {
-      throw new AppError(404, 'Item not found', 'NOT_FOUND');
-    }
-
-    if (item.template.itemType !== 'weapon' && item.template.itemType !== 'armor') {
-      throw new AppError(400, 'Only weapons/armor can be repaired', 'INVALID_ITEM_TYPE');
-    }
-
-    const current = item.currentDurability ?? item.template.maxDurability;
-    const max = item.maxDurability ?? item.template.maxDurability;
-
-    if (current >= max) {
-      res.json({
-        repaired: false,
-        itemId: item.id,
-        currentDurability: current,
-        maxDurability: max,
+    const result = await prisma.$transaction(async (tx) => {
+      const item = await tx.item.findUnique({
+        where: { id: body.itemId },
+        include: { template: true },
       });
-      return;
-    }
 
-    const turnSpend = await spendPlayerTurns(playerId, DURABILITY_CONSTANTS.REPAIR_TURN_COST);
+      if (!item || item.ownerId !== playerId) {
+        throw new AppError(404, 'Item not found', 'NOT_FOUND');
+      }
 
-    const decay = Math.min(
-      DURABILITY_CONSTANTS.REPAIR_MAX_DECAY,
-      Math.max(1, Math.floor(Math.random() * (DURABILITY_CONSTANTS.REPAIR_MAX_DECAY + 1)))
-    );
-    const newMax = Math.max(DURABILITY_CONSTANTS.MIN_MAX_DURABILITY, max - decay);
+      if (item.template.itemType !== 'weapon' && item.template.itemType !== 'armor') {
+        throw new AppError(400, 'Only weapons/armor can be repaired', 'INVALID_ITEM_TYPE');
+      }
 
-    const updated = await prisma.item.update({
-      where: { id: item.id },
-      data: {
-        maxDurability: newMax,
+      const current = item.currentDurability ?? item.template.maxDurability;
+      const max = item.maxDurability ?? item.template.maxDurability;
+
+      if (current >= max) {
+        return {
+          repaired: false as const,
+          itemId: item.id,
+          currentDurability: current,
+          maxDurability: max,
+        };
+      }
+
+      const turnSpend = await spendPlayerTurnsTx(tx, playerId, DURABILITY_CONSTANTS.REPAIR_TURN_COST);
+      const decay = Math.min(
+        DURABILITY_CONSTANTS.REPAIR_MAX_DECAY,
+        Math.max(1, Math.floor(Math.random() * (DURABILITY_CONSTANTS.REPAIR_MAX_DECAY + 1)))
+      );
+      const newMax = Math.max(DURABILITY_CONSTANTS.MIN_MAX_DURABILITY, max - decay);
+
+      const updated = await tx.item.updateMany({
+        where: {
+          id: item.id,
+          ownerId: playerId,
+          currentDurability: item.currentDurability,
+          maxDurability: item.maxDurability,
+        },
+        data: {
+          maxDurability: newMax,
+          currentDurability: newMax,
+        },
+      });
+      if (updated.count !== 1) {
+        throw new AppError(409, 'Item durability changed; try again', 'ITEM_STATE_CHANGED');
+      }
+
+      return {
+        repaired: true as const,
+        turns: turnSpend,
+        itemId: item.id,
         currentDurability: newMax,
-      },
-      select: { id: true, currentDurability: true, maxDurability: true },
+        maxDurability: newMax,
+        maxDurabilityDecay: decay,
+      };
     });
 
-    res.json({
-      repaired: true,
-      turns: turnSpend,
-      itemId: updated.id,
-      currentDurability: updated.currentDurability,
-      maxDurability: updated.maxDurability,
-      maxDurabilityDecay: decay,
-    });
+    res.json(result);
   } catch (err) {
     next(err);
   }

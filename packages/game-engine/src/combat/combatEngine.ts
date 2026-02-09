@@ -12,7 +12,6 @@ import {
   rollD20,
   rollDamage,
   doesAttackHit,
-  doesTargetEvade,
   isCriticalHit,
   calculateFinalDamage,
   rollInitiative,
@@ -47,8 +46,10 @@ export function runCombat(
     hp: mobCurrentHp,
     maxHp: mobMaxHp,
     attack: mob.attack,
+    accuracy: Math.floor(mob.attack / 2),
     defence: mob.defence,
-    evasion: mob.evasion,
+    dodge: mob.evasion,
+    evasion: 0,
     damageMin: mob.damageMin,
     damageMax: mob.damageMax,
     speed: 0,
@@ -141,33 +142,36 @@ function executePlayerAttack(
   mobName: string
 ): void {
   const attackRoll = rollD20();
-  const hits = doesAttackHit(attackRoll, playerStats.attack, mobStats.defence);
+  const hits = doesAttackHit(
+    attackRoll,
+    playerStats.attack,
+    playerStats.accuracy,
+    mobStats.dodge,
+    mobStats.evasion
+  );
 
   if (!hits) {
-    state.log.push({
-      round: state.round,
-      actor: 'player',
-      action: 'attack',
-      roll: attackRoll,
-      attackModifier: playerStats.attack,
-      targetDefence: mobStats.defence,
-      message: `You swing at the ${mobName} but miss!`,
-      ...hpSnapshot(state),
-    });
-    return;
-  }
+    const wouldHitWithoutAvoidance = doesAttackHit(
+      attackRoll,
+      playerStats.attack,
+      playerStats.accuracy,
+      0,
+      0
+    );
 
-  // Check evasion
-  if (doesTargetEvade(mobStats.evasion)) {
     state.log.push({
       round: state.round,
       actor: 'player',
       action: 'attack',
       roll: attackRoll,
-      evaded: true,
+      evaded: wouldHitWithoutAvoidance,
       attackModifier: playerStats.attack,
-      targetDefence: mobStats.defence,
-      message: `The ${mobName} dodges your attack!`,
+      accuracyModifier: playerStats.accuracy,
+      targetDodge: mobStats.dodge,
+      targetEvasion: mobStats.evasion,
+      message: wouldHitWithoutAvoidance
+        ? `The ${mobName} avoids your attack!`
+        : `You swing at the ${mobName} but miss!`,
       ...hpSnapshot(state),
     });
     return;
@@ -189,6 +193,9 @@ function executePlayerAttack(
     roll: attackRoll,
     damage: finalDamage,
     attackModifier: playerStats.attack,
+    accuracyModifier: playerStats.accuracy,
+    targetDodge: mobStats.dodge,
+    targetEvasion: mobStats.evasion,
     targetDefence: mobStats.defence,
     rawDamage,
     armorReduction,
@@ -224,34 +231,39 @@ function executeMobAttack(
   }
 
   const attackRoll = rollD20();
-  const hits = doesAttackHit(attackRoll, mobStats.attack, playerStats.defence);
+  const hits = doesAttackHit(
+    attackRoll,
+    mobStats.attack,
+    mobStats.accuracy,
+    playerStats.dodge,
+    playerStats.evasion
+  );
 
   if (!hits) {
-    state.log.push({
-      round: state.round,
-      actor: 'mob',
-      action: 'attack',
-      roll: attackRoll,
-      attackModifier: mobStats.attack,
-      targetDefence: playerStats.defence,
-      message: `The ${mob.name} attacks but misses!`,
-      ...hpSnapshot(state),
-    });
-    return;
-  }
+    const wouldHitWithoutAvoidance = doesAttackHit(
+      attackRoll,
+      mobStats.attack,
+      mobStats.accuracy,
+      0,
+      0
+    );
+    if (wouldHitWithoutAvoidance) {
+      counters.evasionEvents++;
+    }
 
-  // Check evasion - player dodges mob attack
-  if (doesTargetEvade(playerStats.evasion)) {
-    counters.evasionEvents++;
     state.log.push({
       round: state.round,
       actor: 'mob',
       action: 'attack',
       roll: attackRoll,
-      evaded: true,
       attackModifier: mobStats.attack,
-      targetDefence: playerStats.defence,
-      message: `You dodge the ${mob.name}'s attack!`,
+      accuracyModifier: mobStats.accuracy,
+      targetDodge: playerStats.dodge,
+      targetEvasion: playerStats.evasion,
+      evaded: wouldHitWithoutAvoidance,
+      message: wouldHitWithoutAvoidance
+        ? `You avoid the ${mob.name}'s attack!`
+        : `The ${mob.name} attacks but misses!`,
       ...hpSnapshot(state),
     });
     return;
@@ -276,6 +288,9 @@ function executeMobAttack(
     roll: attackRoll,
     damage: finalDamage,
     attackModifier: mobStats.attack,
+    accuracyModifier: mobStats.accuracy,
+    targetDodge: playerStats.dodge,
+    targetEvasion: playerStats.evasion,
     targetDefence: playerStats.defence,
     rawDamage,
     armorReduction,

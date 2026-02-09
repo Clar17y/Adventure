@@ -52,28 +52,29 @@ export function calculateCritChance(
   );
 }
 
-export function getEligibleBonusStats(itemType: ItemType): CraftingCritStat[] {
+export function getEligibleBonusStats(
+  itemType: ItemType,
+  baseStats?: ItemStats | null | undefined
+): CraftingCritStat[] {
+  const utility: CraftingCritStat[] = ['dodge', 'accuracy', 'luck'];
+
   if (itemType === 'weapon') {
-    return ['attack', 'magicPower', 'rangedPower', 'evasion', 'luck'];
+    const offensive: CraftingCritStat[] = ['attack', 'magicPower', 'rangedPower'];
+    const primary = offensive.filter((stat) => {
+      const value = baseStats?.[stat];
+      return typeof value === 'number' && Number.isFinite(value) && value > 0;
+    });
+    return [...(primary.length > 0 ? primary : offensive), ...utility];
   }
   if (itemType === 'armor') {
-    return ['armor', 'health', 'evasion', 'luck'];
+    const defensive: CraftingCritStat[] = ['armor', 'health'];
+    const primary = defensive.filter((stat) => {
+      const value = baseStats?.[stat];
+      return typeof value === 'number' && Number.isFinite(value) && value > 0;
+    });
+    return [...(primary.length > 0 ? primary : defensive), ...utility];
   }
   return [];
-}
-
-function selectStatWithBaseWeight(
-  eligibleStats: CraftingCritStat[],
-  baseStats: ItemStats | null | undefined
-): CraftingCritStat[] {
-  if (!baseStats || eligibleStats.length === 0) return eligibleStats;
-
-  const withBase = eligibleStats.filter((stat) => {
-    const value = baseStats[stat];
-    return typeof value === 'number' && Number.isFinite(value) && value > 0;
-  });
-
-  return withBase.length > 0 ? withBase : eligibleStats;
 }
 
 function rollBonusPercent(roll?: number): number {
@@ -89,9 +90,8 @@ export function rollBonusStat(
 ): { stat: CraftingCritStat; value: number } | null {
   if (eligibleStats.length === 0) return null;
 
-  const statPool = selectStatWithBaseWeight(eligibleStats, baseStats);
-  const statIndex = Math.floor(randomUnit(rolls?.statRoll) * statPool.length);
-  const stat = statPool[statIndex]!;
+  const statIndex = Math.floor(randomUnit(rolls?.statRoll) * eligibleStats.length);
+  const stat = eligibleStats[statIndex]!;
 
   const baseValueRaw = baseStats?.[stat];
   const baseValue = typeof baseValueRaw === 'number' && Number.isFinite(baseValueRaw)
@@ -109,7 +109,7 @@ export function calculateCraftingCrit(
   rolls?: CraftingCritRolls
 ): CraftingCritResult {
   const critChance = calculateCritChance(input.skillLevel, input.requiredLevel, input.luckStat);
-  const eligibleStats = getEligibleBonusStats(input.itemType);
+  const eligibleStats = getEligibleBonusStats(input.itemType, input.baseStats);
 
   if (eligibleStats.length === 0) {
     return {

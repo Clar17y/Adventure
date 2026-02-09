@@ -11,7 +11,7 @@ import {
 import type { HpState, RestResult, RecoveryResult } from '@adventure/shared';
 import { AppError } from '../middleware/errorHandler';
 import { getEquipmentStats } from './equipmentService';
-import { spendPlayerTurns } from './turnBankService';
+import { spendPlayerTurnsTx } from './turnBankService';
 
 async function getVitalityLevel(playerId: string): Promise<number> {
   const skill = await prisma.playerSkill.findUnique({
@@ -120,16 +120,26 @@ export async function rest(
   const healPerTurn = calculateHealPerTurn(vitalityLevel);
   const healing = calculateRestHealing(currentHp, maxHp, healPerTurn, turnsToSpend);
 
-  // Spend turns (will throw if insufficient)
-  await spendPlayerTurns(playerId, healing.turnsUsed, now);
+  // Spend turns and apply HP update atomically.
+  await prisma.$transaction(async (tx) => {
+    await spendPlayerTurnsTx(tx, playerId, healing.turnsUsed, now);
 
-  // Update HP
-  await prisma.player.update({
-    where: { id: playerId },
-    data: {
-      currentHp: healing.newHp,
-      lastHpRegenAt: now,
-    },
+    const updated = await tx.player.updateMany({
+      where: {
+        id: playerId,
+        currentHp: player.currentHp,
+        lastHpRegenAt: player.lastHpRegenAt,
+        isRecovering: false,
+      },
+      data: {
+        currentHp: healing.newHp,
+        lastHpRegenAt: now,
+      },
+    });
+
+    if (updated.count !== 1) {
+      throw new AppError(409, 'HP state changed; try again', 'HP_STATE_CHANGED');
+    }
   });
 
   return {
@@ -163,9 +173,6 @@ export async function recover(
 
   const recoveryCost = player.recoveryCost ?? 0;
 
-  // Spend recovery turns (will throw if insufficient)
-  await spendPlayerTurns(playerId, recoveryCost, now);
-
   const vitalityLevel = await getVitalityLevel(playerId);
   const equipmentStats = await getEquipmentStats(playerId);
 
@@ -176,15 +183,27 @@ export async function recover(
 
   const exitHp = calculateRecoveryExitHp(maxHp);
 
-  // Exit recovering state
-  await prisma.player.update({
-    where: { id: playerId },
-    data: {
-      currentHp: exitHp,
-      lastHpRegenAt: now,
-      isRecovering: false,
-      recoveryCost: null,
-    },
+  // Spend turns and exit recovering state atomically.
+  await prisma.$transaction(async (tx) => {
+    await spendPlayerTurnsTx(tx, playerId, recoveryCost, now);
+
+    const updated = await tx.player.updateMany({
+      where: {
+        id: playerId,
+        isRecovering: true,
+        recoveryCost: player.recoveryCost,
+      },
+      data: {
+        currentHp: exitHp,
+        lastHpRegenAt: now,
+        isRecovering: false,
+        recoveryCost: null,
+      },
+    });
+
+    if (updated.count !== 1) {
+      throw new AppError(409, 'Recovery state changed; try again', 'RECOVERY_STATE_CHANGED');
+    }
   });
 
   return {

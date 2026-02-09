@@ -18,3 +18,6 @@ export * from './hp/fleeMechanics';
 
 // Crafting
 export * from './crafting/craftingCrit';
+
+// Items
+export * from './items/itemRarity';

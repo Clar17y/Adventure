@@ -17,6 +17,7 @@ export interface Item {
   id: string;
   templateId: string;
   ownerId: string;
+  rarity: ItemRarity;
   currentDurability: number | null;
   maxDurability: number | null;
   quantity: number;
@@ -25,13 +26,17 @@ export interface Item {
 }
 
 export type ItemType = 'weapon' | 'armor' | 'resource' | 'consumable';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface ItemStats {
   attack?: number;
   magicPower?: number;
   rangedPower?: number;
+  accuracy?: number;
+  dodge?: number;
   armor?: number;
   health?: number;
+  // Legacy field kept for compatibility; treat as dodge in combat/stat aggregation.
   evasion?: number;
   luck?: number;
 }

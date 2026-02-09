@@ -1,7 +1,21 @@
-import { prisma } from '@adventure/database';
+import { Prisma, prisma } from '@adventure/database';
 import { AppError } from '../middleware/errorHandler';
 
-export async function addStackableItem(
+interface InventoryClient {
+  itemTemplate: {
+    findUnique: Prisma.TransactionClient['itemTemplate']['findUnique'];
+  };
+  item: {
+    findFirst: Prisma.TransactionClient['item']['findFirst'];
+    findMany: Prisma.TransactionClient['item']['findMany'];
+    update: Prisma.TransactionClient['item']['update'];
+    create: Prisma.TransactionClient['item']['create'];
+    delete: Prisma.TransactionClient['item']['delete'];
+  };
+}
+
+async function addStackableItemWithClient(
+  client: InventoryClient,
   playerId: string,
   itemTemplateId: string,
   quantity: number
@@ -10,7 +24,7 @@ export async function addStackableItem(
     throw new AppError(400, 'Quantity must be a positive integer', 'INVALID_QUANTITY');
   }
 
-  const template = await prisma.itemTemplate.findUnique({ where: { id: itemTemplateId } });
+  const template = await client.itemTemplate.findUnique({ where: { id: itemTemplateId } });
   if (!template) {
     throw new AppError(404, 'Item template not found', 'NOT_FOUND');
   }
@@ -19,13 +33,13 @@ export async function addStackableItem(
     throw new AppError(400, 'Template is not stackable', 'NOT_STACKABLE');
   }
 
-  const existing = await prisma.item.findFirst({
+  const existing = await client.item.findFirst({
     where: { ownerId: playerId, templateId: itemTemplateId },
     select: { id: true, quantity: true },
   });
 
   if (existing) {
-    const updated = await prisma.item.update({
+    const updated = await client.item.update({
       where: { id: existing.id },
       data: { quantity: existing.quantity + quantity },
       select: { id: true, quantity: true },
@@ -33,17 +47,35 @@ export async function addStackableItem(
     return { itemId: updated.id, quantity: updated.quantity };
   }
 
-  const created = await prisma.item.create({
+  const created = await client.item.create({
     data: {
       ownerId: playerId,
       templateId: itemTemplateId,
+      rarity: 'common',
       quantity,
       maxDurability: null,
       currentDurability: null,
-    },
+    } as any,
     select: { id: true, quantity: true },
   });
   return { itemId: created.id, quantity: created.quantity };
+}
+
+export async function addStackableItem(
+  playerId: string,
+  itemTemplateId: string,
+  quantity: number
+): Promise<{ itemId: string; quantity: number }> {
+  return addStackableItemWithClient(prisma, playerId, itemTemplateId, quantity);
+}
+
+export async function addStackableItemTx(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  itemTemplateId: string,
+  quantity: number
+): Promise<{ itemId: string; quantity: number }> {
+  return addStackableItemWithClient(tx, playerId, itemTemplateId, quantity);
 }
 
 export async function getTotalQuantityByTemplate(
@@ -57,7 +89,8 @@ export async function getTotalQuantityByTemplate(
   return items.reduce((sum: number, item: typeof items[number]) => sum + item.quantity, 0);
 }
 
-export async function consumeItemsByTemplate(
+async function consumeItemsByTemplateWithClient(
+  client: InventoryClient,
   playerId: string,
   itemTemplateId: string,
   quantity: number
@@ -66,7 +99,7 @@ export async function consumeItemsByTemplate(
     throw new AppError(400, 'Quantity must be a positive integer', 'INVALID_QUANTITY');
   }
 
-  const items = await prisma.item.findMany({
+  const items = await client.item.findMany({
     where: { ownerId: playerId, templateId: itemTemplateId },
     orderBy: [{ createdAt: 'asc' }],
     select: { id: true, quantity: true },
@@ -76,7 +109,7 @@ export async function consumeItemsByTemplate(
   for (const item of items) {
     if (remaining <= 0) break;
     if (item.quantity > remaining) {
-      await prisma.item.update({
+      await client.item.update({
         where: { id: item.id },
         data: { quantity: item.quantity - remaining },
       });
@@ -85,11 +118,28 @@ export async function consumeItemsByTemplate(
     }
 
     remaining -= item.quantity;
-    await prisma.item.delete({ where: { id: item.id } });
+    await client.item.delete({ where: { id: item.id } });
   }
 
   if (remaining > 0) {
     throw new AppError(400, 'Insufficient materials', 'INSUFFICIENT_ITEMS');
   }
+}
+
+export async function consumeItemsByTemplate(
+  playerId: string,
+  itemTemplateId: string,
+  quantity: number
+): Promise<void> {
+  await consumeItemsByTemplateWithClient(prisma, playerId, itemTemplateId, quantity);
+}
+
+export async function consumeItemsByTemplateTx(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  itemTemplateId: string,
+  quantity: number
+): Promise<void> {
+  await consumeItemsByTemplateWithClient(tx, playerId, itemTemplateId, quantity);
 }
 

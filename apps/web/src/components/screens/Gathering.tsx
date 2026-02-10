@@ -23,6 +23,7 @@ interface ResourceNode {
   remainingCapacity: number;
   maxCapacity: number;
   sizeName: string;
+  weathered?: boolean;
 }
 
 interface GatheringLog {
@@ -244,9 +245,14 @@ export function Gathering({
                       <span className="text-xs text-[var(--rpg-text-secondary)]">
                         {node.remainingCapacity} / {node.maxCapacity} remaining
                       </span>
-                      <span className="text-xs text-[var(--rpg-gold)]">
-                        {Math.max(node.baseYield, GATHERING_CONSTANTS.BASE_YIELD)}/action
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {node.weathered && (
+                          <span className="text-xs text-[var(--rpg-text-secondary)]">Weathered</span>
+                        )}
+                        <span className="text-xs text-[var(--rpg-gold)]">
+                          {Math.max(node.baseYield, GATHERING_CONSTANTS.BASE_YIELD)}/action
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -420,10 +420,12 @@ export async function estimateExploration(turns: number) {
   return fetchApi<{
     estimate: {
       turns: number;
-      mobEncounterChance: number;
+      ambushChance: number;
+      encounterSiteChance: number;
       resourceNodeChance: number;
       hiddenCacheChance: number;
-      expectedMobEncounters: number;
+      expectedAmbushes: number;
+      expectedEncounterSites: number;
     };
   }>(`/api/v1/exploration/estimate?turns=${turns}`);
 }
@@ -433,21 +435,32 @@ export async function startExploration(zoneId: string, turns: number) {
     logId: string;
     zone: { id: string; name: string; difficulty: number };
     turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
-    outcomes: Array<{ type: string; turnOccurred: number }>;
-    mobEncounters: Array<{
-      encounterId: string;
-      zoneId: string;
-      zoneName: string;
-      turnOccurred: number;
-      mobTemplateId: string;
-      mobName: string;
-      mobPrefix: string | null;
-      mobDisplayName: string;
-      createdAt: string;
-      expiresAt: string;
+    aborted: boolean;
+    refundedTurns: number;
+    events: Array<{
+      turn: number;
+      type: string;
+      description: string;
+      details?: Record<string, unknown>;
     }>;
-    resourceDiscoveries: Array<{ turnOccurred: number; resourceNodeId: string; resourceType: string }>;
-    hiddenCaches: Array<{ type: string; turnOccurred: number }>;
+    encounterSites: Array<{
+      turnOccurred: number;
+      encounterSiteId: string;
+      mobFamilyId: string;
+      siteName: string;
+      size: 'small' | 'medium' | 'large';
+      totalMobs: number;
+      discoveredAt: string;
+    }>;
+    resourceDiscoveries: Array<{
+      turnOccurred: number;
+      playerNodeId: string;
+      resourceNodeId: string;
+      resourceType: string;
+      capacity: number;
+      sizeName: string;
+    }>;
+    hiddenCaches: Array<{ turnOccurred: number }>;
     zoneExitDiscovered: boolean;
   }>('/api/v1/exploration/start', {
     method: 'POST',
@@ -507,7 +520,8 @@ export interface CombatResultResponse {
   mobName: string;
   mobPrefix: string | null;
   mobDisplayName: string;
-  pendingEncounterId: string | null;
+  encounterSiteId: string | null;
+  encounterSiteCleared?: boolean;
   attackSkill: 'melee' | 'ranged' | 'magic';
   outcome: CombatOutcomeResponse;
   playerMaxHp: number;
@@ -534,7 +548,8 @@ export interface CombatResponse {
     mobTemplateId: string;
     mobPrefix: string | null;
     mobDisplayName: string;
-    pendingEncounterId: string | null;
+    encounterSiteId: string | null;
+    encounterSiteCleared?: boolean;
     outcome: CombatOutcomeResponse;
     playerMaxHp: number;
     mobMaxHp: number;
@@ -599,33 +614,39 @@ export async function startCombat(zoneId: string, attackSkill: 'melee' | 'ranged
   });
 }
 
-export async function startCombatFromPendingEncounter(pendingEncounterId: string, attackSkill: 'melee' | 'ranged' | 'magic' = 'melee') {
+export async function startCombatFromEncounterSite(encounterSiteId: string, attackSkill: 'melee' | 'ranged' | 'magic' = 'melee') {
   return fetchApi<CombatResponse>('/api/v1/combat/start', {
     method: 'POST',
-    body: JSON.stringify({ pendingEncounterId, attackSkill }),
+    body: JSON.stringify({ encounterSiteId, attackSkill }),
   });
 }
 
-export interface PendingEncountersQuery {
+export interface EncounterSitesQuery {
   page?: number;
   pageSize?: number;
   zoneId?: string;
-  mobTemplateId?: string;
-  sort?: 'recent' | 'expires';
+  mobFamilyId?: string;
+  sort?: 'recent' | 'danger';
 }
 
-export interface PendingEncountersResponse {
-  pendingEncounters: Array<{
-    encounterId: string;
+export interface EncounterSitesResponse {
+  encounterSites: Array<{
+    encounterSiteId: string;
     zoneId: string;
     zoneName: string;
-    mobTemplateId: string;
-    mobName: string;
-    mobPrefix: string | null;
-    mobDisplayName: string;
-    turnOccurred: number;
-    createdAt: string;
-    expiresAt: string;
+    mobFamilyId: string;
+    mobFamilyName: string;
+    siteName: string;
+    size: string;
+    totalMobs: number;
+    aliveMobs: number;
+    defeatedMobs: number;
+    decayedMobs: number;
+    nextMobTemplateId: string | null;
+    nextMobName: string | null;
+    nextMobPrefix: string | null;
+    nextMobDisplayName: string | null;
+    discoveredAt: string;
   }>;
   pagination: {
     page: number;
@@ -637,24 +658,24 @@ export interface PendingEncountersResponse {
   };
   filters: {
     zones: Array<{ id: string; name: string }>;
-    mobs: Array<{ id: string; name: string }>;
+    mobFamilies: Array<{ id: string; name: string }>;
   };
 }
 
-export async function getPendingEncounters(query: PendingEncountersQuery = {}) {
+export async function getEncounterSites(query: EncounterSitesQuery = {}) {
   const params = new URLSearchParams();
   if (query.page !== undefined) params.set('page', String(query.page));
   if (query.pageSize !== undefined) params.set('pageSize', String(query.pageSize));
   if (query.zoneId) params.set('zoneId', query.zoneId);
-  if (query.mobTemplateId) params.set('mobTemplateId', query.mobTemplateId);
+  if (query.mobFamilyId) params.set('mobFamilyId', query.mobFamilyId);
   if (query.sort) params.set('sort', query.sort);
 
   const suffix = params.toString();
-  return fetchApi<PendingEncountersResponse>(`/api/v1/combat/pending${suffix ? `?${suffix}` : ''}`);
+  return fetchApi<EncounterSitesResponse>(`/api/v1/combat/sites${suffix ? `?${suffix}` : ''}`);
 }
 
-export async function abandonPendingEncounters(zoneId?: string) {
-  return fetchApi<{ success: boolean; abandoned: number }>('/api/v1/combat/pending/abandon', {
+export async function abandonEncounterSites(zoneId?: string) {
+  return fetchApi<{ success: boolean; abandoned: number }>('/api/v1/combat/sites/abandon', {
     method: 'POST',
     body: JSON.stringify(zoneId ? { zoneId } : {}),
   });
@@ -922,6 +943,7 @@ export interface GatheringNodesResponse {
     maxCapacity: number;
     sizeName: string;
     discoveredAt: string;
+    weathered: boolean;
   }>;
   pagination: {
     page: number;

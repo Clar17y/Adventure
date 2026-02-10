@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
-import { applyMobPrefix, buildPlayerCombatStats, runCombat, calculateFleeResult, rollMobPrefix } from '@adventure/game-engine';
+import {
+  applyMobPrefix,
+  buildPlayerCombatStats,
+  runCombat,
+  calculateFleeResult,
+  rollMobPrefix,
+  calculateExplorationMobXpMultiplier,
+} from '@adventure/game-engine';
 import { COMBAT_CONSTANTS, getMobPrefixDefinition, type LootDrop, type MobTemplate, type SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -11,6 +18,7 @@ import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
 import { getHpState, setHp, enterRecoveringState } from '../services/hpService';
 import { getEquipmentStats } from '../services/equipmentService';
+import { getPlayerProgressionState } from '../services/attributesService';
 
 export const combatRouter = Router();
 
@@ -246,11 +254,12 @@ combatRouter.post('/start', async (req, res, next) => {
     let mobTemplateId = body.mobTemplateId ?? null;
     let mobPrefix = null as string | null;
     let consumedPendingEncounterId = null as null | string;
+    let explorationSourceLogId = null as null | string;
 
     if (body.pendingEncounterId) {
       const pending = await prismaAny.pendingEncounter.findFirst({
         where: { id: body.pendingEncounterId, playerId },
-        select: { id: true, zoneId: true, mobTemplateId: true, mobPrefix: true, expiresAt: true },
+        select: { id: true, zoneId: true, mobTemplateId: true, mobPrefix: true, expiresAt: true, sourceLogId: true },
       });
 
       if (!pending) {
@@ -266,6 +275,7 @@ combatRouter.post('/start', async (req, res, next) => {
       zoneId = pending.zoneId;
       mobTemplateId = pending.mobTemplateId;
       mobPrefix = pending.mobPrefix ?? null;
+      explorationSourceLogId = pending.sourceLogId ?? null;
     }
 
     if (!zoneId) {
@@ -330,11 +340,9 @@ combatRouter.post('/start', async (req, res, next) => {
     const requestedAttackSkill: AttackSkill | null = body.attackSkill ?? null;
     const mainHandAttackSkill = await getMainHandAttackSkill(playerId);
     const attackSkill: AttackSkill = mainHandAttackSkill ?? requestedAttackSkill ?? 'melee';
-    const [attackLevel, defenceLevel, vitalityLevel, evasionLevel] = await Promise.all([
+    const [attackLevel, progression] = await Promise.all([
       getSkillLevel(playerId, attackSkill),
-      getSkillLevel(playerId, 'defence'),
-      getSkillLevel(playerId, 'vitality'),
-      getSkillLevel(playerId, 'evasion'),
+      getPlayerProgressionState(playerId),
     ]);
 
     const equipmentStats = await getEquipmentStats(playerId);
@@ -342,10 +350,9 @@ combatRouter.post('/start', async (req, res, next) => {
       hpState.currentHp,
       hpState.maxHp,
       {
-        attack: attackLevel,
-        defence: defenceLevel,
-        vitality: vitalityLevel,
-        evasion: evasionLevel,
+        attackStyle: attackSkill,
+        skillLevel: attackLevel,
+        attributes: progression.attributes,
       },
       equipmentStats
     );
@@ -363,26 +370,24 @@ combatRouter.post('/start', async (req, res, next) => {
     let xpGrant = null as null | Awaited<ReturnType<typeof grantSkillXp>>;
     const durabilityLost = await degradeEquippedDurability(playerId);
     let fleeResult = null as null | ReturnType<typeof calculateFleeResult>;
+    let explorationXpMultiplier = 1;
 
-    // Grant secondary skill XP (defence/evasion) regardless of outcome
-    const secondaryXpGrants: Array<Awaited<ReturnType<typeof grantSkillXp>>> = [];
-    const { secondarySkillXp } = combatResult;
-    if (secondarySkillXp.defence.xpGained > 0) {
-      secondaryXpGrants.push(await grantSkillXp(playerId, 'defence', secondarySkillXp.defence.xpGained));
+    if (combatResult.outcome === 'victory' && explorationSourceLogId) {
+      explorationXpMultiplier = calculateExplorationMobXpMultiplier();
     }
-    if (secondarySkillXp.evasion.xpGained > 0) {
-      secondaryXpGrants.push(await grantSkillXp(playerId, 'evasion', secondarySkillXp.evasion.xpGained));
-    }
+
+    const baseXp = combatResult.outcome === 'victory' ? combatResult.xpGained : 0;
+    const xpAwarded = Math.max(0, Math.round(baseXp * explorationXpMultiplier));
 
     if (combatResult.outcome === 'victory') {
       // Update HP to remaining amount after combat
       await setHp(playerId, combatResult.playerHpRemaining);
       loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
-      xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
+      xpGrant = await grantSkillXp(playerId, attackSkill, xpAwarded);
     } else if (combatResult.outcome === 'defeat') {
       // Player lost - calculate flee outcome based on evasion vs mob level
       fleeResult = calculateFleeResult({
-        evasionLevel: evasionLevel,
+        evasionLevel: progression.attributes.evasion,
         mobLevel: prefixedMob.level,
         maxHp: hpState.maxHp,
         currentGold: 0, // TODO: implement gold system
@@ -445,7 +450,9 @@ combatRouter.post('/start', async (req, res, next) => {
           mobMaxHp: combatResult.mobMaxHp,
           log: combatResult.log,
           rewards: {
-            xp: combatResult.xpGained,
+            xp: xpAwarded,
+            baseXp,
+            xpMultiplier: explorationXpMultiplier,
             loot: lootWithNames,
             durabilityLost,
             skillXp: xpGrant
@@ -454,18 +461,14 @@ combatRouter.post('/start', async (req, res, next) => {
                   ...xpGrant.xpResult,
                   newTotalXp: xpGrant.newTotalXp,
                   newDailyXpGained: xpGrant.newDailyXpGained,
+                  characterXpGain: xpGrant.characterXpGain,
+                  characterXpAfter: xpGrant.characterXpAfter,
+                  characterLevelBefore: xpGrant.characterLevelBefore,
+                  characterLevelAfter: xpGrant.characterLevelAfter,
+                  attributePointsAfter: xpGrant.attributePointsAfter,
+                  characterLeveledUp: xpGrant.characterLeveledUp,
                 }
               : null,
-            secondarySkillXp: {
-              defence: secondarySkillXp.defence,
-              evasion: secondarySkillXp.evasion,
-              grants: secondaryXpGrants.map((g) => ({
-                skillType: g.skillType,
-                ...g.xpResult,
-                newTotalXp: g.newTotalXp,
-                newDailyXpGained: g.newDailyXpGained,
-              })),
-            },
           },
         } as unknown as Prisma.InputJsonValue,
       },
@@ -497,7 +500,7 @@ combatRouter.post('/start', async (req, res, next) => {
           : null,
       },
       rewards: {
-        xp: combatResult.xpGained,
+        xp: xpAwarded,
         loot: lootWithNames,
         durabilityLost,
         skillXp: xpGrant
@@ -506,18 +509,14 @@ combatRouter.post('/start', async (req, res, next) => {
               ...xpGrant.xpResult,
               newTotalXp: xpGrant.newTotalXp,
               newDailyXpGained: xpGrant.newDailyXpGained,
+              characterXpGain: xpGrant.characterXpGain,
+              characterXpAfter: xpGrant.characterXpAfter,
+              characterLevelBefore: xpGrant.characterLevelBefore,
+              characterLevelAfter: xpGrant.characterLevelAfter,
+              attributePointsAfter: xpGrant.attributePointsAfter,
+              characterLeveledUp: xpGrant.characterLeveledUp,
             }
           : null,
-        secondarySkillXp: {
-          defence: secondarySkillXp.defence,
-          evasion: secondarySkillXp.evasion,
-          grants: secondaryXpGrants.map((g) => ({
-            skillType: g.skillType,
-            ...g.xpResult,
-            newTotalXp: g.newTotalXp,
-            newDailyXpGained: g.newDailyXpGained,
-          })),
-        },
       },
     });
   } catch (err) {

@@ -2,10 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
 import {
-  COMBAT_SKILLS,
+  ALL_SKILLS,
   CRAFTING_CONSTANTS,
-  CRAFTING_SKILLS,
-  GATHERING_SKILLS,
   type CraftingMaterial,
   type EquipmentSlot,
   type ItemRarity,
@@ -40,11 +38,7 @@ export const craftingRouter = Router();
 craftingRouter.use(authenticate);
 
 function isSkillType(value: string): value is SkillType {
-  return (
-    COMBAT_SKILLS.includes(value as SkillType) ||
-    GATHERING_SKILLS.includes(value as SkillType) ||
-    CRAFTING_SKILLS.includes(value as SkillType)
-  );
+  return ALL_SKILLS.includes(value as SkillType);
 }
 
 function isItemType(value: string): value is ItemType {
@@ -436,6 +430,12 @@ craftingRouter.post('/craft', async (req, res, next) => {
             ...xpGrant.xpResult,
             newTotalXp: xpGrant.newTotalXp,
             newDailyXpGained: xpGrant.newDailyXpGained,
+            characterXpGain: xpGrant.characterXpGain,
+            characterXpAfter: xpGrant.characterXpAfter,
+            characterLevelBefore: xpGrant.characterLevelBefore,
+            characterLevelAfter: xpGrant.characterLevelAfter,
+            attributePointsAfter: xpGrant.attributePointsAfter,
+            characterLeveledUp: xpGrant.characterLeveledUp,
           },
         } as unknown as Prisma.InputJsonValue,
       },
@@ -456,6 +456,12 @@ craftingRouter.post('/craft', async (req, res, next) => {
         ...xpGrant.xpResult,
         newTotalXp: xpGrant.newTotalXp,
         newDailyXpGained: xpGrant.newDailyXpGained,
+        characterXpGain: xpGrant.characterXpGain,
+        characterXpAfter: xpGrant.characterXpAfter,
+        characterLevelBefore: xpGrant.characterLevelBefore,
+        characterLevelAfter: xpGrant.characterLevelAfter,
+        attributePointsAfter: xpGrant.attributePointsAfter,
+        characterLeveledUp: xpGrant.characterLeveledUp,
       },
     });
   } catch (err) {

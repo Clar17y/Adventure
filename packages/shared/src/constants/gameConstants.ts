@@ -48,23 +48,17 @@ export const CRIT_STAT_CONSTANTS = {
 
 export const SLOT_STAT_POOLS: Record<string, { primary: string[]; utility: string[] }> = {
   main_hand: { primary: ['attack', 'magicPower', 'rangedPower', 'critChance', 'critDamage'], utility: ['accuracy', 'luck'] },
-  off_hand: { primary: ['armor', 'dodge'], utility: ['health', 'luck'] },
-  head: { primary: ['armor', 'health'], utility: ['accuracy', 'luck'] },
-  chest: { primary: ['armor', 'health'], utility: ['luck'] },
-  legs: { primary: ['armor', 'health'], utility: ['dodge', 'luck'] },
-  boots: { primary: ['dodge', 'armor'], utility: ['luck'] },
+  off_hand: { primary: ['armor', 'magicDefence', 'dodge'], utility: ['health', 'luck'] },
+  head: { primary: ['armor', 'magicDefence', 'health'], utility: ['accuracy', 'luck'] },
+  chest: { primary: ['armor', 'magicDefence', 'health'], utility: ['luck'] },
+  legs: { primary: ['armor', 'magicDefence', 'health'], utility: ['dodge', 'luck'] },
+  boots: { primary: ['dodge', 'armor', 'magicDefence'], utility: ['luck'] },
   gloves: { primary: ['critChance', 'accuracy', 'critDamage'], utility: ['attack', 'luck'] },
   neck: { primary: ['health', 'luck'], utility: ['accuracy'] },
-  belt: { primary: ['armor', 'health'], utility: ['luck'] },
+  belt: { primary: ['armor', 'magicDefence', 'health'], utility: ['luck'] },
   ring: { primary: ['luck', 'accuracy', 'critChance', 'critDamage'], utility: ['dodge'] },
   charm: { primary: ['luck', 'accuracy', 'dodge', 'critChance', 'critDamage'], utility: ['health'] },
 };
-
-export const COMBAT_XP_CONSTANTS = {
-  DEFENCE_XP_PER_HIT_TAKEN: 1,
-  EVASION_XP_PER_DODGE: 1,
-  VITALITY_XP_FROM_COMBAT: 0,
-} as const;
 
 // =============================================================================
 // SKILLS & XP
@@ -89,11 +83,29 @@ export const SKILL_CONSTANTS = {
   /** Daily XP cap for gathering skills (divided by 4 windows = per-window cap) */
   DAILY_CAP_GATHERING: 30_000,
 
+  /** Daily XP cap for processing skills (divided by 4 windows = per-window cap) */
+  DAILY_CAP_PROCESSING: 30_000,
+
   /** Daily XP cap for crafting skills (divided by 4 windows = per-window cap) */
   DAILY_CAP_CRAFTING: 30_000,
 
   /** Power for diminishing returns curve: efficiency = max(0, 1 - (xp/cap)^power) */
   EFFICIENCY_DECAY_POWER: 2,
+} as const;
+
+export const CHARACTER_CONSTANTS = {
+  /** Character XP gained from skill XP after skill-side efficiency is applied. */
+  XP_RATIO: 0.3,
+
+  /** Maximum character level. */
+  MAX_LEVEL: 100,
+
+  /** Combat stat scaling from allocated attributes. */
+  MELEE_DAMAGE_PER_STRENGTH: 1,
+  RANGED_DAMAGE_PER_DEXTERITY: 1,
+  MAGIC_DAMAGE_PER_INTELLIGENCE: 1,
+  ACCURACY_PER_DEXTERITY: 1,
+  EVASION_TO_SPEED_DIVISOR: 10,
 } as const;
 
 // =============================================================================
@@ -112,6 +124,15 @@ export const EXPLORATION_CONSTANTS = {
 
   /** Per-turn chance to discover zone exit (first time only) */
   ZONE_EXIT_CHANCE: 0.002,
+
+  /**
+   * Baseline turns-per-mob used to scale XP for mobs discovered via exploration.
+   * Example: if you spend ~1,000 turns to find 1 mob, and this is 100, the mob's XP is ~10x.
+   */
+  MOB_XP_NORMALIZER_TURNS: 150,
+
+  /** Safety cap for the exploration-sourced mob XP multiplier. */
+  MOB_XP_MULTIPLIER_MAX: 25,
 
   /** Minimum turns to spend on exploration */
   MIN_EXPLORATION_TURNS: 10,

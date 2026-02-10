@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  allocatePlayerAttribute,
   abandonPendingEncounters,
   craft,
   destroyInventoryItem,
@@ -12,6 +13,7 @@ import {
   getGatheringNodes,
   getHpState,
   getInventory,
+  getPlayer,
   getPendingEncounters,
   getSkills,
   getTurns,
@@ -65,8 +67,10 @@ export interface LastCombatLogEntry {
   targetDodge?: number;
   targetEvasion?: number;
   targetDefence?: number;
+  targetMagicDefence?: number;
   rawDamage?: number;
   armorReduction?: number;
+  magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
   playerHpAfter?: number;
@@ -96,20 +100,45 @@ export interface LastCombat {
       efficiency: number;
       leveledUp: boolean;
       newLevel: number;
+      characterXpGain: number;
+      characterXpAfter: number;
+      characterLevelBefore: number;
+      characterLevelAfter: number;
+      attributePointsAfter: number;
+      characterLeveledUp: boolean;
     } | null;
-    secondarySkillXp: {
-      defence: { events: number; xpGained: number };
-      evasion: { events: number; xpGained: number };
-      grants: Array<{
-        skillType: string;
-        xpGained: number;
-        xpAfterEfficiency: number;
-        leveledUp: boolean;
-        newLevel: number;
-      }>;
-    };
   };
 }
+
+export interface CharacterProgression {
+  characterXp: number;
+  characterLevel: number;
+  attributePoints: number;
+  attributes: {
+    vitality: number;
+    strength: number;
+    dexterity: number;
+    intelligence: number;
+    luck: number;
+    evasion: number;
+  };
+}
+
+type AttributeType = keyof CharacterProgression['attributes'];
+
+const DEFAULT_CHARACTER_PROGRESSION: CharacterProgression = {
+  characterXp: 0,
+  characterLevel: 1,
+  attributePoints: 0,
+  attributes: {
+    vitality: 0,
+    strength: 0,
+    dexterity: 0,
+    intelligence: 0,
+    luck: 0,
+    evasion: 0,
+  },
+};
 
 export interface HpState {
   currentHp: number;
@@ -136,6 +165,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }>>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [skills, setSkills] = useState<Array<{ skillType: string; level: number; xp: number; dailyXpGained: number }>>([]);
+  const [characterProgression, setCharacterProgression] = useState<CharacterProgression>(DEFAULT_CHARACTER_PROGRESSION);
   const [inventory, setInventory] = useState<Array<{
     id: string;
     quantity: number;
@@ -148,6 +178,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       id: string;
       name: string;
       itemType: string;
+      weightClass?: 'heavy' | 'medium' | 'light' | null;
       slot: string | null;
       tier: number;
       baseStats: Record<string, unknown>;
@@ -170,6 +201,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         id: string;
         name: string;
         itemType: string;
+        weightClass?: 'heavy' | 'medium' | 'light' | null;
         slot: string | null;
         tier: number;
         baseStats: Record<string, unknown>;
@@ -220,13 +252,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     id: string;
     skillType: string;
     requiredLevel: number;
-    resultTemplate: { id: string; name: string; itemType: string; slot: string | null; tier: number; baseStats: Record<string, unknown>; stackable: boolean; maxDurability: number; requiredSkill: string | null; requiredLevel: number };
+    resultTemplate: { id: string; name: string; itemType: string; weightClass?: 'heavy' | 'medium' | 'light' | null; slot: string | null; tier: number; baseStats: Record<string, unknown>; stackable: boolean; maxDurability: number; requiredSkill: string | null; requiredLevel: number };
     turnCost: number;
     materials: Array<{ templateId: string; quantity: number }>;
     materialTemplates: Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
     xpReward: number;
   }>>([]);
-  const [activeCraftingSkill, setActiveCraftingSkill] = useState<'weaponsmithing' | 'alchemy'>('weaponsmithing');
+  const [activeCraftingSkill, setActiveCraftingSkill] = useState<'refining' | 'tanning' | 'weaving' | 'weaponsmithing' | 'armorsmithing' | 'leatherworking' | 'tailoring' | 'alchemy'>('weaponsmithing');
   const [explorationLog, setExplorationLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>>([]);
   const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
   const [craftingLog, setCraftingLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
@@ -292,8 +324,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const loadAll = useCallback(async () => {
     setActionError(null);
 
-    const [turnRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, hpRes] = await Promise.all([
+    const [turnRes, playerRes, skillsRes, zonesRes, invRes, equipRes, recipesRes, hpRes] = await Promise.all([
       getTurns(),
+      getPlayer(),
       getSkills(),
       getZones(),
       getInventory(),
@@ -303,6 +336,14 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     ]);
 
     if (turnRes.data) setTurns(turnRes.data.currentTurns);
+    if (playerRes.data) {
+      setCharacterProgression({
+        characterXp: playerRes.data.player.characterXp,
+        characterLevel: playerRes.data.player.characterLevel,
+        attributePoints: playerRes.data.player.attributePoints,
+        attributes: playerRes.data.player.attributes,
+      });
+    }
     if (skillsRes.data) setSkills(skillsRes.data.skills);
     if (hpRes.data) setHpState(hpRes.data);
     if (zonesRes.data) {
@@ -513,7 +554,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const PERCENT_STATS = new Set(['critChance', 'critDamage']);
   const formatStatName = (stat: string) => {
-    if (stat === 'evasion') return 'Dodge';
+    if (stat === 'magicDefence') return 'Magic Defence';
     if (stat === 'critChance') return 'Crit Chance';
     if (stat === 'critDamage') return 'Crit Damage';
     return stat
@@ -618,9 +659,14 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
                 efficiency: data.rewards.skillXp.efficiency,
                 leveledUp: data.rewards.skillXp.leveledUp,
                 newLevel: data.rewards.skillXp.newLevel,
+                characterXpGain: data.rewards.skillXp.characterXpGain,
+                characterXpAfter: data.rewards.skillXp.characterXpAfter,
+                characterLevelBefore: data.rewards.skillXp.characterLevelBefore,
+                characterLevelAfter: data.rewards.skillXp.characterLevelAfter,
+                attributePointsAfter: data.rewards.skillXp.attributePointsAfter,
+                characterLeveledUp: data.rewards.skillXp.characterLeveledUp,
               }
             : null,
-          secondarySkillXp: data.rewards.secondarySkillXp,
         },
       });
 
@@ -917,6 +963,21 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setActiveScreen('explore');
   };
 
+  const handleAllocateAttribute = async (attribute: AttributeType, points = 1) => {
+    await runAction('allocate_attribute', async () => {
+      const res = await allocatePlayerAttribute(attribute, points);
+      if (!res.data) {
+        setActionError(res.error?.message ?? 'Failed to allocate attribute points');
+        return;
+      }
+
+      setCharacterProgression(res.data);
+
+      const hpRes = await getHpState();
+      if (hpRes.data) setHpState(hpRes.data);
+    });
+  };
+
   return {
     // Navigation
     activeScreen,
@@ -932,6 +993,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     activeZoneId,
     setActiveZoneId,
     skills,
+    characterProgression,
     inventory,
     equipment,
     gatheringNodes,
@@ -992,6 +1054,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleRepairItem,
     handleEquipItem,
     handleUnequipSlot,
+    handleAllocateAttribute,
   };
 }
 

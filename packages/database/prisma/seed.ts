@@ -35,10 +35,19 @@ const IDS = {
     spiderSilk: 'acacacac-3333-3333-3333-333333333333',
     banditsPouch: 'acacacac-4444-4444-4444-444444444444',
     wolfPelt: 'acacacac-5555-5555-5555-555555555555',
+    bearHide: 'acacacac-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     wolfFang: 'acacacac-6666-6666-6666-666666666666',
     bearClaw: 'acacacac-7777-7777-7777-777777777777',
     ancientBark: 'acacacac-8888-8888-8888-888888888888',
     spriteDust: 'acacacac-9999-9999-9999-999999999999',
+    copperIngot: 'aeaeaeae-1111-1111-1111-111111111111',
+    ironIngot: 'aeaeaeae-2222-2222-2222-222222222222',
+    oakPlank: 'aeaeaeae-3333-3333-3333-333333333333',
+    maplePlank: 'aeaeaeae-4444-4444-4444-444444444444',
+    wolfLeather: 'aeaeaeae-5555-5555-5555-555555555555',
+    bearLeather: 'aeaeaeae-6666-6666-6666-666666666666',
+    silkCloth: 'aeaeaeae-7777-7777-7777-777777777777',
+    ironPlateCuirass: 'aeaeaeae-8888-8888-8888-888888888888',
     copperDagger: 'adadadad-1111-1111-1111-111111111111',
     boarTuskMace: 'adadadad-2222-2222-2222-222222222222',
     spiderSilkRobe: 'adadadad-3333-3333-3333-333333333333',
@@ -74,6 +83,7 @@ const IDS = {
     wolfCap: '12345678-4444-4444-4444-444444444444',
     bearClaw: '12345679-5555-5555-5555-555555555555',
     bearPelt: '12345679-6666-6666-6666-666666666666',
+    bearHide: '1234567a-5555-5555-5555-555555555555',
     bearPotion: '12345679-7777-7777-7777-777777777777',
     treantBark: '12345679-8888-8888-8888-888888888888',
     treantOak: '12345679-9999-9999-9999-999999999999',
@@ -95,6 +105,15 @@ const IDS = {
     antivenomPotion: '66666666-9999-9999-9999-999999999999',
     bearHideVest: '66666667-1111-1111-1111-111111111111',
     ancientStaff: '66666667-2222-2222-2222-222222222222',
+    refineCopperIngot: '66666667-3333-3333-3333-333333333333',
+    refineIronIngot: '66666667-4444-4444-4444-444444444444',
+    refineOakPlank: '66666667-5555-5555-5555-555555555555',
+    refineMaplePlank: '66666667-6666-6666-6666-666666666666',
+    tanWolfLeather: '66666667-7777-7777-7777-777777777777',
+    tanBearLeather: '66666667-8888-8888-8888-888888888888',
+    weaveSilkCloth: '66666667-9999-9999-9999-999999999999',
+    leatherCap: '66666668-1111-1111-1111-111111111111',
+    ironPlateCuirass: '66666668-2222-2222-2222-222222222222',
   },
 } as const;
 
@@ -199,9 +218,10 @@ async function seedItemTemplates() {
       id: IDS.items.leatherCap,
       name: 'Leather Cap',
       itemType: 'armor',
+      weightClass: 'medium',
       slot: 'head',
       tier: 1,
-      baseStats: { armor: 3 },
+      baseStats: { armor: 3, magicDefence: 3 },
       requiredSkill: null,
       requiredLevel: 1,
       maxDurability: 80,
@@ -210,9 +230,10 @@ async function seedItemTemplates() {
     update: {
       name: 'Leather Cap',
       itemType: 'armor',
+      weightClass: 'medium',
       slot: 'head',
       tier: 1,
-      baseStats: { armor: 3 },
+      baseStats: { armor: 3, magicDefence: 3 },
       requiredSkill: null,
       requiredLevel: 1,
       maxDurability: 80,
@@ -889,6 +910,146 @@ async function seedNewSkillItemTemplates() {
       stackable: false,
     },
   });
+
+  const processingAndArmourTemplates: Array<{
+    id: string;
+    name: string;
+    itemType: string;
+    weightClass: 'heavy' | 'medium' | 'light' | null;
+    slot: string | null;
+    tier: number;
+    baseStats: Prisma.InputJsonValue;
+    requiredSkill: string | null;
+    requiredLevel: number;
+    maxDurability: number;
+    stackable: boolean;
+  }> = [
+    {
+      id: IDS.items.copperIngot,
+      name: 'Copper Ingot',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.ironIngot,
+      name: 'Iron Ingot',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.oakPlank,
+      name: 'Oak Plank',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 1,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.maplePlank,
+      name: 'Maple Plank',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.wolfLeather,
+      name: 'Wolf Leather',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.bearLeather,
+      name: 'Bear Leather',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.silkCloth,
+      name: 'Silk Cloth',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.bearHide,
+      name: 'Bear Hide',
+      itemType: 'resource',
+      weightClass: null,
+      slot: null,
+      tier: 2,
+      baseStats: {},
+      requiredSkill: null,
+      requiredLevel: 1,
+      maxDurability: 0,
+      stackable: true,
+    },
+    {
+      id: IDS.items.ironPlateCuirass,
+      name: 'Iron Plate Cuirass',
+      itemType: 'armor',
+      weightClass: 'heavy',
+      slot: 'chest',
+      tier: 2,
+      baseStats: { armor: 12, magicDefence: 4, health: 10, dodge: -2 },
+      requiredSkill: null,
+      requiredLevel: 10,
+      maxDurability: 140,
+      stackable: false,
+    },
+  ];
+
+  for (const template of processingAndArmourTemplates) {
+    await prisma.itemTemplate.upsert({
+      where: { id: template.id },
+      create: template,
+      update: template,
+    });
+  }
 }
 
 async function seedMobLootAndCraftedItemTemplates() {
@@ -896,6 +1057,7 @@ async function seedMobLootAndCraftedItemTemplates() {
     id: string;
     name: string;
     itemType: string;
+    weightClass?: 'heavy' | 'medium' | 'light' | null;
     slot: string | null;
     tier: number;
     baseStats: Prisma.InputJsonValue;
@@ -1040,9 +1202,10 @@ async function seedMobLootAndCraftedItemTemplates() {
       id: IDS.items.spiderSilkRobe,
       name: 'Spider Silk Robe',
       itemType: 'armor',
+      weightClass: 'light',
       slot: 'chest',
       tier: 2,
-      baseStats: { armor: 4, evasion: 3 },
+      baseStats: { armor: 3, magicDefence: 8, dodge: 4 },
       requiredSkill: null,
       requiredLevel: 5,
       maxDurability: 90,
@@ -1076,9 +1239,10 @@ async function seedMobLootAndCraftedItemTemplates() {
       id: IDS.items.bearHideVest,
       name: 'Bear Hide Vest',
       itemType: 'armor',
+      weightClass: 'medium',
       slot: 'chest',
       tier: 2,
-      baseStats: { armor: 8 },
+      baseStats: { armor: 8, magicDefence: 8, health: 4 },
       requiredSkill: null,
       requiredLevel: 10,
       maxDurability: 120,
@@ -1237,6 +1401,14 @@ async function seedDropTables() {
       maxQuantity: 2,
     },
     {
+      id: IDS.dropTables.bearHide,
+      mobTemplateId: IDS.mobs.forestBear,
+      itemTemplateId: IDS.items.bearHide,
+      dropChance: '0.40',
+      minQuantity: 1,
+      maxQuantity: 2,
+    },
+    {
       id: IDS.dropTables.bearPotion,
       mobTemplateId: IDS.mobs.forestBear,
       itemTemplateId: IDS.items.healthPotion,
@@ -1326,7 +1498,8 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.woodenSword,
       turnCost: 50,
       materials: [
-        { templateId: IDS.items.copperOre, quantity: 5 },
+        { templateId: IDS.items.oakPlank, quantity: 4 },
+        { templateId: IDS.items.copperIngot, quantity: 2 },
       ],
       xpReward: 25,
     },
@@ -1336,7 +1509,8 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.woodenSword,
       turnCost: 50,
       materials: [
-        { templateId: IDS.items.copperOre, quantity: 5 },
+        { templateId: IDS.items.oakPlank, quantity: 4 },
+        { templateId: IDS.items.copperIngot, quantity: 2 },
       ],
       xpReward: 25,
     },
@@ -1401,8 +1575,8 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.oakShortbow,
       turnCost: 50,
       materials: [
-        { templateId: IDS.items.oakLog, quantity: 8 },
-        { templateId: IDS.items.copperOre, quantity: 3 },
+        { templateId: IDS.items.oakPlank, quantity: 8 },
+        { templateId: IDS.items.maplePlank, quantity: 2 },
       ],
       xpReward: 35,
     },
@@ -1412,8 +1586,8 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.oakShortbow,
       turnCost: 50,
       materials: [
-        { templateId: IDS.items.oakLog, quantity: 8 },
-        { templateId: IDS.items.copperOre, quantity: 3 },
+        { templateId: IDS.items.oakPlank, quantity: 8 },
+        { templateId: IDS.items.maplePlank, quantity: 2 },
       ],
       xpReward: 35,
     },
@@ -1428,7 +1602,8 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.oakStaff,
       turnCost: 50,
       materials: [
-        { templateId: IDS.items.oakLog, quantity: 10 },
+        { templateId: IDS.items.oakPlank, quantity: 10 },
+        { templateId: IDS.items.silkCloth, quantity: 2 },
       ],
       xpReward: 35,
     },
@@ -1438,7 +1613,8 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.oakStaff,
       turnCost: 50,
       materials: [
-        { templateId: IDS.items.oakLog, quantity: 10 },
+        { templateId: IDS.items.oakPlank, quantity: 10 },
+        { templateId: IDS.items.silkCloth, quantity: 2 },
       ],
       xpReward: 35,
     },
@@ -1453,7 +1629,7 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.copperDagger,
       turnCost: 40,
       materials: [
-        { templateId: IDS.items.copperOre, quantity: 8 },
+        { templateId: IDS.items.copperIngot, quantity: 4 },
         { templateId: IDS.items.ratTail, quantity: 3 },
       ],
       xpReward: 30,
@@ -1464,7 +1640,7 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.copperDagger,
       turnCost: 40,
       materials: [
-        { templateId: IDS.items.copperOre, quantity: 8 },
+        { templateId: IDS.items.copperIngot, quantity: 4 },
         { templateId: IDS.items.ratTail, quantity: 3 },
       ],
       xpReward: 30,
@@ -1481,7 +1657,8 @@ async function seedRecipes() {
       turnCost: 55,
       materials: [
         { templateId: IDS.items.boarTusk, quantity: 5 },
-        { templateId: IDS.items.oakLog, quantity: 5 },
+        { templateId: IDS.items.oakPlank, quantity: 5 },
+        { templateId: IDS.items.copperIngot, quantity: 2 },
       ],
       xpReward: 40,
     },
@@ -1492,7 +1669,8 @@ async function seedRecipes() {
       turnCost: 55,
       materials: [
         { templateId: IDS.items.boarTusk, quantity: 5 },
-        { templateId: IDS.items.oakLog, quantity: 5 },
+        { templateId: IDS.items.oakPlank, quantity: 5 },
+        { templateId: IDS.items.copperIngot, quantity: 2 },
       ],
       xpReward: 40,
     },
@@ -1502,23 +1680,23 @@ async function seedRecipes() {
     where: { id: IDS.recipes.spiderSilkRobe },
     create: {
       id: IDS.recipes.spiderSilkRobe,
-      skillType: 'weaponsmithing',
+      skillType: 'tailoring',
       requiredLevel: 5,
       resultTemplateId: IDS.items.spiderSilkRobe,
       turnCost: 60,
       materials: [
-        { templateId: IDS.items.spiderSilk, quantity: 10 },
+        { templateId: IDS.items.silkCloth, quantity: 6 },
         { templateId: IDS.items.forestSage, quantity: 3 },
       ],
       xpReward: 40,
     },
     update: {
-      skillType: 'weaponsmithing',
+      skillType: 'tailoring',
       requiredLevel: 5,
       resultTemplateId: IDS.items.spiderSilkRobe,
       turnCost: 60,
       materials: [
-        { templateId: IDS.items.spiderSilk, quantity: 10 },
+        { templateId: IDS.items.silkCloth, quantity: 6 },
         { templateId: IDS.items.forestSage, quantity: 3 },
       ],
       xpReward: 40,
@@ -1535,7 +1713,7 @@ async function seedRecipes() {
       turnCost: 70,
       materials: [
         { templateId: IDS.items.wolfFang, quantity: 6 },
-        { templateId: IDS.items2.ironOre, quantity: 4 },
+        { templateId: IDS.items.ironIngot, quantity: 4 },
       ],
       xpReward: 55,
     },
@@ -1546,7 +1724,7 @@ async function seedRecipes() {
       turnCost: 70,
       materials: [
         { templateId: IDS.items.wolfFang, quantity: 6 },
-        { templateId: IDS.items2.ironOre, quantity: 4 },
+        { templateId: IDS.items.ironIngot, quantity: 4 },
       ],
       xpReward: 55,
     },
@@ -1561,7 +1739,7 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.antivenomPotion,
       turnCost: 30,
       materials: [
-        { templateId: IDS.items.spiderSilk, quantity: 4 },
+        { templateId: IDS.items.silkCloth, quantity: 2 },
         { templateId: IDS.items.forestSage, quantity: 3 },
       ],
       xpReward: 30,
@@ -1572,7 +1750,7 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.antivenomPotion,
       turnCost: 30,
       materials: [
-        { templateId: IDS.items.spiderSilk, quantity: 4 },
+        { templateId: IDS.items.silkCloth, quantity: 2 },
         { templateId: IDS.items.forestSage, quantity: 3 },
       ],
       xpReward: 30,
@@ -1583,24 +1761,24 @@ async function seedRecipes() {
     where: { id: IDS.recipes.bearHideVest },
     create: {
       id: IDS.recipes.bearHideVest,
-      skillType: 'weaponsmithing',
+      skillType: 'leatherworking',
       requiredLevel: 10,
       resultTemplateId: IDS.items.bearHideVest,
       turnCost: 80,
       materials: [
-        { templateId: IDS.items.wolfPelt, quantity: 8 },
-        { templateId: IDS.items.bearClaw, quantity: 4 },
+        { templateId: IDS.items.bearLeather, quantity: 6 },
+        { templateId: IDS.items.wolfLeather, quantity: 4 },
       ],
       xpReward: 65,
     },
     update: {
-      skillType: 'weaponsmithing',
+      skillType: 'leatherworking',
       requiredLevel: 10,
       resultTemplateId: IDS.items.bearHideVest,
       turnCost: 80,
       materials: [
-        { templateId: IDS.items.wolfPelt, quantity: 8 },
-        { templateId: IDS.items.bearClaw, quantity: 4 },
+        { templateId: IDS.items.bearLeather, quantity: 6 },
+        { templateId: IDS.items.wolfLeather, quantity: 4 },
       ],
       xpReward: 65,
     },
@@ -1615,8 +1793,9 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.ancientStaff,
       turnCost: 85,
       materials: [
-        { templateId: IDS.items.ancientBark, quantity: 6 },
+        { templateId: IDS.items.maplePlank, quantity: 8 },
         { templateId: IDS.items.spriteDust, quantity: 4 },
+        { templateId: IDS.items.silkCloth, quantity: 3 },
       ],
       xpReward: 70,
     },
@@ -1626,12 +1805,119 @@ async function seedRecipes() {
       resultTemplateId: IDS.items.ancientStaff,
       turnCost: 85,
       materials: [
-        { templateId: IDS.items.ancientBark, quantity: 6 },
+        { templateId: IDS.items.maplePlank, quantity: 8 },
         { templateId: IDS.items.spriteDust, quantity: 4 },
+        { templateId: IDS.items.silkCloth, quantity: 3 },
       ],
       xpReward: 70,
     },
   });
+
+  const processingRecipes: Array<{
+    id: string;
+    skillType: string;
+    requiredLevel: number;
+    resultTemplateId: string;
+    turnCost: number;
+    materials: Array<{ templateId: string; quantity: number }>;
+    xpReward: number;
+  }> = [
+    {
+      id: IDS.recipes.refineCopperIngot,
+      skillType: 'refining',
+      requiredLevel: 1,
+      resultTemplateId: IDS.items.copperIngot,
+      turnCost: 20,
+      materials: [{ templateId: IDS.items.copperOre, quantity: 3 }],
+      xpReward: 12,
+    },
+    {
+      id: IDS.recipes.refineIronIngot,
+      skillType: 'refining',
+      requiredLevel: 8,
+      resultTemplateId: IDS.items.ironIngot,
+      turnCost: 24,
+      materials: [{ templateId: IDS.items2.ironOre, quantity: 3 }],
+      xpReward: 16,
+    },
+    {
+      id: IDS.recipes.refineOakPlank,
+      skillType: 'refining',
+      requiredLevel: 1,
+      resultTemplateId: IDS.items.oakPlank,
+      turnCost: 18,
+      materials: [{ templateId: IDS.items.oakLog, quantity: 2 }],
+      xpReward: 10,
+    },
+    {
+      id: IDS.recipes.refineMaplePlank,
+      skillType: 'refining',
+      requiredLevel: 8,
+      resultTemplateId: IDS.items.maplePlank,
+      turnCost: 22,
+      materials: [{ templateId: IDS.items.mapleLog, quantity: 2 }],
+      xpReward: 14,
+    },
+    {
+      id: IDS.recipes.tanWolfLeather,
+      skillType: 'tanning',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.wolfLeather,
+      turnCost: 20,
+      materials: [{ templateId: IDS.items.wolfPelt, quantity: 2 }],
+      xpReward: 12,
+    },
+    {
+      id: IDS.recipes.tanBearLeather,
+      skillType: 'tanning',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.bearLeather,
+      turnCost: 24,
+      materials: [{ templateId: IDS.items.bearHide, quantity: 2 }],
+      xpReward: 16,
+    },
+    {
+      id: IDS.recipes.weaveSilkCloth,
+      skillType: 'weaving',
+      requiredLevel: 5,
+      resultTemplateId: IDS.items.silkCloth,
+      turnCost: 20,
+      materials: [{ templateId: IDS.items.spiderSilk, quantity: 3 }],
+      xpReward: 12,
+    },
+    {
+      id: IDS.recipes.leatherCap,
+      skillType: 'leatherworking',
+      requiredLevel: 4,
+      resultTemplateId: IDS.items.leatherCap,
+      turnCost: 35,
+      materials: [
+        { templateId: IDS.items.wolfLeather, quantity: 3 },
+        { templateId: IDS.items.oakPlank, quantity: 1 },
+      ],
+      xpReward: 24,
+    },
+    {
+      id: IDS.recipes.ironPlateCuirass,
+      skillType: 'armorsmithing',
+      requiredLevel: 10,
+      resultTemplateId: IDS.items.ironPlateCuirass,
+      turnCost: 70,
+      materials: [
+        { templateId: IDS.items.ironIngot, quantity: 8 },
+        { templateId: IDS.items.oakPlank, quantity: 2 },
+      ],
+      xpReward: 60,
+    },
+  ];
+
+  for (const recipe of processingRecipes) {
+    await prisma.craftingRecipe.upsert({
+      where: { id: recipe.id },
+      create: recipe,
+      update: recipe,
+    });
+  }
 }
 
 async function main() {

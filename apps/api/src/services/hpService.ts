@@ -12,13 +12,19 @@ import type { HpState, RestResult, RecoveryResult } from '@adventure/shared';
 import { AppError } from '../middleware/errorHandler';
 import { getEquipmentStats } from './equipmentService';
 import { spendPlayerTurnsTx } from './turnBankService';
+import { normalizePlayerAttributes } from './attributesService';
 
 async function getVitalityLevel(playerId: string): Promise<number> {
-  const skill = await prisma.playerSkill.findUnique({
-    where: { playerId_skillType: { playerId, skillType: 'vitality' } },
-    select: { level: true },
+  // Temporary shim until local Prisma client is regenerated with new Player fields.
+  const prismaAny = prisma as unknown as any;
+  const player = await prismaAny.player.findUnique({
+    where: { id: playerId },
+    select: { attributes: true },
   });
-  return skill?.level ?? 1;
+  if (!player) {
+    throw new AppError(404, 'Player not found', 'NOT_FOUND');
+  }
+  return normalizePlayerAttributes(player.attributes).vitality;
 }
 
 export async function getHpState(

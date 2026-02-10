@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '@adventure/database';
 import { authenticate } from '../middleware/auth';
+import { AppError } from '../middleware/errorHandler';
 
 export const zonesRouter = Router();
 
@@ -17,6 +18,9 @@ zonesRouter.get('/', async (req, res, next) => {
     const zones = await prisma.zone.findMany({
       orderBy: [{ isStarter: 'desc' }, { difficulty: 'asc' }, { name: 'asc' }],
     });
+    if (zones.length === 0) {
+      throw new AppError(500, 'No zones configured. Run database seed.', 'NO_ZONES_CONFIGURED');
+    }
 
     const logs = await prisma.activityLog.findMany({
       where: {

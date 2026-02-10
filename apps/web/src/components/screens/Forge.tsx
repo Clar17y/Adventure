@@ -45,7 +45,7 @@ function statEntries(stats: Record<string, unknown> | null | undefined): Array<[
 const PERCENT_STATS = new Set(['critChance', 'critDamage']);
 
 function prettifyStat(stat: string): string {
-  if (stat === 'evasion') return 'Dodge';
+  if (stat === 'magicDefence') return 'Magic Defence';
   if (stat === 'critChance') return 'Crit Chance';
   if (stat === 'critDamage') return 'Crit Damage';
   return stat

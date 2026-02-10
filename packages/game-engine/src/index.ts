@@ -11,6 +11,7 @@ export * from './skills/xpCalculator';
 
 // Exploration
 export * from './exploration/probabilityModel';
+export * from './exploration/xpScaling';
 
 // HP
 export * from './hp/hpCalculator';

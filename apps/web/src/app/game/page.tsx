@@ -21,21 +21,24 @@ import { rarityFromTier } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
 import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
-import { Sword, Shield, Crosshair, Heart, Sparkles, Zap, Pickaxe, Hammer, Leaf, FlaskConical, Axe } from 'lucide-react';
+import { Sword, Shield, Crosshair, Sparkles, Pickaxe, Hammer, Leaf, FlaskConical, Axe, Scissors, Anvil } from 'lucide-react';
 import { CombatScreen } from './screens/CombatScreen';
 import { useGameController, type Screen } from './useGameController';
 
 const SKILL_META: Record<string, { name: string; icon: typeof Sword; color: string }> = {
   melee: { name: 'Melee', icon: Sword, color: 'var(--rpg-red)' },
-  defence: { name: 'Defence', icon: Shield, color: 'var(--rpg-blue-light)' },
   ranged: { name: 'Ranged', icon: Crosshair, color: 'var(--rpg-green-light)' },
-  vitality: { name: 'Vitality', icon: Heart, color: 'var(--rpg-green-light)' },
   magic: { name: 'Magic', icon: Sparkles, color: 'var(--rpg-purple)' },
-  evasion: { name: 'Evasion', icon: Zap, color: 'var(--rpg-gold)' },
   mining: { name: 'Mining', icon: Pickaxe, color: 'var(--rpg-text-secondary)' },
   foraging: { name: 'Foraging', icon: Leaf, color: 'var(--rpg-green-light)' },
   woodcutting: { name: 'Woodcutting', icon: Axe, color: 'var(--rpg-text-secondary)' },
+  refining: { name: 'Refining', icon: Hammer, color: 'var(--rpg-blue-light)' },
+  tanning: { name: 'Tanning', icon: Shield, color: 'var(--rpg-gold)' },
+  weaving: { name: 'Weaving', icon: Scissors, color: 'var(--rpg-purple)' },
   weaponsmithing: { name: 'Weaponsmithing', icon: Hammer, color: 'var(--rpg-gold)' },
+  armorsmithing: { name: 'Armorsmithing', icon: Anvil, color: 'var(--rpg-blue-light)' },
+  leatherworking: { name: 'Leatherworking', icon: Shield, color: 'var(--rpg-green-light)' },
+  tailoring: { name: 'Tailoring', icon: Scissors, color: 'var(--rpg-purple)' },
   alchemy: { name: 'Alchemy', icon: FlaskConical, color: 'var(--rpg-purple)' },
 };
 
@@ -46,7 +49,13 @@ const GATHERING_SKILL_TABS = [
 ] as const;
 
 const CRAFTING_SKILL_TABS = [
+  { id: 'refining', label: 'Refining' },
+  { id: 'tanning', label: 'Tanning' },
+  { id: 'weaving', label: 'Weaving' },
   { id: 'weaponsmithing', label: 'Weaponsmithing' },
+  { id: 'armorsmithing', label: 'Armorsmithing' },
+  { id: 'leatherworking', label: 'Leatherworking' },
+  { id: 'tailoring', label: 'Tailoring' },
   { id: 'alchemy', label: 'Alchemy' },
 ] as const;
 
@@ -158,6 +167,7 @@ export default function GamePage() {
     zones,
     activeZoneId,
     skills,
+    characterProgression,
     inventory,
     equipment,
     gatheringNodes,
@@ -214,6 +224,7 @@ export default function GamePage() {
     handleRepairItem,
     handleEquipItem,
     handleUnequipSlot,
+    handleAllocateAttribute,
   } = useGameController({ isAuthenticated });
 
   if (isLoading) {
@@ -234,6 +245,10 @@ export default function GamePage() {
   const renderScreen = () => {
     switch (activeScreen) {
       case 'home':
+        const currentLevelFloorXp = xpForLevel(characterProgression.characterLevel);
+        const nextLevelTotalXp = xpForLevel(characterProgression.characterLevel + 1);
+        const currentLevelXp = Math.max(0, characterProgression.characterXp - currentLevelFloorXp);
+        const requiredLevelXp = Math.max(1, nextLevelTotalXp - currentLevelFloorXp);
         return (
           <Dashboard
             playerData={{
@@ -241,8 +256,10 @@ export default function GamePage() {
               maxTurns: TURN_CONSTANTS.BANK_CAP,
               turnsRegenRate: TURN_CONSTANTS.REGEN_RATE * 60,
               gold: 0,
-              currentXP: skills.reduce((sum, s) => sum + (s.xp ?? 0), 0),
-              nextLevelXP: 0,
+              currentXP: characterProgression.characterXp,
+              nextLevelXP: nextLevelTotalXp,
+              currentLevelXp,
+              requiredLevelXp,
               currentZone: currentZone?.name ?? 'Unknown',
               currentHp: hpState.currentHp,
               maxHp: hpState.maxHp,
@@ -250,6 +267,7 @@ export default function GamePage() {
               isRecovering: hpState.isRecovering,
               recoveryCost: hpState.recoveryCost,
             }}
+            characterProgression={characterProgression}
             skills={skills
               .map((s) => {
                 const meta = SKILL_META[s.skillType];
@@ -258,6 +276,7 @@ export default function GamePage() {
               })
               .filter(Boolean) as Array<{ name: string; level: number; icon: typeof Sword; imageSrc: string }>}
             onNavigate={handleNavigate}
+            onAllocateAttribute={handleAllocateAttribute}
           />
         );
       case 'explore':
@@ -286,6 +305,7 @@ export default function GamePage() {
               rarity: item.rarity,
               description: item.template.itemType,
               type: item.template.itemType,
+              weightClass: item.template.weightClass ?? null,
               slot: item.template.slot,
               equippedSlot: item.equippedSlot,
               durability: (() => {
@@ -325,6 +345,7 @@ export default function GamePage() {
                       name: template.name,
                       imageSrc: itemImageSrc(template.name, template.itemType),
                       rarity: e.item!.rarity,
+                      weightClass: template.weightClass ?? null,
                       durability: cur,
                       maxDurability: max,
                       baseStats: template.baseStats,
@@ -346,6 +367,7 @@ export default function GamePage() {
                   imageSrc: itemImageSrc(item.template.name, item.template.itemType),
                   rarity: item.rarity,
                   slot: item.template.slot as string,
+                  weightClass: item.template.weightClass ?? null,
                   equippedSlot: item.equippedSlot,
                   durability,
                   baseStats: item.template.baseStats,
@@ -357,6 +379,7 @@ export default function GamePage() {
             stats={(() => {
               let attack = 0;
               let defence = 0;
+              let magicDefence = 0;
               let hp = 0;
               let dodge = 0;
               let accuracy = 0;
@@ -368,9 +391,9 @@ export default function GamePage() {
                 if (base) {
                   if (typeof base.attack === 'number') attack += base.attack;
                   if (typeof base.armor === 'number') defence += base.armor;
+                  if (typeof base.magicDefence === 'number') magicDefence += base.magicDefence;
                   if (typeof base.health === 'number') hp += base.health;
                   if (typeof base.dodge === 'number') dodge += base.dodge;
-                  else if (typeof base.evasion === 'number') dodge += base.evasion;
                   if (typeof base.accuracy === 'number') accuracy += base.accuracy;
                   if (typeof base.critChance === 'number') critChance += base.critChance;
                   if (typeof base.critDamage === 'number') critDamage += base.critDamage;
@@ -378,15 +401,15 @@ export default function GamePage() {
                 if (bonus) {
                   if (typeof bonus.attack === 'number') attack += bonus.attack;
                   if (typeof bonus.armor === 'number') defence += bonus.armor;
+                  if (typeof bonus.magicDefence === 'number') magicDefence += bonus.magicDefence;
                   if (typeof bonus.health === 'number') hp += bonus.health;
                   if (typeof bonus.dodge === 'number') dodge += bonus.dodge;
-                  else if (typeof bonus.evasion === 'number') dodge += bonus.evasion;
                   if (typeof bonus.accuracy === 'number') accuracy += bonus.accuracy;
                   if (typeof bonus.critChance === 'number') critChance += bonus.critChance;
                   if (typeof bonus.critDamage === 'number') critDamage += bonus.critDamage;
                 }
               }
-              return { attack, defence, hp, dodge, accuracy, critChance, critDamage };
+              return { attack, defence, magicDefence, hp, dodge, accuracy, critChance, critDamage };
             })()}
           />
         );

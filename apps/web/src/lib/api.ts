@@ -1,4 +1,31 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+function resolveApiUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (!configured) {
+    if (typeof window !== 'undefined') {
+      return `${window.location.protocol}//${window.location.hostname}:4000`;
+    }
+    return 'http://localhost:4000';
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const parsed = new URL(configured);
+      const isConfiguredLoopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+      const isRemoteClient = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      if (isConfiguredLoopback && isRemoteClient) {
+        const protocol = parsed.protocol || window.location.protocol;
+        const port = parsed.port || '4000';
+        return `${protocol}//${window.location.hostname}:${port}`;
+      }
+    } catch {
+      // fall through to configured value
+    }
+  }
+
+  return configured;
+}
+
+const API_URL = resolveApiUrl();
 
 interface ApiResponse<T> {
   data?: T;
@@ -170,8 +197,62 @@ export async function refreshToken(token: string) {
 // Player
 export async function getPlayer() {
   return fetchApi<{
-    player: { id: string; username: string; email: string; createdAt: string };
+    player: {
+      id: string;
+      username: string;
+      email: string;
+      createdAt: string;
+      characterXp: number;
+      characterLevel: number;
+      attributePoints: number;
+      attributes: {
+        vitality: number;
+        strength: number;
+        dexterity: number;
+        intelligence: number;
+        luck: number;
+        evasion: number;
+      };
+    };
   }>('/api/v1/player');
+}
+
+export async function getPlayerAttributes() {
+  return fetchApi<{
+    characterXp: number;
+    characterLevel: number;
+    attributePoints: number;
+    attributes: {
+      vitality: number;
+      strength: number;
+      dexterity: number;
+      intelligence: number;
+      luck: number;
+      evasion: number;
+    };
+  }>('/api/v1/player/attributes');
+}
+
+export async function allocatePlayerAttribute(
+  attribute: 'vitality' | 'strength' | 'dexterity' | 'intelligence' | 'luck' | 'evasion',
+  points: number = 1
+) {
+  return fetchApi<{
+    characterXp: number;
+    characterLevel: number;
+    attributePoints: number;
+    attributes: {
+      vitality: number;
+      strength: number;
+      dexterity: number;
+      intelligence: number;
+      luck: number;
+      evasion: number;
+    };
+  }>('/api/v1/player/attributes', {
+    method: 'POST',
+    body: JSON.stringify({ attribute, points }),
+  });
 }
 
 export async function getSkills() {
@@ -205,6 +286,7 @@ export async function getEquipment() {
           id: string;
           name: string;
           itemType: string;
+          weightClass: 'heavy' | 'medium' | 'light' | null;
           slot: string | null;
           tier: number;
           baseStats: Record<string, unknown>;
@@ -388,8 +470,10 @@ export interface CombatLogEntryResponse {
   targetDodge?: number;
   targetEvasion?: number;
   targetDefence?: number;
+  targetMagicDefence?: number;
   rawDamage?: number;
   armorReduction?: number;
+  magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
   playerHpAfter?: number;
@@ -406,12 +490,12 @@ export interface SkillXpGrantResponse {
   atDailyCap: boolean;
   newTotalXp: number;
   newDailyXpGained: number;
-}
-
-export interface SecondarySkillXpResponse {
-  defence: { events: number; xpGained: number };
-  evasion: { events: number; xpGained: number };
-  grants: SkillXpGrantResponse[];
+  characterXpGain: number;
+  characterXpAfter: number;
+  characterLevelBefore: number;
+  characterLevelAfter: number;
+  attributePointsAfter: number;
+  characterLeveledUp: boolean;
 }
 
 export type CombatOutcomeResponse = 'victory' | 'defeat' | 'fled';
@@ -439,7 +523,6 @@ export interface CombatResultResponse {
     }>;
     durabilityLost: Array<{ itemId: string; amount: number }>;
     skillXp: SkillXpGrantResponse | null;
-    secondarySkillXp: SecondarySkillXpResponse;
   };
 }
 
@@ -467,7 +550,6 @@ export interface CombatResponse {
     }>;
     durabilityLost: Array<{ itemId: string; amount: number }>;
     skillXp: SkillXpGrantResponse | null;
-    secondarySkillXp: SecondarySkillXpResponse;
   };
 }
 
@@ -610,13 +692,14 @@ export async function getInventory() {
       quantity: number;
       bonusStats: Record<string, number> | null;
       createdAt: string;
-      template: {
-        id: string;
-        name: string;
-        itemType: string;
-        slot: string | null;
-        tier: number;
-        baseStats: Record<string, unknown>;
+        template: {
+          id: string;
+          name: string;
+          itemType: string;
+          weightClass: 'heavy' | 'medium' | 'light' | null;
+          slot: string | null;
+          tier: number;
+          baseStats: Record<string, unknown>;
         requiredSkill: string | null;
         requiredLevel: number;
         maxDurability: number;
@@ -678,7 +761,22 @@ export async function mine(playerNodeId: string, turns: number, currentZoneId: s
       nodeDepleted: boolean;
     };
     results: { actions: number; baseYield: number; yieldMultiplier: number; totalYield: number; itemTemplateId: string; itemId: string };
-    xp: { skillType: string; xpAfterEfficiency: number; efficiency: number; leveledUp: boolean; newLevel: number; atDailyCap: boolean; newTotalXp: number; newDailyXpGained: number };
+    xp: {
+      skillType: string;
+      xpAfterEfficiency: number;
+      efficiency: number;
+      leveledUp: boolean;
+      newLevel: number;
+      atDailyCap: boolean;
+      newTotalXp: number;
+      newDailyXpGained: number;
+      characterXpGain: number;
+      characterXpAfter: number;
+      characterLevelBefore: number;
+      characterLevelAfter: number;
+      attributePointsAfter: number;
+      characterLeveledUp: boolean;
+    };
   }>('/api/v1/gathering/mine', {
     method: 'POST',
     body: JSON.stringify({ playerNodeId, turns, currentZoneId }),
@@ -695,6 +793,7 @@ export async function getCraftingRecipes() {
         id: string;
         name: string;
         itemType: string;
+        weightClass: 'heavy' | 'medium' | 'light' | null;
         slot: string | null;
         tier: number;
         baseStats: Record<string, unknown>;
@@ -723,7 +822,22 @@ export async function craft(recipeId: string, quantity: number = 1) {
       bonusStat?: string;
       bonusValue?: number;
     }>;
-    xp: { skillType: string; xpAfterEfficiency: number; efficiency: number; leveledUp: boolean; newLevel: number; atDailyCap: boolean; newTotalXp: number; newDailyXpGained: number };
+    xp: {
+      skillType: string;
+      xpAfterEfficiency: number;
+      efficiency: number;
+      leveledUp: boolean;
+      newLevel: number;
+      atDailyCap: boolean;
+      newTotalXp: number;
+      newDailyXpGained: number;
+      characterXpGain: number;
+      characterXpAfter: number;
+      characterLevelBefore: number;
+      characterLevelAfter: number;
+      attributePointsAfter: number;
+      characterLeveledUp: boolean;
+    };
   }>('/api/v1/crafting/craft', {
     method: 'POST',
     body: JSON.stringify({ recipeId, quantity }),

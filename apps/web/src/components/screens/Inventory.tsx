@@ -17,6 +17,7 @@ interface Item {
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
   description: string;
   type: string;
+  weightClass?: 'heavy' | 'medium' | 'light' | null;
   slot?: string | null;
   equippedSlot?: string | null;
   durability?: { current: number; max: number } | null;
@@ -59,11 +60,29 @@ function formatStatValue(stat: string, value: number): string {
   return String(value);
 }
 
+function formatSignedStatValue(stat: string, value: number): string {
+  const formatted = formatStatValue(stat, Math.abs(value));
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `-${formatted}`;
+  return formatted;
+}
+
+function signedClass(value: number, positiveClass: string): string {
+  if (value < 0) return 'text-[var(--rpg-red)]';
+  return positiveClass;
+}
+
+function prettyWeightClass(weightClass?: 'heavy' | 'medium' | 'light' | null): string | null {
+  if (!weightClass) return null;
+  return `${weightClass[0].toUpperCase()}${weightClass.slice(1)} Armor`;
+}
+
 function statDisplay(stat: string) {
   if (stat === 'attack') return { Icon: Sword, color: 'text-[var(--rpg-red)]', label: 'Attack' };
   if (stat === 'armor') return { Icon: Shield, color: 'text-[var(--rpg-blue-light)]', label: 'Armor' };
+  if (stat === 'magicDefence') return { Icon: Zap, color: 'text-[var(--rpg-purple)]', label: 'Magic Def' };
   if (stat === 'health') return { Icon: Heart, color: 'text-[var(--rpg-green-light)]', label: 'HP' };
-  if (stat === 'dodge' || stat === 'evasion') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Dodge' };
+  if (stat === 'dodge') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Dodge' };
   if (stat === 'accuracy') return { Icon: Crosshair, color: 'text-[var(--rpg-blue-light)]', label: 'Accuracy' };
   if (stat === 'critChance') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Crit Chance' };
   if (stat === 'critDamage') return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: 'Crit Damage' };
@@ -77,13 +96,14 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
   const stats = selectedItem?.baseStats ?? {};
   const attack = numStat(stats.attack);
   const armor = numStat(stats.armor);
+  const magicDefence = numStat(stats.magicDefence);
   const health = numStat(stats.health);
-  const dodge = numStat(stats.dodge) ?? numStat(stats.evasion);
+  const dodge = numStat(stats.dodge);
   const accuracy = numStat(stats.accuracy);
   const bonusEntries = Object.entries(selectedItem?.bonusStats ?? {})
     .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] !== 0);
 
-  const hasAnyStats = [attack, armor, health, dodge, accuracy].some((v) => typeof v === 'number' && v !== 0);
+  const hasAnyStats = [attack, armor, magicDefence, health, dodge, accuracy].some((v) => typeof v === 'number' && v !== 0);
   const hasAnyBonusStats = bonusEntries.length > 0;
   const isRepairable = Boolean(selectedItem && ['weapon', 'armor'].includes(selectedItem.type));
   const isEquippable = Boolean(selectedItem?.slot && ['weapon', 'armor'].includes(selectedItem?.type ?? ''));
@@ -168,6 +188,11 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                   <div className="text-xs text-[var(--rpg-text-secondary)] capitalize">
                     {selectedItem.rarity} • {selectedItem.type}
                   </div>
+                  {selectedItem.weightClass && (
+                    <div className="text-xs text-[var(--rpg-gold)]">
+                      {prettyWeightClass(selectedItem.weightClass)}
+                    </div>
+                  )}
                 </div>
               </div>
               <button
@@ -206,35 +231,54 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                       <div className="flex items-center gap-2 text-sm">
                         <Sword size={16} className="text-[var(--rpg-red)]" />
                         <span className="text-[var(--rpg-text-secondary)]">Attack</span>
-                        <span className="ml-auto font-mono text-[var(--rpg-red)]">+{attack}</span>
+                        <span className={`ml-auto font-mono ${signedClass(attack, 'text-[var(--rpg-red)]')}`}>
+                          {formatSignedStatValue('attack', attack)}
+                        </span>
                       </div>
                     )}
                     {typeof armor === 'number' && armor !== 0 && (
                       <div className="flex items-center gap-2 text-sm">
                         <Shield size={16} className="text-[var(--rpg-blue-light)]" />
                         <span className="text-[var(--rpg-text-secondary)]">Armor</span>
-                        <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">+{armor}</span>
+                        <span className={`ml-auto font-mono ${signedClass(armor, 'text-[var(--rpg-blue-light)]')}`}>
+                          {formatSignedStatValue('armor', armor)}
+                        </span>
+                      </div>
+                    )}
+                    {typeof magicDefence === 'number' && magicDefence !== 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap size={16} className="text-[var(--rpg-purple)]" />
+                        <span className="text-[var(--rpg-text-secondary)]">Magic Def</span>
+                        <span className={`ml-auto font-mono ${signedClass(magicDefence, 'text-[var(--rpg-purple)]')}`}>
+                          {formatSignedStatValue('magicDefence', magicDefence)}
+                        </span>
                       </div>
                     )}
                     {typeof health === 'number' && health !== 0 && (
                       <div className="flex items-center gap-2 text-sm">
                         <Heart size={16} className="text-[var(--rpg-green-light)]" />
                         <span className="text-[var(--rpg-text-secondary)]">HP</span>
-                        <span className="ml-auto font-mono text-[var(--rpg-green-light)]">+{health}</span>
+                        <span className={`ml-auto font-mono ${signedClass(health, 'text-[var(--rpg-green-light)]')}`}>
+                          {formatSignedStatValue('health', health)}
+                        </span>
                       </div>
                     )}
                     {typeof dodge === 'number' && dodge !== 0 && (
                       <div className="flex items-center gap-2 text-sm">
                         <Zap size={16} className="text-[var(--rpg-gold)]" />
                         <span className="text-[var(--rpg-text-secondary)]">Dodge</span>
-                        <span className="ml-auto font-mono text-[var(--rpg-gold)]">+{dodge}</span>
+                        <span className={`ml-auto font-mono ${signedClass(dodge, 'text-[var(--rpg-gold)]')}`}>
+                          {formatSignedStatValue('dodge', dodge)}
+                        </span>
                       </div>
                     )}
                     {typeof accuracy === 'number' && accuracy !== 0 && (
                       <div className="flex items-center gap-2 text-sm">
                         <Crosshair size={16} className="text-[var(--rpg-blue-light)]" />
                         <span className="text-[var(--rpg-text-secondary)]">Accuracy</span>
-                        <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">+{accuracy}</span>
+                        <span className={`ml-auto font-mono ${signedClass(accuracy, 'text-[var(--rpg-blue-light)]')}`}>
+                          {formatSignedStatValue('accuracy', accuracy)}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -250,7 +294,9 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                           <div key={stat} className="flex items-center gap-2 text-sm">
                             <Icon size={16} className={color} />
                             <span className="text-[var(--rpg-text-secondary)]">{label}</span>
-                            <span className={`ml-auto font-mono ${color}`}>+{formatStatValue(stat, value)}</span>
+                            <span className={`ml-auto font-mono ${value < 0 ? 'text-[var(--rpg-red)]' : color}`}>
+                              {formatSignedStatValue(stat, value)}
+                            </span>
                           </div>
                         );
                       })}

@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { getHpState, rest, recover } from '../services/hpService';
 import { getTurnState } from '../services/turnBankService';
 import { calculateHealPerTurn, calculateRecoveryExitHp } from '@adventure/game-engine';
+import { getPlayerProgressionState } from '../services/attributesService';
 
 export const hpRouter = Router();
 
@@ -122,11 +123,8 @@ hpRouter.get('/rest/estimate', async (req, res, next) => {
       return;
     }
 
-    const vitalitySkill = await prisma.playerSkill.findUnique({
-      where: { playerId_skillType: { playerId, skillType: 'vitality' } },
-      select: { level: true },
-    });
-    const vitalityLevel = vitalitySkill?.level ?? 1;
+    const progression = await getPlayerProgressionState(playerId);
+    const vitalityLevel = progression.attributes.vitality;
 
     const healPerTurn = calculateHealPerTurn(vitalityLevel);
     const hpNeeded = hpState.maxHp - hpState.currentHp;

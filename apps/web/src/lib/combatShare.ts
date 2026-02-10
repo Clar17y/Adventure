@@ -14,10 +14,6 @@ export interface ShareCombatRewards {
     skillType: string;
     xpAfterEfficiency: number;
   } | null;
-  secondarySkillXp?: {
-    defence?: { events: number; xpGained: number };
-    evasion?: { events: number; xpGained: number };
-  };
   loot: Array<{ itemTemplateId: string; quantity: number; itemName?: string | null }>;
 }
 
@@ -80,15 +76,6 @@ export function formatCombatShareText(input: CombatShareInput): string {
 
   if (input.rewards.skillXp) {
     lines.push(`${input.rewards.skillXp.skillType}: +${input.rewards.skillXp.xpAfterEfficiency} XP`);
-  }
-
-  const defenceXp = input.rewards.secondarySkillXp?.defence;
-  const evasionXp = input.rewards.secondarySkillXp?.evasion;
-  if (defenceXp && defenceXp.xpGained > 0) {
-    lines.push(`Defence: +${defenceXp.xpGained} XP (${defenceXp.events} hits taken)`);
-  }
-  if (evasionXp && evasionXp.xpGained > 0) {
-    lines.push(`Evasion: +${evasionXp.xpGained} XP (${evasionXp.events} dodges)`);
   }
 
   if (input.rewards.loot.length > 0) {

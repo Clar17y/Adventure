@@ -51,8 +51,30 @@ describe('buildPlayerCombatStats', () => {
     const stats = buildPlayerCombatStats(
       80,
       100,
-      { attack: 10, defence: 8, vitality: 5, evasion: 4 },
-      { attack: 5, accuracy: 3, armor: 2, health: 10, dodge: 1, critChance: 0.2, critDamage: 0.35 }
+      {
+        attackStyle: 'melee',
+        skillLevel: 10,
+        attributes: {
+          vitality: 5,
+          strength: 5,
+          dexterity: 0,
+          intelligence: 0,
+          luck: 0,
+          evasion: 4,
+        },
+      },
+      {
+        attack: 5,
+        rangedPower: 0,
+        magicPower: 0,
+        accuracy: 3,
+        armor: 2,
+        magicDefence: 1,
+        health: 10,
+        dodge: 1,
+        critChance: 0.2,
+        critDamage: 0.35,
+      }
     );
 
     expect(stats.critChance).toBe(0.2);

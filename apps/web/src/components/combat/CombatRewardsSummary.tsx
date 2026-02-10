@@ -12,10 +12,10 @@ function capitalize(s: string): string {
 }
 
 export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryProps) {
-  const { skillXp, secondarySkillXp, xp, loot } = rewards;
+  const { skillXp, xp, loot } = rewards;
   const totalLootItems = loot.reduce((sum, drop) => sum + drop.quantity, 0);
 
-  const hasAnyRewards = xp > 0 || skillXp || secondarySkillXp.defence.xpGained > 0 || secondarySkillXp.evasion.xpGained > 0 || loot.length > 0;
+  const hasAnyRewards = xp > 0 || skillXp || loot.length > 0;
 
   if (!hasAnyRewards) return null;
 
@@ -41,48 +41,11 @@ export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryP
               L{skillXp.newLevel}!
             </span>
           )}
-        </div>
-      )}
-
-      {/* Secondary skill XP: defence */}
-      {secondarySkillXp.defence.xpGained > 0 && (
-        <div className="flex items-center gap-2 text-sm">
-          <span>DEF</span>
-          <span className="text-[var(--rpg-text-primary)]">Defence</span>
-          <span className="text-[var(--rpg-blue-light)] font-mono">
-            +{secondarySkillXp.defence.xpGained} XP
-          </span>
-          <span className="text-[var(--rpg-text-secondary)] text-xs">
-            ({secondarySkillXp.defence.events} hit{secondarySkillXp.defence.events !== 1 ? 's' : ''} taken)
-          </span>
-          {secondarySkillXp.grants
-            .filter((g) => g.skillType === 'defence' && g.leveledUp)
-            .map((g) => (
-              <span key={g.skillType} className="text-[var(--rpg-gold)] font-semibold text-xs">
-                L{g.newLevel}!
-              </span>
-            ))}
-        </div>
-      )}
-
-      {/* Secondary skill XP: evasion */}
-      {secondarySkillXp.evasion.xpGained > 0 && (
-        <div className="flex items-center gap-2 text-sm">
-          <span>EVA</span>
-          <span className="text-[var(--rpg-text-primary)]">Evasion</span>
-          <span className="text-[var(--rpg-blue-light)] font-mono">
-            +{secondarySkillXp.evasion.xpGained} XP
-          </span>
-          <span className="text-[var(--rpg-text-secondary)] text-xs">
-            ({secondarySkillXp.evasion.events} dodge{secondarySkillXp.evasion.events !== 1 ? 's' : ''})
-          </span>
-          {secondarySkillXp.grants
-            .filter((g) => g.skillType === 'evasion' && g.leveledUp)
-            .map((g) => (
-              <span key={g.skillType} className="text-[var(--rpg-gold)] font-semibold text-xs">
-                L{g.newLevel}!
-              </span>
-            ))}
+          {skillXp.characterLeveledUp && (
+            <span className="text-[var(--rpg-gold)] font-semibold text-xs">
+              C{skillXp.characterLevelAfter}!
+            </span>
+          )}
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { prisma } from '@adventure/database';
 import type { SkillType, SkillXpResult } from '@adventure/shared';
-import { applyXpGain, shouldResetDailyCap } from '@adventure/game-engine';
+import { applyXpGain, calculateCharacterXpGain, characterLevelFromXp, shouldResetDailyCap } from '@adventure/game-engine';
 
 export interface GrantXpResult {
   skillType: SkillType;
@@ -8,6 +8,12 @@ export interface GrantXpResult {
   newTotalXp: number;
   newDailyXpGained: number;
   newLevel: number;
+  characterXpGain: number;
+  characterXpAfter: number;
+  characterLevelBefore: number;
+  characterLevelAfter: number;
+  attributePointsAfter: number;
+  characterLeveledUp: boolean;
 }
 
 export async function grantSkillXp(
@@ -16,50 +22,88 @@ export async function grantSkillXp(
   rawXpGain: number,
   now: Date = new Date()
 ): Promise<GrantXpResult> {
-  const skill = await prisma.playerSkill.findUnique({
-    where: {
-      playerId_skillType: { playerId, skillType },
-    },
+  return prisma.$transaction(async (tx) => {
+    const txAny = tx as unknown as any;
+    const [skill, player] = await Promise.all([
+      tx.playerSkill.findUnique({
+        where: {
+          playerId_skillType: { playerId, skillType },
+        },
+      }),
+      txAny.player.findUnique({
+        where: { id: playerId },
+        select: {
+          characterXp: true,
+          characterLevel: true,
+          attributePoints: true,
+        },
+      }),
+    ]);
+
+    if (!skill) {
+      throw new Error(`Skill not found for playerId=${playerId}, skillType=${skillType}`);
+    }
+    if (!player) {
+      throw new Error(`Player not found for playerId=${playerId}`);
+    }
+
+    const needsReset = shouldResetDailyCap(skill.lastXpResetAt, now);
+    const currentWindowXpGained = needsReset ? 0 : skill.dailyXpGained;
+
+    const currentXp = Number(skill.xp);
+    const xpResult = applyXpGain(
+      currentXp,
+      skill.level,
+      currentWindowXpGained,
+      rawXpGain,
+      skillType
+    );
+
+    const newTotalXp = currentXp + xpResult.xpAfterEfficiency;
+    const newDailyXpGained = currentWindowXpGained + xpResult.xpAfterEfficiency;
+
+    await tx.playerSkill.update({
+      where: {
+        playerId_skillType: { playerId, skillType },
+      },
+      data: {
+        xp: BigInt(newTotalXp),
+        level: xpResult.newLevel,
+        dailyXpGained: newDailyXpGained,
+        ...(needsReset ? { lastXpResetAt: now } : {}),
+      },
+    });
+
+    const characterXpGain = calculateCharacterXpGain(xpResult.xpAfterEfficiency);
+    const characterXpBefore = Number(player.characterXp);
+    const characterXpAfter = characterXpBefore + characterXpGain;
+    const characterLevelBefore = player.characterLevel;
+    const characterLevelAfter = characterLevelFromXp(characterXpAfter);
+    const levelUps = Math.max(0, characterLevelAfter - characterLevelBefore);
+    const attributePointsAfter = player.attributePoints + levelUps;
+
+    await txAny.player.update({
+      where: { id: playerId },
+      data: {
+        characterXp: BigInt(characterXpAfter),
+        characterLevel: characterLevelAfter,
+        attributePoints: attributePointsAfter,
+      },
+    });
+
+    return {
+      skillType,
+      xpResult,
+      newTotalXp,
+      newDailyXpGained,
+      newLevel: xpResult.newLevel,
+      characterXpGain,
+      characterXpAfter,
+      characterLevelBefore,
+      characterLevelAfter,
+      attributePointsAfter,
+      characterLeveledUp: characterLevelAfter > characterLevelBefore,
+    };
   });
-
-  if (!skill) {
-    // Shouldn't happen since we create all skills on register.
-    throw new Error(`Skill not found for playerId=${playerId}, skillType=${skillType}`);
-  }
-
-  const needsReset = shouldResetDailyCap(skill.lastXpResetAt, now);
-  const currentWindowXpGained = needsReset ? 0 : skill.dailyXpGained;
-
-  const currentXp = Number(skill.xp);
-  const xpResult = applyXpGain(
-    currentXp,
-    skill.level,
-    currentWindowXpGained,
-    rawXpGain,
-    skillType
-  );
-
-  const newTotalXp = currentXp + xpResult.xpAfterEfficiency;
-  const newDailyXpGained = currentWindowXpGained + xpResult.xpAfterEfficiency;
-
-  await prisma.playerSkill.update({
-    where: {
-      playerId_skillType: { playerId, skillType },
-    },
-    data: {
-      xp: BigInt(newTotalXp),
-      level: xpResult.newLevel,
-      dailyXpGained: newDailyXpGained,
-      ...(needsReset ? { lastXpResetAt: now } : {}),
-    },
-  });
-
-  return {
-    skillType,
-    xpResult,
-    newTotalXp,
-    newDailyXpGained,
-    newLevel: xpResult.newLevel,
-  };
 }
 

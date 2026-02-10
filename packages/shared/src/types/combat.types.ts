@@ -47,8 +47,10 @@ export interface CombatLogEntry {
   targetDodge?: number;
   targetEvasion?: number;
   targetDefence?: number;
+  targetMagicDefence?: number;
   rawDamage?: number;
   armorReduction?: number;
+  magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
   playerHpAfter?: number;
@@ -58,11 +60,6 @@ export interface CombatLogEntry {
 export type CombatAction = 'attack' | 'spell' | 'defend' | 'flee';
 
 export type CombatOutcome = 'victory' | 'defeat' | 'fled';
-
-export interface SecondarySkillXpEntry {
-  events: number;
-  xpGained: number;
-}
 
 export interface CombatResult {
   outcome: CombatOutcome;
@@ -74,10 +71,6 @@ export interface CombatResult {
   durabilityLost: DurabilityLoss[];
   turnsSpent: number;
   playerHpRemaining: number;
-  secondarySkillXp: {
-    defence: SecondarySkillXpEntry;
-    evasion: SecondarySkillXpEntry;
-  };
 }
 
 export interface LootDrop {
@@ -97,6 +90,7 @@ export interface CombatantStats {
   attack: number;
   accuracy: number;
   defence: number;
+  magicDefence: number;
   dodge: number;
   evasion: number;
   damageMin: number;

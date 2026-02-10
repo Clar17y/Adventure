@@ -1,12 +1,15 @@
 import { prisma } from '@adventure/database';
 import type { EquipmentSlot, SkillType } from '@adventure/shared';
-import { ALL_EQUIPMENT_SLOTS, COMBAT_SKILLS, CRAFTING_SKILLS, GATHERING_SKILLS } from '@adventure/shared';
+import { ALL_EQUIPMENT_SLOTS, ALL_SKILLS } from '@adventure/shared';
 import { AppError } from '../middleware/errorHandler';
 
 export interface EquipmentStats {
   attack: number;
+  rangedPower: number;
+  magicPower: number;
   accuracy: number;
   armor: number;
+  magicDefence: number;
   health: number;
   dodge: number;
   luck: number;
@@ -15,11 +18,7 @@ export interface EquipmentStats {
 }
 
 export function isSkillType(value: string): value is SkillType {
-  return (
-    COMBAT_SKILLS.includes(value as SkillType) ||
-    GATHERING_SKILLS.includes(value as SkillType) ||
-    CRAFTING_SKILLS.includes(value as SkillType)
-  );
+  return ALL_SKILLS.includes(value as SkillType);
 }
 
 export async function ensureEquipmentSlots(playerId: string): Promise<void> {
@@ -48,8 +47,11 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
   });
 
   let attack = 0;
+  let rangedPower = 0;
+  let magicPower = 0;
   let accuracy = 0;
   let armor = 0;
+  let magicDefence = 0;
   let health = 0;
   let dodge = 0;
   let luck = 0;
@@ -64,22 +66,20 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
     for (const stats of statSources) {
       if (!stats) continue;
       if (typeof stats.attack === 'number') attack += stats.attack;
+      if (typeof stats.rangedPower === 'number') rangedPower += stats.rangedPower;
+      if (typeof stats.magicPower === 'number') magicPower += stats.magicPower;
       if (typeof stats.accuracy === 'number') accuracy += stats.accuracy;
       if (typeof stats.armor === 'number') armor += stats.armor;
+      if (typeof stats.magicDefence === 'number') magicDefence += stats.magicDefence;
       if (typeof stats.health === 'number') health += stats.health;
-      if (typeof stats.dodge === 'number') {
-        dodge += stats.dodge;
-      } else if (typeof stats.evasion === 'number') {
-        // Legacy compatibility for existing gear rolls/templates.
-        dodge += stats.evasion;
-      }
+      if (typeof stats.dodge === 'number') dodge += stats.dodge;
       if (typeof stats.luck === 'number') luck += stats.luck;
       if (typeof stats.critChance === 'number') critChance += stats.critChance;
       if (typeof stats.critDamage === 'number') critDamage += stats.critDamage;
     }
   }
 
-  return { attack, accuracy, armor, health, dodge, luck, critChance, critDamage };
+  return { attack, rangedPower, magicPower, accuracy, armor, magicDefence, health, dodge, luck, critChance, critDamage };
 }
 
 export async function equipItem(

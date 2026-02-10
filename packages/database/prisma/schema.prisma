@@ -19,6 +19,12 @@ model Player {
   createdAt    DateTime  @default(now()) @map("created_at")
   lastActiveAt DateTime? @map("last_active_at")
 
+  // Character Progression
+  characterXp     BigInt @default(0) @map("character_xp")
+  characterLevel  Int    @default(1) @map("character_level")
+  attributePoints Int    @default(0) @map("attribute_points")
+  attributes      Json   @default("{\"vitality\":0,\"strength\":0,\"dexterity\":0,\"intelligence\":0,\"luck\":0,\"evasion\":0}")
+
   // HP System
   currentHp     Int      @default(100) @map("current_hp")
   lastHpRegenAt DateTime @default(now()) @map("last_hp_regen_at")
@@ -108,6 +114,7 @@ model ItemTemplate {
   id             String  @id @default(uuid())
   name           String  @db.VarChar(64)
   itemType       String  @map("item_type") @db.VarChar(32)
+  weightClass    String? @map("weight_class") @db.VarChar(16)
   slot           String? @db.VarChar(16)
   tier           Int     @default(1)
   baseStats      Json    @default("{}") @map("base_stats")

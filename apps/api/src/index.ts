@@ -18,11 +18,48 @@ import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+const isProduction = process.env.NODE_ENV === 'production';
+
+function parseConfiguredCorsOrigins(): string[] {
+  const raw =
+    process.env.CORS_ORIGINS
+    ?? process.env.CORS_ORIGIN
+    ?? 'http://localhost:3002,http://127.0.0.1:3002';
+
+  return raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
+const configuredCorsOrigins = new Set(parseConfiguredCorsOrigins());
+
+function isAllowedCorsOrigin(origin: string): boolean {
+  if (configuredCorsOrigins.has(origin)) return true;
+
+  // In non-production, allow any origin on port 3002 for LAN playtesting.
+  if (!isProduction) {
+    try {
+      const parsed = new URL(origin);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+      return parsed.port === '3002';
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
 
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3002',
+  origin: (origin, callback) => {
+    // Allow non-browser or same-origin requests without Origin header.
+    if (!origin) return callback(null, true);
+    if (isAllowedCorsOrigin(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json());

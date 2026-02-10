@@ -4,6 +4,7 @@ export interface ItemTemplate {
   id: string;
   name: string;
   itemType: ItemType;
+  weightClass: WeightClass | null;
   slot: EquipmentSlot | null;
   tier: number;
   baseStats: ItemStats;
@@ -27,6 +28,7 @@ export interface Item {
 
 export type ItemType = 'weapon' | 'armor' | 'resource' | 'consumable';
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type WeightClass = 'heavy' | 'medium' | 'light';
 
 export interface ItemStats {
   attack?: number;
@@ -35,12 +37,11 @@ export interface ItemStats {
   accuracy?: number;
   dodge?: number;
   armor?: number;
+  magicDefence?: number;
   health?: number;
-  // Legacy field kept for compatibility; treat as dodge in combat/stat aggregation.
-  evasion?: number;
   luck?: number;
   critChance?: number;  // flat bonus to base 5% (e.g., 0.04 = +4%)
-  critDamage?: number;  // flat bonus to base 1.5x (e.g., 0.15 → 1.65x)
+  critDamage?: number;  // flat bonus to base 1.5x (e.g., 0.15 -> 1.65x)
 }
 
 export interface DropTableEntry {

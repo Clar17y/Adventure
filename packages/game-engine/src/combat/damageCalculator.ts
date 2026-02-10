@@ -1,4 +1,4 @@
-import { COMBAT_CONSTANTS, CombatantStats } from '@adventure/shared';
+import { CHARACTER_CONSTANTS, COMBAT_CONSTANTS, CombatantStats, type PlayerAttributes } from '@adventure/shared';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -60,7 +60,7 @@ export function isCriticalHit(bonusCritChance = 0): boolean {
  */
 export function calculateFinalDamage(
   rawDamage: number,
-  armor: number,
+  defence: number,
   isCrit: boolean,
   bonusCritDamage = 0
 ): { damage: number; actualMultiplier: number } {
@@ -76,8 +76,8 @@ export function calculateFinalDamage(
     damage = Math.floor(damage * actualMultiplier);
   }
 
-  // Apply armor reduction (diminishing returns)
-  const reduction = armor / (armor + 100);
+  // Apply defence reduction (diminishing returns)
+  const reduction = calculateDefenceReduction(defence);
   damage = Math.floor(damage * (1 - reduction));
 
   return {
@@ -93,26 +93,61 @@ export function rollInitiative(speed: number): number {
   return rollD20() + speed;
 }
 
+export function calculateDefenceReduction(defence: number): number {
+  const safeDefence = Math.max(0, Number.isFinite(defence) ? defence : 0);
+  return safeDefence / (safeDefence + 100);
+}
+
 /**
- * Build combatant stats from player equipment and skills.
+ * Build combatant stats from player equipment, proficiencies, and attributes.
  */
 export function buildPlayerCombatStats(
   currentHp: number,
   maxHp: number,
-  skillLevels: { attack: number; defence: number; vitality: number; evasion: number },
-  equipmentStats: { attack: number; accuracy: number; armor: number; health: number; dodge: number; critChance?: number; critDamage?: number }
+  input: { attackStyle: 'melee' | 'ranged' | 'magic'; skillLevel: number; attributes: PlayerAttributes },
+  equipmentStats: {
+    attack: number;
+    rangedPower: number;
+    magicPower: number;
+    accuracy: number;
+    armor: number;
+    magicDefence: number;
+    health: number;
+    dodge: number;
+    critChance?: number;
+    critDamage?: number;
+  }
 ): CombatantStats {
+  const weaponPower = input.attackStyle === 'ranged'
+    ? equipmentStats.rangedPower
+    : input.attackStyle === 'magic'
+      ? equipmentStats.magicPower
+      : equipmentStats.attack;
+
+  const attributeDamageBonus = input.attackStyle === 'ranged'
+    ? input.attributes.dexterity * CHARACTER_CONSTANTS.RANGED_DAMAGE_PER_DEXTERITY
+    : input.attackStyle === 'magic'
+      ? input.attributes.intelligence * CHARACTER_CONSTANTS.MAGIC_DAMAGE_PER_INTELLIGENCE
+      : input.attributes.strength * CHARACTER_CONSTANTS.MELEE_DAMAGE_PER_STRENGTH;
+
+  const accuracyFromDexterity = input.attackStyle === 'ranged'
+    ? input.attributes.dexterity * CHARACTER_CONSTANTS.ACCURACY_PER_DEXTERITY
+    : 0;
+
+  const totalAttack = input.skillLevel + weaponPower + attributeDamageBonus;
+
   return {
     hp: Math.min(currentHp, maxHp),
     maxHp,
-    attack: skillLevels.attack + equipmentStats.attack,
-    accuracy: Math.floor(skillLevels.attack / 2) + equipmentStats.accuracy,
-    defence: skillLevels.defence + equipmentStats.armor,
+    attack: totalAttack,
+    accuracy: Math.floor(input.skillLevel / 2) + equipmentStats.accuracy + accuracyFromDexterity,
+    defence: equipmentStats.armor,
+    magicDefence: equipmentStats.magicDefence,
     dodge: equipmentStats.dodge,
-    evasion: skillLevels.evasion,
-    damageMin: 1 + Math.floor(skillLevels.attack / 5),
-    damageMax: 5 + Math.floor(skillLevels.attack / 2),
-    speed: Math.floor(skillLevels.evasion / 10),
+    evasion: input.attributes.evasion,
+    damageMin: 1 + Math.floor(totalAttack / 5),
+    damageMax: 5 + Math.floor(totalAttack / 2),
+    speed: Math.floor(input.attributes.evasion / CHARACTER_CONSTANTS.EVASION_TO_SPEED_DIVISOR),
     critChance: equipmentStats.critChance ?? 0,
     critDamage: equipmentStats.critDamage ?? 0,
   };

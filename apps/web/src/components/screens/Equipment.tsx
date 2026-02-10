@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
-import { Crosshair, Heart, Shield, Sword, X, Zap } from 'lucide-react';
+import { Crosshair, Heart, Shield, Sparkles, Sword, X, Zap } from 'lucide-react';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
 
@@ -14,6 +14,7 @@ interface EquippedItem {
   icon?: string;
   imageSrc?: string;
   rarity: Rarity;
+  weightClass?: 'heavy' | 'medium' | 'light' | null;
   durability: number;
   maxDurability: number;
   baseStats?: Record<string, unknown>;
@@ -35,6 +36,7 @@ interface EquipmentProps {
     imageSrc?: string;
     rarity: Rarity;
     slot: string;
+    weightClass?: 'heavy' | 'medium' | 'light' | null;
     equippedSlot: string | null;
     durability: { current: number; max: number } | null;
     baseStats?: Record<string, unknown>;
@@ -45,6 +47,7 @@ interface EquipmentProps {
   stats: {
     attack: number;
     defence: number;
+    magicDefence: number;
     hp: number;
     dodge: number;
     accuracy: number;
@@ -67,21 +70,13 @@ function totalStatValue(
   bonusStats: Record<string, unknown> | null | undefined,
   key: string
 ): number {
-  if (key === 'dodge') {
-    const baseDodge = statValue(baseStats, 'dodge');
-    const bonusDodge = statValue(bonusStats ?? undefined, 'dodge');
-    if (baseDodge !== 0 || bonusDodge !== 0) return baseDodge + bonusDodge;
-
-    // Legacy compatibility for old templates/rolls that still use `evasion`.
-    return statValue(baseStats, 'evasion') + statValue(bonusStats ?? undefined, 'evasion');
-  }
   return statValue(baseStats, key) + statValue(bonusStats ?? undefined, key);
 }
 
 const PERCENT_STATS = new Set(['critChance', 'critDamage']);
 
 function prettyStatName(stat: string): string {
-  if (stat === 'evasion') return 'Dodge';
+  if (stat === 'magicDefence') return 'Magic Defence';
   if (stat === 'critChance') return 'Crit Chance';
   if (stat === 'critDamage') return 'Crit Damage';
   return stat
@@ -95,8 +90,25 @@ function formatStatValue(stat: string, value: number): string {
   return String(value);
 }
 
+function formatSignedStatValue(stat: string, value: number): string {
+  const formatted = formatStatValue(stat, Math.abs(value));
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `-${formatted}`;
+  return formatted;
+}
+
+function signedClass(value: number, positiveClass: string): string {
+  if (value < 0) return 'text-[var(--rpg-red)]';
+  return positiveClass;
+}
+
 function prettySlot(slot: string) {
   return titleCaseFromSnake(slot);
+}
+
+function prettyWeightClass(weightClass?: 'heavy' | 'medium' | 'light' | null): string | null {
+  if (!weightClass) return null;
+  return `${weightClass[0].toUpperCase()}${weightClass.slice(1)} Armor`;
 }
 
 export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: EquipmentProps) {
@@ -272,6 +284,9 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-[var(--rpg-text-primary)] text-sm">{currentItem.name}</div>
+                        {currentItem.weightClass && (
+                          <div className="text-xs text-[var(--rpg-gold)]">{prettyWeightClass(currentItem.weightClass)}</div>
+                        )}
                         <div className="text-xs text-[var(--rpg-text-secondary)] font-mono">
                           {currentItem.durability}/{currentItem.maxDurability}
                         </div>
@@ -291,8 +306,8 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                         <div className="flex items-center gap-2">
                           <Sword size={16} className="text-[var(--rpg-red)]" />
                           <span className="text-[var(--rpg-text-secondary)]">Attack</span>
-                          <span className="ml-auto font-mono text-[var(--rpg-red)]">
-                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'attack')}
+                          <span className={`ml-auto font-mono ${signedClass(totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'attack'), 'text-[var(--rpg-red)]')}`}>
+                            {formatSignedStatValue('attack', totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'attack'))}
                           </span>
                         </div>
                       )}
@@ -300,8 +315,17 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                         <div className="flex items-center gap-2">
                           <Shield size={16} className="text-[var(--rpg-blue-light)]" />
                           <span className="text-[var(--rpg-text-secondary)]">Armor</span>
-                          <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">
-                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'armor')}
+                          <span className={`ml-auto font-mono ${signedClass(totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'armor'), 'text-[var(--rpg-blue-light)]')}`}>
+                            {formatSignedStatValue('armor', totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'armor'))}
+                          </span>
+                        </div>
+                      )}
+                      {totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'magicDefence') !== 0 && (
+                        <div className="flex items-center gap-2">
+                          <Sparkles size={16} className="text-[var(--rpg-purple)]" />
+                          <span className="text-[var(--rpg-text-secondary)]">Magic Def</span>
+                          <span className={`ml-auto font-mono ${signedClass(totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'magicDefence'), 'text-[var(--rpg-purple)]')}`}>
+                            {formatSignedStatValue('magicDefence', totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'magicDefence'))}
                           </span>
                         </div>
                       )}
@@ -309,8 +333,8 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                         <div className="flex items-center gap-2">
                           <Heart size={16} className="text-[var(--rpg-green-light)]" />
                           <span className="text-[var(--rpg-text-secondary)]">HP</span>
-                          <span className="ml-auto font-mono text-[var(--rpg-green-light)]">
-                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'health')}
+                          <span className={`ml-auto font-mono ${signedClass(totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'health'), 'text-[var(--rpg-green-light)]')}`}>
+                            {formatSignedStatValue('health', totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'health'))}
                           </span>
                         </div>
                       )}
@@ -318,8 +342,8 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                         <div className="flex items-center gap-2">
                           <Zap size={16} className="text-[var(--rpg-gold)]" />
                           <span className="text-[var(--rpg-text-secondary)]">Dodge</span>
-                          <span className="ml-auto font-mono text-[var(--rpg-gold)]">
-                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'dodge')}
+                          <span className={`ml-auto font-mono ${signedClass(totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'dodge'), 'text-[var(--rpg-gold)]')}`}>
+                            {formatSignedStatValue('dodge', totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'dodge'))}
                           </span>
                         </div>
                       )}
@@ -327,8 +351,8 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                         <div className="flex items-center gap-2">
                           <Crosshair size={16} className="text-[var(--rpg-blue-light)]" />
                           <span className="text-[var(--rpg-text-secondary)]">Accuracy</span>
-                          <span className="ml-auto font-mono text-[var(--rpg-blue-light)]">
-                            +{totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'accuracy')}
+                          <span className={`ml-auto font-mono ${signedClass(totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'accuracy'), 'text-[var(--rpg-blue-light)]')}`}>
+                            {formatSignedStatValue('accuracy', totalStatValue(currentItem.baseStats, currentItem.bonusStats, 'accuracy'))}
                           </span>
                         </div>
                       )}
@@ -345,7 +369,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-mono">
                             {bonusEntries.map(([stat, value]) => (
                               <span key={stat} className="text-[var(--rpg-green-light)]">
-                                +{formatStatValue(stat, value)} {prettyStatName(stat)}
+                                {formatSignedStatValue(stat, value)} {prettyStatName(stat)}
                               </span>
                             ))}
                           </div>
@@ -369,12 +393,14 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                     {candidates.map((item) => {
                       const currentAttack = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'attack');
                       const currentArmor = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'armor');
+                      const currentMagicDefence = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'magicDefence');
                       const currentHealth = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'health');
                       const currentDodge = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'dodge');
                       const currentAccuracy = totalStatValue(currentItem?.baseStats, currentItem?.bonusStats, 'accuracy');
 
                       const nextAttack = totalStatValue(item.baseStats, item.bonusStats, 'attack');
                       const nextArmor = totalStatValue(item.baseStats, item.bonusStats, 'armor');
+                      const nextMagicDefence = totalStatValue(item.baseStats, item.bonusStats, 'magicDefence');
                       const nextHealth = totalStatValue(item.baseStats, item.bonusStats, 'health');
                       const nextDodge = totalStatValue(item.baseStats, item.bonusStats, 'dodge');
                       const nextAccuracy = totalStatValue(item.baseStats, item.bonusStats, 'accuracy');
@@ -382,6 +408,7 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                       const diffs = [
                         { key: 'Attack', diff: nextAttack - currentAttack },
                         { key: 'Armor', diff: nextArmor - currentArmor },
+                        { key: 'Magic Def', diff: nextMagicDefence - currentMagicDefence },
                         { key: 'HP', diff: nextHealth - currentHealth },
                         { key: 'Dodge', diff: nextDodge - currentDodge },
                         { key: 'Accuracy', diff: nextAccuracy - currentAccuracy },
@@ -437,6 +464,12 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                                   {isEquippedHere ? 'Equipped' : 'Equip'}
                                 </PixelButton>
                               </div>
+                              {item.weightClass && (
+                                <div className="mt-1 text-xs text-[var(--rpg-gold)]">{prettyWeightClass(item.weightClass)}</div>
+                              )}
+                              {nextDodge < 0 && (
+                                <div className="mt-1 text-xs text-[var(--rpg-red)]">Evasion penalty: {nextDodge}</div>
+                              )}
 
                               {durability && durability.max > 0 && (
                                 <div className="mt-2">
@@ -508,6 +541,16 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
             <div>
               <div className="text-xs text-[var(--rpg-text-secondary)]">Defence</div>
               <div className="text-2xl font-bold text-[var(--rpg-blue-light)] font-mono">{stats.defence}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center">
+              <Sparkles size={20} color="var(--rpg-purple)" />
+            </div>
+            <div>
+              <div className="text-xs text-[var(--rpg-text-secondary)]">Magic Def</div>
+              <div className="text-2xl font-bold text-[var(--rpg-purple)] font-mono">{stats.magicDefence}</div>
             </div>
           </div>
 
@@ -607,8 +650,8 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                         return (
                           <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs font-mono">
                             {bonusEntries.map(([stat, value]) => (
-                              <span key={stat} className="text-[var(--rpg-green-light)]">
-                                +{formatStatValue(stat, value)} {prettyStatName(stat)}
+                              <span key={stat} className={value < 0 ? 'text-[var(--rpg-red)]' : 'text-[var(--rpg-green-light)]'}>
+                                {formatSignedStatValue(stat, value)} {prettyStatName(stat)}
                               </span>
                             ))}
                           </div>

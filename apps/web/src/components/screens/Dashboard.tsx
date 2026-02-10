@@ -1,11 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
-import { Coins, TrendingUp, MapPin, Sword, Pickaxe, Hammer, Heart } from 'lucide-react';
+import { Coins, TrendingUp, MapPin, Sword, Pickaxe, Hammer, Heart, Crosshair, Sparkles, Dice5, Wind } from 'lucide-react';
 import Image from 'next/image';
 import { uiIconSrc } from '@/lib/assets';
 
@@ -17,6 +18,8 @@ interface DashboardProps {
     gold: number;
     currentXP: number;
     nextLevelXP: number;
+    currentLevelXp: number;
+    requiredLevelXp: number;
     currentZone: string;
     // HP fields
     currentHp: number;
@@ -27,9 +30,48 @@ interface DashboardProps {
   };
   skills: Array<{ name: string; level: number; icon?: LucideIcon; imageSrc?: string }>;
   onNavigate: (screen: string) => void;
+  characterProgression: {
+    characterLevel: number;
+    attributePoints: number;
+    attributes: {
+      vitality: number;
+      strength: number;
+      dexterity: number;
+      intelligence: number;
+      luck: number;
+      evasion: number;
+    };
+  };
+  onAllocateAttribute?: (
+    attribute: 'vitality' | 'strength' | 'dexterity' | 'intelligence' | 'luck' | 'evasion',
+    points?: number
+  ) => Promise<void>;
 }
 
-export function Dashboard({ playerData, skills, onNavigate }: DashboardProps) {
+const ATTRIBUTE_META = {
+  vitality: { label: 'Vitality', description: 'HP and regen', icon: Heart, color: 'var(--rpg-green-light)' },
+  strength: { label: 'Strength', description: 'Melee damage', icon: Sword, color: 'var(--rpg-red)' },
+  dexterity: { label: 'Dexterity', description: 'Ranged + accuracy', icon: Crosshair, color: 'var(--rpg-blue-light)' },
+  intelligence: { label: 'Intelligence', description: 'Magic power', icon: Sparkles, color: 'var(--rpg-purple)' },
+  luck: { label: 'Luck', description: 'Crits and drops', icon: Dice5, color: 'var(--rpg-gold)' },
+  evasion: { label: 'Evasion', description: 'Dodge chance', icon: Wind, color: 'var(--rpg-blue-light)' },
+} as const;
+
+type AttributeType = keyof typeof ATTRIBUTE_META;
+
+export function Dashboard({ playerData, skills, onNavigate, characterProgression, onAllocateAttribute }: DashboardProps) {
+  const [allocating, setAllocating] = useState<AttributeType | null>(null);
+
+  const handleAllocate = async (attribute: AttributeType) => {
+    if (!onAllocateAttribute || characterProgression.attributePoints <= 0 || allocating) return;
+    setAllocating(attribute);
+    try {
+      await onAllocateAttribute(attribute, 1);
+    } finally {
+      setAllocating(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Knockout Banner */}
@@ -158,6 +200,67 @@ export function Dashboard({ playerData, skills, onNavigate }: DashboardProps) {
           </div>
         </PixelCard>
       </div>
+
+      {/* Attributes */}
+      <PixelCard>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-sm text-[var(--rpg-text-secondary)]">Character Level</div>
+            <div className="text-2xl font-bold text-[var(--rpg-gold)]">{characterProgression.characterLevel}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-[var(--rpg-text-secondary)]">Unspent Points</div>
+            <div className="text-2xl font-bold text-[var(--rpg-blue-light)]">{characterProgression.attributePoints}</div>
+          </div>
+        </div>
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-xs text-[var(--rpg-text-secondary)] mb-1">
+            <span>Level Progress</span>
+            <span className="font-mono">
+              {playerData.currentLevelXp.toLocaleString()} / {playerData.requiredLevelXp.toLocaleString()} XP
+            </span>
+          </div>
+          <StatBar
+            current={playerData.currentLevelXp}
+            max={Math.max(1, playerData.requiredLevelXp)}
+            color="xp"
+            size="sm"
+            showNumbers={false}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {Object.entries(ATTRIBUTE_META).map(([key, meta]) => {
+            const attribute = key as AttributeType;
+            const Icon = meta.icon;
+            const disabled = characterProgression.attributePoints <= 0 || allocating !== null;
+            return (
+              <div
+                key={attribute}
+                className="rounded border border-[var(--rpg-border)] bg-[var(--rpg-background)] px-3 py-2 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Icon size={16} color={meta.color} />
+                    <span className="font-semibold text-[var(--rpg-text-primary)]">{meta.label}</span>
+                    <span className="text-sm font-bold text-[var(--rpg-gold)]">
+                      {characterProgression.attributes[attribute]}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[var(--rpg-text-secondary)]">{meta.description}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleAllocate(attribute)}
+                  disabled={disabled}
+                  className="px-2 py-1 rounded text-sm font-bold bg-[var(--rpg-gold)] text-[var(--rpg-background)] disabled:opacity-50"
+                >
+                  +1
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </PixelCard>
 
       {/* Skills Grid */}
       <div>

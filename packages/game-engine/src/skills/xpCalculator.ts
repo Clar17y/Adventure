@@ -1,8 +1,10 @@
 import {
+  CHARACTER_CONSTANTS,
   SKILL_CONSTANTS,
   SkillType,
   COMBAT_SKILLS,
   GATHERING_SKILLS,
+  PROCESSING_SKILLS,
   CRAFTING_SKILLS,
   SkillXpResult,
 } from '@adventure/shared';
@@ -27,6 +29,16 @@ export function levelFromXp(totalXp: number): number {
 
   let level = 1;
   while (level < SKILL_CONSTANTS.MAX_LEVEL && xpForLevel(level + 1) <= totalXp) {
+    level++;
+  }
+  return level;
+}
+
+export function characterLevelFromXp(totalXp: number): number {
+  if (totalXp <= 0) return 1;
+
+  let level = 1;
+  while (level < CHARACTER_CONSTANTS.MAX_LEVEL && xpForLevel(level + 1) <= totalXp) {
     level++;
   }
   return level;
@@ -82,6 +94,9 @@ export function getWindowCap(skillType: SkillType): number {
   }
   if (GATHERING_SKILLS.includes(skillType)) {
     return Math.floor(SKILL_CONSTANTS.DAILY_CAP_GATHERING / windowsPerDay);
+  }
+  if (PROCESSING_SKILLS.includes(skillType)) {
+    return Math.floor(SKILL_CONSTANTS.DAILY_CAP_PROCESSING / windowsPerDay);
   }
   if (CRAFTING_SKILLS.includes(skillType)) {
     return Math.floor(SKILL_CONSTANTS.DAILY_CAP_CRAFTING / windowsPerDay);
@@ -140,3 +155,7 @@ export function shouldResetWindowCap(lastResetDate: Date, now: Date = new Date()
 
 // Keep old name as alias for backwards compatibility
 export const shouldResetDailyCap = shouldResetWindowCap;
+
+export function calculateCharacterXpGain(skillXpAfterEfficiency: number): number {
+  return Math.floor(skillXpAfterEfficiency * CHARACTER_CONSTANTS.XP_RATIO);
+}

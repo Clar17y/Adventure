@@ -1,10 +1,18 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '@adventure/database';
+import { ATTRIBUTE_TYPES, type AttributeType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { ensureEquipmentSlots } from '../services/equipmentService';
+import {
+  allocateAttributePoints,
+  getPlayerProgressionState,
+  normalizePlayerAttributes,
+} from '../services/attributesService';
 
 export const playerRouter = Router();
+const prismaAny = prisma as unknown as any;
 
 playerRouter.use(authenticate);
 
@@ -16,7 +24,7 @@ playerRouter.get('/', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
 
-    const player = await prisma.player.findUnique({
+    const player = await prismaAny.player.findUnique({
       where: { id: playerId },
       select: {
         id: true,
@@ -24,6 +32,10 @@ playerRouter.get('/', async (req, res, next) => {
         email: true,
         createdAt: true,
         lastActiveAt: true,
+        characterXp: true,
+        characterLevel: true,
+        attributePoints: true,
+        attributes: true,
       },
     });
 
@@ -31,7 +43,13 @@ playerRouter.get('/', async (req, res, next) => {
       throw new AppError(404, 'Player not found', 'NOT_FOUND');
     }
 
-    res.json({ player });
+    res.json({
+      player: {
+        ...player,
+        characterXp: Number(player.characterXp),
+        attributes: normalizePlayerAttributes(player.attributes),
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -63,6 +81,42 @@ playerRouter.get('/skills', async (req, res, next) => {
     }));
 
     res.json({ skills: serializedSkills });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/player/attributes
+ * Get character level progression and current attribute allocation.
+ */
+playerRouter.get('/attributes', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const progression = await getPlayerProgressionState(playerId);
+    res.json(progression);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const allocateAttributesSchema = z.object({
+  attribute: z.custom<AttributeType>((value) => ATTRIBUTE_TYPES.includes(value as AttributeType), {
+    message: 'Invalid attribute type',
+  }),
+  points: z.number().int().positive().default(1),
+});
+
+/**
+ * POST /api/v1/player/attributes
+ * Spend unallocated attribute points.
+ */
+playerRouter.post('/attributes', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = allocateAttributesSchema.parse(req.body);
+    const progression = await allocateAttributePoints(playerId, body.attribute, body.points);
+    res.json(progression);
   } catch (err) {
     next(err);
   }

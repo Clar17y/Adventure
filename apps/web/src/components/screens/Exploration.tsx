@@ -25,17 +25,18 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
 
   const calculateProbabilities = (turns: number) => {
-    const expectedEncounters = turns * EXPLORATION_CONSTANTS.MOB_ENCOUNTER_CHANCE;
+    const expectedAmbushes = turns * EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN;
+    const expectedSites = turns * EXPLORATION_CONSTANTS.ENCOUNTER_SITE_CHANCE_PER_TURN;
     const expectedResources = turns * EXPLORATION_CONSTANTS.RESOURCE_NODE_CHANCE;
     // Cumulative probability of at least one hidden cache: 1 - (1 - p)^n
     const hiddenCacheChance = Math.min(
       Math.round((1 - Math.pow(1 - EXPLORATION_CONSTANTS.HIDDEN_CACHE_CHANCE, turns)) * 100),
       99
     );
-    return { expectedEncounters, expectedResources, hiddenCacheChance };
+    return { expectedAmbushes, expectedSites, expectedResources, hiddenCacheChance };
   };
 
-  const { expectedEncounters, expectedResources, hiddenCacheChance } = calculateProbabilities(turnInvestment[0]);
+  const { expectedAmbushes, expectedSites, expectedResources, hiddenCacheChance } = calculateProbabilities(turnInvestment[0]);
 
   return (
     <div className="space-y-4">
@@ -124,15 +125,21 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
       {/* Probability Preview */}
       <PixelCard className="bg-[var(--rpg-background)]">
         <h3 className="font-semibold text-[var(--rpg-text-primary)] mb-3">Expected Results</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="text-center">
             <div className="text-2xl font-bold text-[var(--rpg-red)] font-mono">
-              {expectedEncounters < 1 ? expectedEncounters.toFixed(1) : `~${Math.round(expectedEncounters)}`}
+              {expectedAmbushes < 1 ? expectedAmbushes.toFixed(1) : `~${Math.round(expectedAmbushes)}`}
             </div>
-            <div className="text-xs text-[var(--rpg-text-secondary)]">Mobs</div>
+            <div className="text-xs text-[var(--rpg-text-secondary)]">Ambushes</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-[var(--rpg-blue-light)] font-mono">
+              {expectedSites < 1 ? expectedSites.toFixed(2) : `~${Math.round(expectedSites)}`}
+            </div>
+            <div className="text-xs text-[var(--rpg-text-secondary)]">Sites</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-[var(--rpg-gold)] font-mono">
               {expectedResources < 1 ? expectedResources.toFixed(2) : `~${Math.round(expectedResources)}`}
             </div>
             <div className="text-xs text-[var(--rpg-text-secondary)]">Resources</div>

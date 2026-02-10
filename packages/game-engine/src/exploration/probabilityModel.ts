@@ -1,7 +1,8 @@
 import { EXPLORATION_CONSTANTS } from '@adventure/shared';
 
 export type ExplorationOutcomeType =
-  | 'mob_encounter'
+  | 'ambush'
+  | 'encounter_site'
   | 'resource_node'
   | 'hidden_cache'
   | 'zone_exit';
@@ -13,10 +14,12 @@ export interface ExplorationOutcome {
 
 export interface ExplorationEstimate {
   turns: number;
-  mobEncounterChance: number;
+  ambushChance: number;
+  encounterSiteChance: number;
   resourceNodeChance: number;
   hiddenCacheChance: number;
-  expectedMobEncounters: number;
+  expectedAmbushes: number;
+  expectedEncounterSites: number;
 }
 
 /**
@@ -39,8 +42,12 @@ export function cumulativeProbability(perTurnChance: number, turns: number): num
 export function estimateExploration(turns: number): ExplorationEstimate {
   return {
     turns,
-    mobEncounterChance: cumulativeProbability(
-      EXPLORATION_CONSTANTS.MOB_ENCOUNTER_CHANCE,
+    ambushChance: cumulativeProbability(
+      EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN,
+      turns
+    ),
+    encounterSiteChance: cumulativeProbability(
+      EXPLORATION_CONSTANTS.ENCOUNTER_SITE_CHANCE_PER_TURN,
       turns
     ),
     resourceNodeChance: cumulativeProbability(
@@ -51,7 +58,8 @@ export function estimateExploration(turns: number): ExplorationEstimate {
       EXPLORATION_CONSTANTS.HIDDEN_CACHE_CHANCE,
       turns
     ),
-    expectedMobEncounters: turns * EXPLORATION_CONSTANTS.MOB_ENCOUNTER_CHANCE,
+    expectedAmbushes: turns * EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN,
+    expectedEncounterSites: turns * EXPLORATION_CONSTANTS.ENCOUNTER_SITE_CHANCE_PER_TURN,
   };
 }
 
@@ -66,9 +74,12 @@ export function simulateExploration(
   const outcomes: ExplorationOutcome[] = [];
 
   for (let t = 1; t <= turns; t++) {
-    // Check each outcome type (in order of rarity)
-    if (Math.random() < EXPLORATION_CONSTANTS.MOB_ENCOUNTER_CHANCE) {
-      outcomes.push({ type: 'mob_encounter', turnOccurred: t });
+    if (Math.random() < EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN) {
+      outcomes.push({ type: 'ambush', turnOccurred: t });
+    }
+
+    if (Math.random() < EXPLORATION_CONSTANTS.ENCOUNTER_SITE_CHANCE_PER_TURN) {
+      outcomes.push({ type: 'encounter_site', turnOccurred: t });
     }
 
     if (Math.random() < EXPLORATION_CONSTANTS.RESOURCE_NODE_CHANCE) {

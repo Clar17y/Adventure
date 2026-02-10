@@ -113,8 +113,11 @@ export const CHARACTER_CONSTANTS = {
 // =============================================================================
 
 export const EXPLORATION_CONSTANTS = {
-  /** Per-turn chance to encounter a mob */
-  MOB_ENCOUNTER_CHANCE: 0.001,
+  /** Per-turn chance for an unavoidable ambush combat */
+  AMBUSH_CHANCE_PER_TURN: 0.005,
+
+  /** Per-turn chance to discover a persistent encounter site */
+  ENCOUNTER_SITE_CHANCE_PER_TURN: 0.0008,
 
   /** Per-turn chance to discover a resource node */
   RESOURCE_NODE_CHANCE: 0.0005,
@@ -125,14 +128,15 @@ export const EXPLORATION_CONSTANTS = {
   /** Per-turn chance to discover zone exit (first time only) */
   ZONE_EXIT_CHANCE: 0.002,
 
-  /**
-   * Baseline turns-per-mob used to scale XP for mobs discovered via exploration.
-   * Example: if you spend ~1,000 turns to find 1 mob, and this is 100, the mob's XP is ~10x.
-   */
-  MOB_XP_NORMALIZER_TURNS: 150,
+  /** Mobs that decay from encounter sites per hour (lazy-applied). */
+  ENCOUNTER_SITE_DECAY_RATE_PER_HOUR: 0.06,
 
-  /** Safety cap for the exploration-sourced mob XP multiplier. */
-  MOB_XP_MULTIPLIER_MAX: 25,
+  /** Capacity lost from resource nodes per hour (lazy-applied). */
+  RESOURCE_NODE_DECAY_RATE_PER_HOUR: 0.65,
+
+  ENCOUNTER_SIZE_SMALL: { min: 2, max: 3 },
+  ENCOUNTER_SIZE_MEDIUM: { min: 4, max: 6 },
+  ENCOUNTER_SIZE_LARGE: { min: 7, max: 10 },
 
   /** Minimum turns to spend on exploration */
   MIN_EXPLORATION_TURNS: 10,

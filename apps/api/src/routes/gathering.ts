@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
-import { GATHERING_CONSTANTS, GATHERING_SKILLS, type SkillType } from '@adventure/shared';
+import { EXPLORATION_CONSTANTS, GATHERING_CONSTANTS, GATHERING_SKILLS, type SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurnsTx } from '../services/turnBankService';
@@ -22,6 +22,23 @@ const nodesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
 });
+
+function calculateNodeDecay(
+  node: { remainingCapacity: number; decayedCapacity: number; discoveredAt: Date },
+  now: Date
+): {
+  targetDecay: number;
+  newlyDecayed: number;
+  effectiveCapacity: number;
+} {
+  const elapsedMs = Math.max(0, now.getTime() - node.discoveredAt.getTime());
+  const elapsedHours = elapsedMs / (1000 * 60 * 60);
+  const targetDecay = Math.max(0, Math.floor(elapsedHours * EXPLORATION_CONSTANTS.RESOURCE_NODE_DECAY_RATE_PER_HOUR));
+  const newlyDecayed = Math.max(0, targetDecay - node.decayedCapacity);
+  const effectiveCapacity = Math.max(0, node.remainingCapacity - newlyDecayed);
+
+  return { targetDecay, newlyDecayed, effectiveCapacity };
+}
 
 function getNodeSizeName(remaining: number, maxCapacity: number): string {
   const ratio = remaining / maxCapacity;
@@ -46,6 +63,7 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const query = nodesQuerySchema.parse(req.query);
+    const now = new Date();
 
     const resourceNodeWhere: Prisma.ResourceNodeWhereInput = {};
     if (query.zoneId) {
@@ -66,41 +84,55 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
       ...(Object.keys(resourceNodeWhere).length > 0 ? { resourceNode: resourceNodeWhere } : {}),
     };
 
-    const offset = (query.page - 1) * query.pageSize;
+    const playerNodes = await prisma.playerResourceNode.findMany({
+      where,
+      include: {
+        resourceNode: {
+          include: { zone: true },
+        },
+      },
+      orderBy: [{ discoveredAt: 'desc' }],
+    });
 
-    const [total, playerNodes, templatesForFilters] = await Promise.all([
-      prisma.playerResourceNode.count({ where }),
-      prisma.playerResourceNode.findMany({
-        where,
-        include: {
-          resourceNode: {
-            include: { zone: true },
+    const activeNodes: Array<(typeof playerNodes)[number] & { effectiveCapacity: number }> = [];
+    for (const node of playerNodes) {
+      const decay = calculateNodeDecay(node, now);
+      if (decay.newlyDecayed > 0) {
+        if (decay.effectiveCapacity <= 0) {
+          await prisma.playerResourceNode.deleteMany({
+            where: { id: node.id, playerId },
+          });
+          continue;
+        }
+
+        await prisma.playerResourceNode.updateMany({
+          where: {
+            id: node.id,
+            playerId,
+            remainingCapacity: node.remainingCapacity,
+            decayedCapacity: node.decayedCapacity,
           },
-        },
-        orderBy: [{ discoveredAt: 'desc' }],
-        skip: offset,
-        take: query.pageSize,
-      }),
-      prisma.resourceNode.findMany({
-        where: {
-          playerNodes: { some: { playerId } },
-          ...(query.skillRequired ? { skillRequired: query.skillRequired } : {}),
-        },
-        select: {
-          zoneId: true,
-          resourceType: true,
-          zone: {
-            select: {
-              name: true,
-            },
+          data: {
+            remainingCapacity: decay.effectiveCapacity,
+            decayedCapacity: decay.targetDecay,
           },
-        },
-      }),
-    ]);
+        });
+      }
+
+      const effectiveCapacity = decay.newlyDecayed > 0 ? decay.effectiveCapacity : node.remainingCapacity;
+      if (effectiveCapacity <= 0) continue;
+      activeNodes.push({
+        ...node,
+        remainingCapacity: effectiveCapacity,
+        decayedCapacity: decay.newlyDecayed > 0 ? decay.targetDecay : node.decayedCapacity,
+        effectiveCapacity,
+      });
+    }
 
     const zoneById = new Map<string, string>();
     const resourceTypeSet = new Set<string>();
-    for (const template of templatesForFilters) {
+    for (const node of activeNodes) {
+      const template = node.resourceNode;
       zoneById.set(template.zoneId, template.zone.name);
       resourceTypeSet.add(getResourceTypeCategory(template.resourceType));
     }
@@ -109,10 +141,14 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
     const resourceTypes = Array.from(resourceTypeSet).sort((a, b) => a.localeCompare(b));
+    const total = activeNodes.length;
     const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
+    const page = Math.min(query.page, totalPages);
+    const offset = (page - 1) * query.pageSize;
+    const pageNodes = activeNodes.slice(offset, offset + query.pageSize);
 
     res.json({
-      nodes: playerNodes.map((pn: typeof playerNodes[number]) => {
+      nodes: pageNodes.map((pn) => {
         const template = pn.resourceNode;
         return {
           id: pn.id, // PlayerResourceNode ID (what frontend uses to mine)
@@ -124,19 +160,20 @@ gatheringRouter.get('/nodes', async (req, res, next) => {
           skillRequired: template.skillRequired,
           levelRequired: template.levelRequired,
           baseYield: template.baseYield,
-          remainingCapacity: pn.remainingCapacity,
+          remainingCapacity: pn.effectiveCapacity,
           maxCapacity: template.maxCapacity,
-          sizeName: getNodeSizeName(pn.remainingCapacity, template.maxCapacity),
+          sizeName: getNodeSizeName(pn.effectiveCapacity, template.maxCapacity),
           discoveredAt: pn.discoveredAt.toISOString(),
+          weathered: pn.decayedCapacity > 0,
         };
       }),
       pagination: {
-        page: query.page,
+        page,
         pageSize: query.pageSize,
         total,
         totalPages,
-        hasNext: query.page < totalPages,
-        hasPrevious: query.page > 1,
+        hasNext: page < totalPages,
+        hasPrevious: page > 1,
       },
       filters: {
         zones,
@@ -210,6 +247,16 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     }
 
     const template = playerNode.resourceNode;
+    const now = new Date();
+    const decay = calculateNodeDecay(playerNode, now);
+    const effectiveCapacity = decay.effectiveCapacity;
+
+    if (effectiveCapacity <= 0) {
+      await prisma.playerResourceNode.deleteMany({
+        where: { id: playerNode.id, playerId },
+      });
+      throw new AppError(400, 'Node is depleted', 'NODE_DEPLETED');
+    }
 
     // Validate player is in the correct zone
     if (template.zoneId !== body.currentZoneId) {
@@ -236,7 +283,7 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     const yieldPerAction = Math.floor(baseYield * yieldMultiplier);
 
     // Cap actions by remaining capacity
-    const maxActionsByCapacity = Math.ceil(playerNode.remainingCapacity / yieldPerAction);
+    const maxActionsByCapacity = Math.ceil(effectiveCapacity / yieldPerAction);
     const actions = Math.min(maxActionsByTurns, maxActionsByCapacity);
 
     if (actions <= 0) {
@@ -244,9 +291,9 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     }
 
     const turnsSpent = actions * GATHERING_CONSTANTS.BASE_TURN_COST;
-    const totalYield = Math.min(actions * yieldPerAction, playerNode.remainingCapacity);
+    const totalYield = Math.min(actions * yieldPerAction, effectiveCapacity);
 
-    const newCapacity = playerNode.remainingCapacity - totalYield;
+    const newCapacity = effectiveCapacity - totalYield;
     const nodeDepleted = newCapacity <= 0;
 
     const resourceTemplateId = await getResourceTemplateId(template.resourceType);
@@ -259,6 +306,7 @@ gatheringRouter.post('/mine', async (req, res, next) => {
             id: playerNode.id,
             playerId,
             remainingCapacity: playerNode.remainingCapacity,
+            decayedCapacity: playerNode.decayedCapacity,
           },
         });
         if (depleted.count !== 1) {
@@ -270,8 +318,12 @@ gatheringRouter.post('/mine', async (req, res, next) => {
             id: playerNode.id,
             playerId,
             remainingCapacity: playerNode.remainingCapacity,
+            decayedCapacity: playerNode.decayedCapacity,
           },
-          data: { remainingCapacity: newCapacity },
+          data: {
+            remainingCapacity: newCapacity,
+            decayedCapacity: decay.targetDecay,
+          },
         });
         if (updated.count !== 1) {
           throw new AppError(409, 'Resource node state changed; try again', 'NODE_STATE_CHANGED');

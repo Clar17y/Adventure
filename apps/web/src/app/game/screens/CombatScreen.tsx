@@ -30,16 +30,16 @@ interface CombatScreenProps {
   };
   pendingEncounterZoneFilter: string;
   pendingEncounterMobFilter: string;
-  pendingEncounterSort: 'recent' | 'expires';
+  pendingEncounterSort: 'recent' | 'danger';
   pendingClockMs: number;
   busyAction: string | null;
   lastCombat: LastCombat | null;
   bestiaryMobs: Array<{ id: string; isDiscovered: boolean }>;
-  onStartCombat: (pendingEncounterId: string) => void | Promise<void>;
+  onStartCombat: (encounterSiteId: string) => void | Promise<void>;
   onPendingEncounterPageChange: (page: number) => void;
   onPendingEncounterZoneFilterChange: (zoneId: string) => void;
   onPendingEncounterMobFilterChange: (mobTemplateId: string) => void;
-  onPendingEncounterSortChange: (sort: 'recent' | 'expires') => void;
+  onPendingEncounterSortChange: (sort: 'recent' | 'danger') => void;
 }
 
 export function CombatScreen({
@@ -149,16 +149,16 @@ export function CombatScreen({
       {activeView === 'encounters' ? (
         <>
           <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 space-y-3">
-            <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Pending Encounters</h2>
+            <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Encounter Sites</h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <select
                 value={pendingEncounterSort}
-                onChange={(event) => onPendingEncounterSortChange(event.target.value as 'recent' | 'expires')}
+                onChange={(event) => onPendingEncounterSortChange(event.target.value as 'recent' | 'danger')}
                 className="px-3 py-2 rounded border border-[var(--rpg-border)] bg-[var(--rpg-background)] text-[var(--rpg-text-primary)] text-sm"
                 disabled={pendingEncountersLoading}
               >
-                <option value="expires">Sort: Expiring Soon</option>
+                <option value="danger">Sort: Most Dangerous</option>
                 <option value="recent">Sort: Most Recent</option>
               </select>
 
@@ -182,7 +182,7 @@ export function CombatScreen({
                 className="px-3 py-2 rounded border border-[var(--rpg-border)] bg-[var(--rpg-background)] text-[var(--rpg-text-primary)] text-sm"
                 disabled={pendingEncountersLoading}
               >
-                <option value="all">Mob: All</option>
+                <option value="all">Family: All</option>
                 {pendingEncounterFilters.mobs.map((mob) => (
                   <option key={mob.id} value={mob.id}>
                     {mob.name}
@@ -196,49 +196,48 @@ export function CombatScreen({
             )}
 
             {!pendingEncountersError && pendingEncountersLoading && (
-              <div className="text-sm text-[var(--rpg-text-secondary)]">Loading pending encounters...</div>
+              <div className="text-sm text-[var(--rpg-text-secondary)]">Loading encounter sites...</div>
             )}
 
             {!pendingEncountersError && !pendingEncountersLoading && pendingEncounters.length === 0 && (
-              <div className="text-sm text-[var(--rpg-text-secondary)]">No pending encounters match these filters.</div>
+              <div className="text-sm text-[var(--rpg-text-secondary)]">No encounter sites match these filters.</div>
             )}
 
             {!pendingEncountersError && !pendingEncountersLoading && pendingEncounters.length > 0 && (
               <div className="space-y-2">
                 {pendingEncounters.map((e) => {
-                  const prefix = getMobPrefixDefinition(e.mobPrefix);
+                  const prefix = getMobPrefixDefinition(e.nextMobPrefix);
+                  const nextMobLabel = e.nextMobName
+                    ? (prefix ? `${prefix.displayName} ${e.nextMobName}` : e.nextMobName)
+                    : null;
                   return (
                     <div
-                      key={e.encounterId}
+                      key={e.encounterSiteId}
                       className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 flex items-center justify-between"
                     >
                       <div>
                         <div className="text-[var(--rpg-text-primary)] font-semibold">
-                          {prefix ? (
-                            <>
-                              <span className="text-[var(--rpg-gold)]">{prefix.displayName}</span>{' '}
-                              <span>{e.mobName}</span>
-                            </>
-                          ) : (
-                            e.mobName
-                          )}
+                          {e.siteName} ({e.aliveMobs}/{e.totalMobs})
                         </div>
                         <div className="text-xs text-[var(--rpg-text-secondary)]">
-                          Zone: {e.zoneName} | Found {Math.max(0, Math.ceil((pendingClockMs - new Date(e.createdAt).getTime()) / 60000))}m ago | Expires in{' '}
-                          {Math.max(0, Math.ceil((new Date(e.expiresAt).getTime() - pendingClockMs) / 60000))}m
+                          Next monster: {nextMobLabel ?? 'None (site decayed)'}
+                        </div>
+                        <div className="text-xs text-[var(--rpg-text-secondary)]">
+                          Zone: {e.zoneName} | Decayed {e.decayedMobs} | Found{' '}
+                          {Math.max(0, Math.ceil((pendingClockMs - new Date(e.discoveredAt).getTime()) / 60000))}m ago
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => void onStartCombat(e.encounterId)}
-                        disabled={hpState.isRecovering || busyAction === 'combat'}
+                        onClick={() => void onStartCombat(e.encounterSiteId)}
+                        disabled={hpState.isRecovering || busyAction === 'combat' || !e.nextMobTemplateId}
                         className={`px-3 py-2 rounded font-semibold ${
-                          hpState.isRecovering
+                          hpState.isRecovering || !e.nextMobTemplateId
                             ? 'bg-[var(--rpg-border)] text-[var(--rpg-text-secondary)] cursor-not-allowed'
                             : 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
                         }`}
                       >
-                        {hpState.isRecovering ? 'Recover First' : 'Fight'}
+                        {hpState.isRecovering ? 'Recover First' : !e.nextMobTemplateId ? 'Decayed' : 'Fight'}
                       </button>
                     </div>
                   );

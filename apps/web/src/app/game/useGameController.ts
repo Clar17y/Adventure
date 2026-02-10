@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   allocatePlayerAttribute,
-  abandonPendingEncounters,
   craft,
   destroyInventoryItem,
   equip,
@@ -14,14 +13,14 @@ import {
   getHpState,
   getInventory,
   getPlayer,
-  getPendingEncounters,
+  getEncounterSites,
   getSkills,
   getTurns,
   getZones,
   mine,
   repairItem,
   salvage,
-  startCombatFromPendingEncounter,
+  startCombatFromEncounterSite,
   startExploration,
   unequip,
 } from '@/lib/api';
@@ -42,16 +41,22 @@ export type Screen =
   | 'rest';
 
 export interface PendingEncounter {
-  encounterId: string;
+  encounterSiteId: string;
   zoneId: string;
   zoneName: string;
-  mobTemplateId: string;
-  mobName: string;
-  mobPrefix: string | null;
-  mobDisplayName: string;
-  turnOccurred: number;
-  createdAt: string;
-  expiresAt: string;
+  mobFamilyId: string;
+  mobFamilyName: string;
+  siteName: string;
+  size: string;
+  totalMobs: number;
+  aliveMobs: number;
+  defeatedMobs: number;
+  decayedMobs: number;
+  nextMobTemplateId: string | null;
+  nextMobName: string | null;
+  nextMobPrefix: string | null;
+  nextMobDisplayName: string | null;
+  discoveredAt: string;
 }
 
 export interface LastCombatLogEntry {
@@ -226,6 +231,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     maxCapacity: number;
     sizeName: string;
     discoveredAt: string;
+    weathered: boolean;
   }>>([]);
   const [gatheringLoading, setGatheringLoading] = useState(false);
   const [gatheringError, setGatheringError] = useState<string | null>(null);
@@ -268,7 +274,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [pendingEncounterPage, setPendingEncounterPage] = useState(1);
   const [pendingEncounterZoneFilter, setPendingEncounterZoneFilter] = useState('all');
   const [pendingEncounterMobFilter, setPendingEncounterMobFilter] = useState('all');
-  const [pendingEncounterSort, setPendingEncounterSort] = useState<'recent' | 'expires'>('expires');
+  const [pendingEncounterSort, setPendingEncounterSort] = useState<'recent' | 'danger'>('danger');
   const [pendingEncounterPagination, setPendingEncounterPagination] = useState({
     page: 1,
     pageSize: PENDING_ENCOUNTER_PAGE_SIZE,
@@ -395,11 +401,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setPendingEncountersError(null);
 
     try {
-      const res = await getPendingEncounters({
+      const res = await getEncounterSites({
         page: pendingEncounterPage,
         pageSize: PENDING_ENCOUNTER_PAGE_SIZE,
         zoneId: pendingEncounterZoneFilter === 'all' ? undefined : pendingEncounterZoneFilter,
-        mobTemplateId: pendingEncounterMobFilter === 'all' ? undefined : pendingEncounterMobFilter,
+        mobFamilyId: pendingEncounterMobFilter === 'all' ? undefined : pendingEncounterMobFilter,
         sort: pendingEncounterSort,
       });
 
@@ -416,7 +422,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           hasPrevious: false,
         });
         setPendingEncounterFilters({ zones: [], mobs: [] });
-        setPendingEncountersError(res.error?.message ?? 'Failed to load pending encounters');
+        setPendingEncountersError(res.error?.message ?? 'Failed to load encounter sites');
         return;
       }
 
@@ -425,9 +431,31 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         return;
       }
 
-      setPendingEncounters(res.data.pendingEncounters);
+      setPendingEncounters(
+        res.data.encounterSites.map((site) => ({
+          encounterSiteId: site.encounterSiteId,
+          zoneId: site.zoneId,
+          zoneName: site.zoneName,
+          mobFamilyId: site.mobFamilyId,
+          mobFamilyName: site.mobFamilyName,
+          siteName: site.siteName,
+          size: site.size,
+          totalMobs: site.totalMobs,
+          aliveMobs: site.aliveMobs,
+          defeatedMobs: site.defeatedMobs,
+          decayedMobs: site.decayedMobs,
+          nextMobTemplateId: site.nextMobTemplateId,
+          nextMobName: site.nextMobName,
+          nextMobPrefix: site.nextMobPrefix,
+          nextMobDisplayName: site.nextMobDisplayName,
+          discoveredAt: site.discoveredAt,
+        }))
+      );
       setPendingEncounterPagination(res.data.pagination);
-      setPendingEncounterFilters(res.data.filters);
+      setPendingEncounterFilters({
+        zones: res.data.filters.zones,
+        mobs: res.data.filters.mobFamilies,
+      });
     } finally {
       if (!isBackground && latestPendingRequestRef.current === requestId) {
         setPendingEncountersLoading(false);
@@ -534,7 +562,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setPendingEncounterPage(1);
   }, []);
 
-  const handlePendingEncounterSortChange = useCallback((sort: 'recent' | 'expires') => {
+  const handlePendingEncounterSortChange = useCallback((sort: 'recent' | 'danger') => {
     setPendingEncounterSort(sort);
     setPendingEncounterPage(1);
   }, []);
@@ -602,37 +630,51 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
+      const stampedEvents = data.events
+        .slice()
+        .reverse()
+        .map((event) => ({
+          timestamp: nowStamp(),
+          type: event.type === 'ambush_defeat' ? 'danger' as const : event.type === 'ambush_victory' || event.type === 'encounter_site' || event.type === 'resource_node' ? 'success' as const : 'info' as const,
+          message: `Turn ${event.turn}: ${event.description}`,
+        }));
+
       setExplorationLog((prev) => [
-        { timestamp: nowStamp(), type: 'info', message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}.` },
+        ...(data.aborted
+          ? []
+          : [{ timestamp: nowStamp(), type: 'info' as const, message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}.` }]),
+        ...stampedEvents,
         ...prev,
       ]);
 
-      if (data.mobEncounters.length > 0) {
+      if (data.aborted && data.refundedTurns > 0) {
         setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'success', message: `Encountered ${data.mobEncounters.length} mob(s). Check Combat tab.` },
+          { timestamp: nowStamp(), type: 'info', message: `Exploration aborted. ${data.refundedTurns.toLocaleString()} turns refunded.` },
           ...prev,
         ]);
-        if (activeScreen === 'combat') {
-          await refreshPendingEncounters();
-        }
+      }
+
+      if (data.encounterSites.length > 0 && activeScreen === 'combat') {
+        await refreshPendingEncounters();
       }
 
       if (data.resourceDiscoveries.length > 0) {
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'success', message: `Found ${data.resourceDiscoveries.length} resource node(s).` },
-          ...prev,
-        ]);
         await loadGatheringNodes();
+      }
+
+      const hadAmbush = data.events.some((event) => event.type === 'ambush_victory' || event.type === 'ambush_defeat');
+      if (hadAmbush) {
+        await loadAll();
       }
     });
   };
 
-  const handleStartCombat = async (pendingEncounterId: string) => {
+  const handleStartCombat = async (encounterSiteId: string) => {
     await runAction('combat', async () => {
-      const res = await startCombatFromPendingEncounter(pendingEncounterId, 'melee');
+      const res = await startCombatFromEncounterSite(encounterSiteId, 'melee');
       const data = res.data;
       if (!data) {
-        if (res.error?.code === 'ENCOUNTER_EXPIRED' || res.error?.code === 'NOT_FOUND') {
+        if (res.error?.code === 'SITE_DECAYED' || res.error?.code === 'NOT_FOUND') {
           await refreshPendingEncounters();
         }
         setActionError(res.error?.message ?? 'Combat failed');
@@ -936,29 +978,6 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const handleTravelToZone = async (id: string) => {
-    const leavingZoneId = activeZoneId;
-    let leavingCount = 0;
-
-    if (leavingZoneId) {
-      const pendingInZoneRes = await getPendingEncounters({
-        zoneId: leavingZoneId,
-        page: 1,
-        pageSize: 1,
-      });
-      leavingCount = pendingInZoneRes.data?.pagination.total
-        ?? pendingEncounters.filter((p) => p.zoneId === leavingZoneId).length;
-    }
-
-    if (leavingZoneId && leavingCount > 0) {
-      const ok = window.confirm(
-        `You have ${leavingCount} pending encounter(s) in this zone. Traveling will abandon them. Continue?`
-      );
-      if (!ok) return;
-
-      await abandonPendingEncounters(leavingZoneId);
-      await refreshPendingEncounters();
-    }
-
     setActiveZoneId(id);
     setActiveScreen('explore');
   };

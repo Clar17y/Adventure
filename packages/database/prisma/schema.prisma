@@ -38,7 +38,7 @@ model Player {
   bestiary          PlayerBestiary[]
   bestiaryPrefixes  PlayerBestiaryPrefix[]
   activityLogs      ActivityLog[]
-  pendingEncounters PendingEncounter[]
+  encounterSites    EncounterSite[]
   refreshTokens     RefreshToken[]
   resourceNodes     PlayerResourceNode[]
 
@@ -160,9 +160,10 @@ model Zone {
   travelCost  Int     @map("travel_cost")
   isStarter   Boolean @default(false) @map("is_starter")
 
-  mobs          MobTemplate[]
-  resourceNodes ResourceNode[]
-  pendingEncounters PendingEncounter[]
+  mobs            MobTemplate[]
+  resourceNodes   ResourceNode[]
+  zoneMobFamilies ZoneMobFamily[]
+  encounterSites  EncounterSite[]
 
   @@map("zones")
 }
@@ -186,11 +187,11 @@ model MobTemplate {
   encounterWeight Int    @default(100) @map("encounter_weight")
   spellPattern    Json   @default("[]") @map("spell_pattern")
 
-  zone       Zone             @relation(fields: [zoneId], references: [id])
-  dropTables DropTable[]
-  bestiary   PlayerBestiary[]
+  zone             Zone              @relation(fields: [zoneId], references: [id])
+  dropTables       DropTable[]
+  bestiary         PlayerBestiary[]
   bestiaryPrefixes PlayerBestiaryPrefix[]
-  pendingEncounters PendingEncounter[]
+  familyMembers    MobFamilyMember[]
 
   @@map("mob_templates")
 }
@@ -269,6 +270,7 @@ model PlayerResourceNode {
   playerId          String   @map("player_id")
   resourceNodeId    String   @map("resource_node_id")
   remainingCapacity Int      @map("remaining_capacity")
+  decayedCapacity   Int      @default(0) @map("decayed_capacity")
   discoveredAt      DateTime @default(now()) @map("discovered_at")
 
   player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -309,29 +311,71 @@ model ActivityLog {
   createdAt    DateTime @default(now()) @map("created_at")
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  pendingEncounters PendingEncounter[]
+  encounterSites EncounterSite[]
 
   @@index([playerId, createdAt])
   @@map("activity_logs")
 }
 
-model PendingEncounter {
-  id           String   @id @default(uuid())
-  playerId     String   @map("player_id")
-  zoneId       String   @map("zone_id")
-  mobTemplateId String  @map("mob_template_id")
-  mobPrefix    String?  @map("mob_prefix") @db.VarChar(32)
-  turnOccurred Int      @map("turn_occurred")
-  sourceLogId  String?  @map("source_log_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  expiresAt    DateTime @map("expires_at")
+model MobFamily {
+  id             String @id @default(uuid())
+  name           String @db.VarChar(64)
+  siteNounSmall  String @map("site_noun_small") @db.VarChar(64)
+  siteNounMedium String @map("site_noun_medium") @db.VarChar(64)
+  siteNounLarge  String @map("site_noun_large") @db.VarChar(64)
 
-  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  zone        Zone        @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  members      MobFamilyMember[]
+  zoneMappings ZoneMobFamily[]
+  encounterSites EncounterSite[]
+
+  @@map("mob_families")
+}
+
+model MobFamilyMember {
+  mobFamilyId   String @map("mob_family_id")
+  mobTemplateId String @map("mob_template_id")
+  role          String @db.VarChar(16)
+
+  mobFamily   MobFamily   @relation(fields: [mobFamilyId], references: [id], onDelete: Cascade)
   mobTemplate MobTemplate @relation(fields: [mobTemplateId], references: [id], onDelete: Cascade)
-  sourceLog   ActivityLog? @relation(fields: [sourceLogId], references: [id], onDelete: SetNull)
 
-  @@index([playerId, createdAt])
-  @@index([playerId, expiresAt])
-  @@map("pending_encounters")
+  @@id([mobFamilyId, mobTemplateId, role])
+  @@index([mobTemplateId])
+  @@map("mob_family_members")
+}
+
+model ZoneMobFamily {
+  zoneId           String @map("zone_id")
+  mobFamilyId      String @map("mob_family_id")
+  discoveryWeight  Int    @default(100) @map("discovery_weight")
+  minSize          String @map("min_size") @db.VarChar(16)
+  maxSize          String @map("max_size") @db.VarChar(16)
+
+  zone      Zone      @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  mobFamily MobFamily @relation(fields: [mobFamilyId], references: [id], onDelete: Cascade)
+
+  @@id([zoneId, mobFamilyId])
+  @@index([zoneId, discoveryWeight])
+  @@map("zone_mob_families")
+}
+
+model EncounterSite {
+  id          String   @id @default(uuid())
+  playerId    String   @map("player_id")
+  zoneId      String   @map("zone_id")
+  mobFamilyId String   @map("mob_family_id")
+  name        String   @db.VarChar(128)
+  size        String   @db.VarChar(16)
+  mobs        Json
+  discoveredAt DateTime @default(now()) @map("discovered_at")
+  sourceLogId String?  @map("source_log_id")
+
+  player    Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  zone      Zone       @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  mobFamily MobFamily  @relation(fields: [mobFamilyId], references: [id], onDelete: Cascade)
+  sourceLog ActivityLog? @relation(fields: [sourceLogId], references: [id], onDelete: SetNull)
+
+  @@index([playerId, discoveredAt])
+  @@index([playerId, zoneId])
+  @@map("encounter_sites")
 }

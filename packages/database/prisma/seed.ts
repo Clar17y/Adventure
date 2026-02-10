@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { Prisma, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const prismaAny = prisma as unknown as any;
 
 const IDS = {
   zones: {
@@ -17,6 +18,12 @@ const IDS = {
     forestBear: 'dddddddd-3333-3333-3333-333333333333',
     darkTreant: 'dddddddd-4444-4444-4444-444444444444',
     forestSprite: 'dddddddd-5555-5555-5555-555555555555',
+  },
+  mobFamilies: {
+    forestCritters: 'b0b0b0b0-1111-1111-1111-111111111111',
+    forestBandits: 'b0b0b0b0-2222-2222-2222-222222222222',
+    deepWilds: 'b0b0b0b0-3333-3333-3333-333333333333',
+    deepSpirits: 'b0b0b0b0-4444-4444-4444-444444444444',
   },
   items: {
     copperOre: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
@@ -495,6 +502,105 @@ async function seedMobs() {
         { round: 6, action: 'Thorn Barrage', damage: 12 },
       ],
     },
+  });
+}
+
+async function seedMobFamilies() {
+  const families = [
+    {
+      id: IDS.mobFamilies.forestCritters,
+      name: 'Forest',
+      siteNounSmall: 'Pack',
+      siteNounMedium: 'Den',
+      siteNounLarge: 'Territory',
+    },
+    {
+      id: IDS.mobFamilies.forestBandits,
+      name: 'Bandit',
+      siteNounSmall: 'Raiders',
+      siteNounMedium: 'Camp',
+      siteNounLarge: 'Stronghold',
+    },
+    {
+      id: IDS.mobFamilies.deepWilds,
+      name: 'Wild',
+      siteNounSmall: 'Pack',
+      siteNounMedium: 'Hunting Grounds',
+      siteNounLarge: 'Domain',
+    },
+    {
+      id: IDS.mobFamilies.deepSpirits,
+      name: 'Spirit',
+      siteNounSmall: 'Cluster',
+      siteNounMedium: 'Circle',
+      siteNounLarge: 'Sanctum',
+    },
+  ];
+
+  for (const family of families) {
+    await prismaAny.mobFamily.upsert({
+      where: { id: family.id },
+      create: family,
+      update: family,
+    });
+  }
+
+  await prismaAny.mobFamilyMember.deleteMany({});
+  await prismaAny.zoneMobFamily.deleteMany({});
+
+  await prismaAny.mobFamilyMember.createMany({
+    data: [
+      // Forest Edge families
+      { mobFamilyId: IDS.mobFamilies.forestCritters, mobTemplateId: IDS.mobs.forestRat, role: 'trash' },
+      { mobFamilyId: IDS.mobFamilies.forestCritters, mobTemplateId: IDS.mobs.forestSpider, role: 'elite' },
+      { mobFamilyId: IDS.mobFamilies.forestCritters, mobTemplateId: IDS.mobs.wildBoar, role: 'boss' },
+
+      { mobFamilyId: IDS.mobFamilies.forestBandits, mobTemplateId: IDS.mobs.woodlandBandit, role: 'trash' },
+      { mobFamilyId: IDS.mobFamilies.forestBandits, mobTemplateId: IDS.mobs.woodlandBandit, role: 'elite' },
+      { mobFamilyId: IDS.mobFamilies.forestBandits, mobTemplateId: IDS.mobs.woodlandBandit, role: 'boss' },
+
+      // Deep Forest families
+      { mobFamilyId: IDS.mobFamilies.deepWilds, mobTemplateId: IDS.mobs.forestWolf, role: 'trash' },
+      { mobFamilyId: IDS.mobFamilies.deepWilds, mobTemplateId: IDS.mobs.forestBear, role: 'elite' },
+      { mobFamilyId: IDS.mobFamilies.deepWilds, mobTemplateId: IDS.mobs.darkTreant, role: 'boss' },
+
+      { mobFamilyId: IDS.mobFamilies.deepSpirits, mobTemplateId: IDS.mobs.forestSprite, role: 'trash' },
+      { mobFamilyId: IDS.mobFamilies.deepSpirits, mobTemplateId: IDS.mobs.forestSprite, role: 'elite' },
+      { mobFamilyId: IDS.mobFamilies.deepSpirits, mobTemplateId: IDS.mobs.forestSprite, role: 'boss' },
+    ],
+  });
+
+  await prismaAny.zoneMobFamily.createMany({
+    data: [
+      {
+        zoneId: IDS.zones.forestEdge,
+        mobFamilyId: IDS.mobFamilies.forestCritters,
+        discoveryWeight: 110,
+        minSize: 'small',
+        maxSize: 'medium',
+      },
+      {
+        zoneId: IDS.zones.forestEdge,
+        mobFamilyId: IDS.mobFamilies.forestBandits,
+        discoveryWeight: 70,
+        minSize: 'small',
+        maxSize: 'medium',
+      },
+      {
+        zoneId: IDS.zones.deepForest,
+        mobFamilyId: IDS.mobFamilies.deepWilds,
+        discoveryWeight: 100,
+        minSize: 'medium',
+        maxSize: 'large',
+      },
+      {
+        zoneId: IDS.zones.deepForest,
+        mobFamilyId: IDS.mobFamilies.deepSpirits,
+        discoveryWeight: 60,
+        minSize: 'small',
+        maxSize: 'medium',
+      },
+    ],
   });
 }
 
@@ -1929,6 +2035,7 @@ async function main() {
   await seedNewSkillItemTemplates();
   await seedMobLootAndCraftedItemTemplates();
   await seedMobs();
+  await seedMobFamilies();
   await seedResourceNodes();
   await seedDropTables();
   await seedRecipes();

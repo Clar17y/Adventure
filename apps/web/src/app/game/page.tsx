@@ -600,6 +600,7 @@ export default function GamePage() {
                 remainingCapacity: n.remainingCapacity,
                 maxCapacity: n.maxCapacity,
                 sizeName: n.sizeName,
+                weathered: n.weathered,
               }))}
               currentZoneId={activeZoneId}
               availableTurns={turns}

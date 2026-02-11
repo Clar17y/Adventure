@@ -25,6 +25,7 @@ import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
+import { discoverZone, getUndiscoveredNeighborZones } from '../services/zoneDiscoveryService';
 
 export const explorationRouter = Router();
 
@@ -34,6 +35,7 @@ const prismaAny = prisma as unknown as any;
 
 const estimateQuerySchema = z.object({
   turns: z.coerce.number().int(),
+  zoneId: z.string().uuid().optional(),
 });
 
 const startSchema = z.object({
@@ -305,7 +307,18 @@ explorationRouter.get('/estimate', async (req, res, next) => {
       throw new AppError(400, validation.error ?? 'Invalid turns', 'INVALID_TURNS');
     }
 
-    res.json({ estimate: estimateExploration(query.turns) });
+    let zoneExitChance: number | null = null;
+    if (query.zoneId) {
+      const zone = await prisma.zone.findUnique({
+        where: { id: query.zoneId },
+        select: { zoneExitChance: true },
+      });
+      if (zone) {
+        zoneExitChance = zone.zoneExitChance;
+      }
+    }
+
+    res.json({ estimate: estimateExploration(query.turns, zoneExitChance) });
   } catch (err) {
     next(err);
   }
@@ -337,6 +350,9 @@ explorationRouter.post('/start', async (req, res, next) => {
     if (!zone) {
       throw new AppError(404, 'Zone not found', 'NOT_FOUND');
     }
+    if (zone.zoneType === 'town') {
+      throw new AppError(400, 'Cannot explore in towns. Travel to a wild zone first.', 'TOWN_ZONE');
+    }
 
     const [mobTemplates, resourceNodes, zoneFamilies, progression, equipmentStats, mainHandAttackSkill] = await Promise.all([
       prisma.mobTemplate.findMany({ where: { zoneId: body.zoneId } }),
@@ -365,9 +381,12 @@ explorationRouter.post('/start', async (req, res, next) => {
     const attackSkill: AttackSkill = mainHandAttackSkill ?? 'melee';
     const attackLevel = await getSkillLevel(playerId, attackSkill);
 
+    const undiscoveredNeighbors = await getUndiscoveredNeighborZones(playerId, body.zoneId);
+    const effectiveExitChance = undiscoveredNeighbors.length > 0 ? zone.zoneExitChance : null;
+
     const turnSpend = await spendPlayerTurns(playerId, body.turns);
 
-    const outcomes = simulateExploration(body.turns, true);
+    const outcomes = simulateExploration(body.turns, effectiveExitChance);
 
     const pendingResources: PendingResourceDiscovery[] = [];
     const pendingSites: PendingEncounterSiteDiscovery[] = [];
@@ -588,13 +607,22 @@ explorationRouter.post('/start', async (req, res, next) => {
         continue;
       }
 
-      if (outcome.type === 'zone_exit') {
+      if (outcome.type === 'zone_exit' && undiscoveredNeighbors.length > 0) {
+        const neighborIndex = randomIntInclusive(0, undiscoveredNeighbors.length - 1);
+        const neighbor = undiscoveredNeighbors[neighborIndex]!;
+        await discoverZone(playerId, neighbor.id);
+        // Remove so subsequent zone_exit rolls pick a different neighbor
+        undiscoveredNeighbors.splice(neighborIndex, 1);
+
         zoneExitDiscovered = true;
         events.push({
           turn: outcome.turnOccurred,
           type: 'zone_exit',
-          description: 'You discovered a path to another zone.',
-          details: {},
+          description: `You discovered a path leading to **${neighbor.name}**.`,
+          details: {
+            discoveredZoneId: neighbor.id,
+            discoveredZoneName: neighbor.name,
+          },
         });
       }
     }

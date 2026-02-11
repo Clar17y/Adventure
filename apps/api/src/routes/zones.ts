@@ -7,15 +7,18 @@ import {
   applyMobPrefix,
   rollMobPrefix,
   simulateTravelAmbushes,
+  calculateFleeResult,
 } from '@adventure/game-engine';
 import type { MobTemplate, SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns, refundPlayerTurns } from '../services/turnBankService';
-import { getHpState, enterRecoveringState } from '../services/hpService';
+import { getHpState, enterRecoveringState, setHp } from '../services/hpService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { grantSkillXp } from '../services/xpService';
+import { rollAndGrantLoot } from '../services/lootService';
+import { degradeEquippedDurability } from '../services/durabilityService';
 import {
   ensureStarterDiscoveries,
   getDiscoveredZoneIds,
@@ -295,58 +298,111 @@ zonesRouter.post('/travel', async (req, res, next) => {
           const combatResult = runCombat(playerStats, prefixedMob);
           currentHp = combatResult.playerHpRemaining;
 
+          const durabilityLost = await degradeEquippedDurability(playerId);
+
           if (combatResult.outcome === 'victory') {
+            const loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
+            const xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
+            const xpGain = xpGrant.xpResult.xpAfterEfficiency;
+            await setHp(playerId, currentHp);
+
+            // Update bestiary
+            await prisma.playerBestiary.upsert({
+              where: { playerId_mobTemplateId: { playerId, mobTemplateId: prefixedMob.id } },
+              create: { playerId, mobTemplateId: prefixedMob.id, kills: 1 },
+              update: { kills: { increment: 1 } },
+            });
+            if (prefixedMob.mobPrefix) {
+              await db.playerBestiaryPrefix.upsert({
+                where: {
+                  playerId_mobTemplateId_prefix: {
+                    playerId, mobTemplateId: prefixedMob.id, prefix: prefixedMob.mobPrefix,
+                  },
+                },
+                create: { playerId, mobTemplateId: prefixedMob.id, prefix: prefixedMob.mobPrefix, kills: 1 },
+                update: { kills: { increment: 1 } },
+              });
+            }
+
             events.push({
               turn: ambush.turnOccurred,
               type: 'ambush_victory',
-              description: `Ambushed by ${prefixedMob.mobDisplayName}! You defeated it.`,
-              details: { mobName: prefixedMob.mobDisplayName, xp: prefixedMob.xpReward },
+              description: `Ambushed by ${prefixedMob.mobDisplayName}! You defeated it. (+${xpGain} XP)`,
+              details: { mobName: prefixedMob.mobDisplayName, xp: xpGain, loot, durabilityLost },
             });
-
-            // Grant XP using the equipped weapon's attack skill
-            await grantSkillXp(playerId, attackSkill, prefixedMob.xpReward);
           } else {
-            // Player KO'd during travel
-            events.push({
-              turn: ambush.turnOccurred,
-              type: 'ambush_defeat',
-              description: `Ambushed by ${prefixedMob.mobDisplayName}! You were defeated.`,
-              details: { mobName: prefixedMob.mobDisplayName },
+            // Player lost — calculate flee result
+            const fleeResult = calculateFleeResult({
+              evasionLevel: progression.attributes.evasion,
+              mobLevel: prefixedMob.level,
+              maxHp: hpState.maxHp,
+              currentGold: 0,
             });
 
-            await enterRecoveringState(playerId, hpState.maxHp);
-            const respawn = await respawnToHomeTown(playerId);
+            if (fleeResult.outcome === 'knockout') {
+              currentHp = 0;
+              await enterRecoveringState(playerId, hpState.maxHp);
+              const respawn = await respawnToHomeTown(playerId);
 
-            // Refund remaining turns (turns after the ambush point)
-            const refundAmount = travelCost - ambush.turnOccurred;
-            if (refundAmount > 0) {
-              await refundPlayerTurns(playerId, refundAmount);
+              events.push({
+                turn: ambush.turnOccurred,
+                type: 'ambush_defeat',
+                description: `Ambushed by ${prefixedMob.mobDisplayName}! You were knocked out.`,
+                details: { mobName: prefixedMob.mobDisplayName, durabilityLost },
+              });
+
+              // Refund remaining turns
+              const refundAmount = travelCost - ambush.turnOccurred;
+              if (refundAmount > 0) {
+                await refundPlayerTurns(playerId, refundAmount);
+              }
+
+              const discoveredIds = await discoverZonesFromTown(playerId, respawn.townId);
+              const discoveredZones = await db.zone.findMany({
+                where: { id: { in: discoveredIds } },
+                select: { id: true, name: true },
+              });
+
+              return res.json({
+                zone: { id: respawn.townId, name: respawn.townName, zoneType: 'town' },
+                turns: await getTurnSnapshot(),
+                breadcrumbReturn: false,
+                events,
+                aborted: true,
+                refundedTurns: refundAmount,
+                respawnedTo: respawn,
+                newDiscoveries: discoveredZones,
+              });
+            } else {
+              // Fled — abort travel, stay in current zone
+              currentHp = fleeResult.remainingHp;
+              await setHp(playerId, currentHp);
+
+              events.push({
+                turn: ambush.turnOccurred,
+                type: 'ambush_defeat',
+                description: `Ambushed by ${prefixedMob.mobDisplayName}! You escaped with ${currentHp} HP.`,
+                details: { mobName: prefixedMob.mobDisplayName, remainingHp: currentHp, durabilityLost },
+              });
+
+              // Refund remaining turns
+              const refundAmount = travelCost - ambush.turnOccurred;
+              if (refundAmount > 0) {
+                await refundPlayerTurns(playerId, refundAmount);
+              }
+
+              return res.json({
+                zone: { id: currentZoneId, name: currentZone.name, zoneType: currentZone.zoneType },
+                turns: await getTurnSnapshot(),
+                breadcrumbReturn: false,
+                events,
+                aborted: true,
+                refundedTurns: refundAmount,
+                respawnedTo: null,
+                newDiscoveries: [],
+              });
             }
-
-            // Auto-discover zones from respawn town
-            const discoveredIds = await discoverZonesFromTown(playerId, respawn.townId);
-            const discoveredZones = await db.zone.findMany({
-              where: { id: { in: discoveredIds } },
-              select: { id: true, name: true },
-            });
-
-            return res.json({
-              zone: { id: respawn.townId, name: respawn.townName, zoneType: 'town' },
-              turns: await getTurnSnapshot(),
-              breadcrumbReturn: false,
-              events,
-              aborted: true,
-              refundedTurns: refundAmount,
-              respawnedTo: respawn,
-              newDiscoveries: discoveredZones,
-            });
           }
-
-          // Update player's current HP after surviving ambush
-          await prisma.player.update({
-            where: { id: playerId },
-            data: { currentHp },
-          });
         }
       }
     }

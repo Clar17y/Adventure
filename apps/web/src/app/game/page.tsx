@@ -166,6 +166,7 @@ export default function GamePage() {
     setTurns,
     zones,
     activeZoneId,
+    zoneConnections,
     skills,
     characterProgression,
     inventory,
@@ -441,13 +442,16 @@ export default function GamePage() {
             zones={zones.map((z) => ({
               id: z.id,
               name: z.name,
-              description: z.description ?? '',
+              description: z.description,
               difficulty: z.difficulty,
               travelCost: z.travelCost,
-              isLocked: !z.discovered || z.name === '???',
-              isCurrent: z.id === activeZoneId,
+              discovered: z.discovered ?? true,
+              zoneType: z.zoneType ?? 'wild',
               imageSrc: z.discovered && z.name !== '???' ? zoneImageSrc(z.name) : undefined,
             }))}
+            connections={zoneConnections}
+            currentZoneId={activeZoneId ?? ''}
+            availableTurns={turns}
             onTravel={handleTravelToZone}
           />
         );

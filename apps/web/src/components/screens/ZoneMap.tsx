@@ -1,29 +1,135 @@
 'use client';
 
-import { useState } from 'react';
-import { PixelCard } from '@/components/PixelCard';
+import { useMemo, useState } from 'react';
 import { PixelButton } from '@/components/PixelButton';
-import { MapPin, Lock, Star, Hourglass } from 'lucide-react';
-
-interface Zone {
-  id: string;
-  name: string;
-  icon?: string;
-  imageSrc?: string;
-  difficulty: number;
-  travelCost: number;
-  isLocked: boolean;
-  isCurrent: boolean;
-  description: string;
-}
+import { MapPin, Star, Hourglass } from 'lucide-react';
 
 interface ZoneMapProps {
-  zones: Zone[];
+  zones: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    difficulty: number;
+    travelCost: number;
+    discovered: boolean;
+    zoneType: string;
+    imageSrc?: string;
+  }>;
+  connections: Array<{ fromId: string; toId: string }>;
+  currentZoneId: string;
+  availableTurns: number;
   onTravel: (zoneId: string) => void;
 }
 
-export function ZoneMap({ zones, onTravel }: ZoneMapProps) {
-  const [selectedZone, setSelectedZone] = useState<Zone | null>(zones.find((z) => z.isCurrent) || null);
+/** BFS from the starter zone to compute shortest-path tier for each zone. */
+function computeTiers(
+  zones: ZoneMapProps['zones'],
+  connections: ZoneMapProps['connections'],
+): Map<string, number> {
+  const starterZone = zones.find(
+    (z) => z.discovered && z.travelCost === 0 && z.zoneType === 'town',
+  );
+  if (!starterZone) return new Map();
+
+  // Build adjacency as undirected so BFS can traverse both directions
+  const graph = new Map<string, string[]>();
+  for (const conn of connections) {
+    if (!graph.has(conn.fromId)) graph.set(conn.fromId, []);
+    graph.get(conn.fromId)!.push(conn.toId);
+    if (!graph.has(conn.toId)) graph.set(conn.toId, []);
+    graph.get(conn.toId)!.push(conn.fromId);
+  }
+
+  const tiers = new Map<string, number>();
+  const queue = [starterZone.id];
+  tiers.set(starterZone.id, 0);
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const currentTier = tiers.get(current)!;
+    for (const neighbor of graph.get(current) ?? []) {
+      if (!tiers.has(neighbor)) {
+        tiers.set(neighbor, currentTier + 1);
+        queue.push(neighbor);
+      }
+    }
+  }
+  return tiers;
+}
+
+// Fixed grid dimensions for line drawing
+const NODE_W = 100;
+const NODE_H = 100;
+const ROW_GAP = 48;
+const COL_GAP = 12;
+
+export function ZoneMap({
+  zones,
+  connections,
+  currentZoneId,
+  availableTurns,
+  onTravel,
+}: ZoneMapProps) {
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+
+  const tiers = useMemo(() => computeTiers(zones, connections), [zones, connections]);
+
+  // Group zones by tier
+  const tierRows = useMemo(() => {
+    const rows = new Map<number, typeof zones>();
+    for (const zone of zones) {
+      const tier = tiers.get(zone.id) ?? -1;
+      if (tier < 0) continue; // unreachable zone
+      if (!rows.has(tier)) rows.set(tier, []);
+      rows.get(tier)!.push(zone);
+    }
+    // Sort by tier ascending
+    return Array.from(rows.entries()).sort(([a], [b]) => a - b);
+  }, [zones, tiers]);
+
+  // Compute center positions for each zone node (for SVG lines)
+  const zonePositions = useMemo(() => {
+    const positions = new Map<string, { x: number; y: number }>();
+    let maxRowWidth = 0;
+
+    for (const [, rowZones] of tierRows) {
+      const rowWidth = rowZones.length * NODE_W + (rowZones.length - 1) * COL_GAP;
+      if (rowWidth > maxRowWidth) maxRowWidth = rowWidth;
+    }
+
+    for (let rowIdx = 0; rowIdx < tierRows.length; rowIdx++) {
+      const [, rowZones] = tierRows[rowIdx];
+      const rowWidth = rowZones.length * NODE_W + (rowZones.length - 1) * COL_GAP;
+      const offsetX = (maxRowWidth - rowWidth) / 2;
+      const y = rowIdx * (NODE_H + ROW_GAP) + NODE_H / 2;
+
+      for (let colIdx = 0; colIdx < rowZones.length; colIdx++) {
+        const x = offsetX + colIdx * (NODE_W + COL_GAP) + NODE_W / 2;
+        positions.set(rowZones[colIdx].id, { x, y });
+      }
+    }
+
+    return positions;
+  }, [tierRows]);
+
+  // Total SVG size
+  const svgSize = useMemo(() => {
+    let maxRowWidth = 0;
+    for (const [, rowZones] of tierRows) {
+      const rowWidth = rowZones.length * NODE_W + (rowZones.length - 1) * COL_GAP;
+      if (rowWidth > maxRowWidth) maxRowWidth = rowWidth;
+    }
+    return {
+      width: Math.max(maxRowWidth, NODE_W),
+      height: tierRows.length * (NODE_H + ROW_GAP) - ROW_GAP,
+    };
+  }, [tierRows]);
+
+  const selectedZone = zones.find((z) => z.id === selectedZoneId);
+  const canTravel =
+    selectedZone &&
+    selectedZone.discovered &&
+    selectedZone.id !== currentZoneId &&
+    availableTurns >= selectedZone.travelCost;
 
   return (
     <div className="space-y-4">
@@ -32,101 +138,238 @@ export function ZoneMap({ zones, onTravel }: ZoneMapProps) {
         <MapPin size={20} color="var(--rpg-gold)" />
       </div>
 
-      {/* Zone Grid */}
-      <div className="space-y-3">
-        {zones.map((zone) => {
-          const isSelected = selectedZone?.id === zone.id;
-          return (
-            <button
-              key={zone.id}
-              onClick={() => !zone.isLocked && setSelectedZone(zone)}
-              disabled={zone.isLocked}
-              className={`w-full text-left transition-all ${zone.isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <PixelCard
-                className={`relative overflow-hidden ${
-                  zone.isCurrent
-                    ? 'border-[var(--rpg-gold)] border-2'
-                    : isSelected
-                    ? 'border-[var(--rpg-blue-light)]'
-                    : ''
-                }`}
+      {/* Tiered map */}
+      <div
+        className="relative mx-auto"
+        style={{ width: svgSize.width, minHeight: svgSize.height }}
+      >
+        {/* SVG connection lines */}
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width={svgSize.width}
+          height={svgSize.height}
+          style={{ zIndex: 0 }}
+        >
+          {connections.map((conn) => {
+            const from = zonePositions.get(conn.fromId);
+            const to = zonePositions.get(conn.toId);
+            if (!from || !to) return null;
+            return (
+              <line
+                key={`${conn.fromId}-${conn.toId}`}
+                x1={from.x}
+                y1={from.y}
+                x2={to.x}
+                y2={to.y}
+                stroke="var(--rpg-border)"
+                strokeWidth={2}
+                strokeDasharray="6 4"
+              />
+            );
+          })}
+        </svg>
+
+        {/* Zone nodes */}
+        {tierRows.map(([tier, rowZones]) => {
+          const rowWidth = rowZones.length * NODE_W + (rowZones.length - 1) * COL_GAP;
+          let maxRowWidth = 0;
+          for (const [, rz] of tierRows) {
+            const w = rz.length * NODE_W + (rz.length - 1) * COL_GAP;
+            if (w > maxRowWidth) maxRowWidth = w;
+          }
+          const offsetX = (maxRowWidth - rowWidth) / 2;
+          const rowY = tierRows.findIndex(([t]) => t === tier) * (NODE_H + ROW_GAP);
+
+          return rowZones.map((zone, colIdx) => {
+            const x = offsetX + colIdx * (NODE_W + COL_GAP);
+            const isCurrent = zone.id === currentZoneId;
+            const isSelected = zone.id === selectedZoneId;
+            const isUndiscovered = !zone.discovered;
+
+            return (
+              <button
+                key={zone.id}
+                onClick={() => {
+                  if (!isUndiscovered) setSelectedZoneId(zone.id);
+                }}
+                disabled={isUndiscovered}
+                className="absolute flex flex-col items-center justify-center text-center transition-all"
+                style={{
+                  left: x,
+                  top: rowY,
+                  width: NODE_W,
+                  height: NODE_H,
+                  zIndex: 1,
+                }}
               >
-                {zone.isLocked && (
-                  <div className="absolute top-2 right-2 z-10">
-                    <div className="w-8 h-8 rounded-full bg-[var(--rpg-background)] border border-[var(--rpg-border)] flex items-center justify-center">
-                      <Lock size={16} color="var(--rpg-text-secondary)" />
-                    </div>
-                  </div>
-                )}
+                {/* Node card */}
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    background: isUndiscovered
+                      ? 'var(--rpg-background)'
+                      : 'var(--rpg-bg-medium, var(--rpg-surface))',
+                    border: isCurrent
+                      ? '2px solid var(--rpg-gold)'
+                      : isSelected
+                        ? '2px solid var(--rpg-blue-light)'
+                        : '1px solid var(--rpg-border)',
+                    borderRadius: 8,
+                    opacity: isUndiscovered ? 0.4 : 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 4,
+                    cursor: isUndiscovered ? 'not-allowed' : 'pointer',
+                    boxShadow: isCurrent
+                      ? '0 0 8px var(--rpg-gold)'
+                      : isSelected
+                        ? '0 0 6px var(--rpg-blue-light)'
+                        : 'none',
+                  }}
+                >
+                  {/* Zone icon */}
+                  {zone.imageSrc && !isUndiscovered ? (
+                    <img
+                      src={zone.imageSrc}
+                      alt={zone.name}
+                      className="image-rendering-pixelated"
+                      style={{ width: 32, height: 32, objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 20 }}>
+                      {isUndiscovered ? '?' : zone.zoneType === 'town' ? '\u{1F3D8}\uFE0F' : '\u{1F332}'}
+                    </span>
+                  )}
 
-                <div className="flex gap-3">
-                  {/* Zone Thumbnail */}
-                  <div
-                    className={`w-20 h-20 rounded-lg flex items-center justify-center text-4xl flex-shrink-0 ${
-                      zone.isLocked ? 'bg-[var(--rpg-background)] grayscale opacity-50' : 'bg-[var(--rpg-background)]'
-                    }`}
+                  {/* Zone name */}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      lineHeight: '12px',
+                      fontWeight: 600,
+                      color: isUndiscovered
+                        ? 'var(--rpg-text-secondary)'
+                        : 'var(--rpg-text-primary)',
+                      marginTop: 2,
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
                   >
-                    {zone.isLocked ? (
-                      <Lock size={32} color="var(--rpg-text-secondary)" />
-                    ) : zone.imageSrc ? (
-                      <img
-                        src={zone.imageSrc}
-                        alt={zone.name}
-                        className="w-16 h-16 object-contain image-rendering-pixelated"
-                      />
-                    ) : (
-                      zone.icon ?? null
-                    )}
-                  </div>
+                    {isUndiscovered ? '???' : zone.name}
+                  </span>
 
-                  {/* Zone Info */}
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-1">
-                      <h3 className="font-semibold text-[var(--rpg-text-primary)]">
-                        {zone.isLocked ? '???' : zone.name}
-                        {zone.isCurrent && <span className="ml-2 text-xs text-[var(--rpg-gold)]">(Current)</span>}
-                      </h3>
+                  {/* Difficulty stars */}
+                  {!isUndiscovered && (
+                    <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>
+                      {Array.from({ length: Math.min(zone.difficulty, 5) }).map((_, idx) => (
+                        <Star
+                          key={idx}
+                          size={8}
+                          fill="var(--rpg-gold)"
+                          color="var(--rpg-gold)"
+                        />
+                      ))}
                     </div>
+                  )}
 
-                    {!zone.isLocked && (
-                      <>
-                        <p className="text-xs text-[var(--rpg-text-secondary)] mb-2">{zone.description}</p>
+                  {/* Travel cost badge */}
+                  {!isUndiscovered && zone.travelCost > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        marginTop: 2,
+                        fontSize: 9,
+                        color: 'var(--rpg-gold)',
+                      }}
+                    >
+                      <Hourglass size={8} />
+                      <span>{zone.travelCost}</span>
+                    </div>
+                  )}
 
-                        <div className="flex items-center gap-4 text-xs">
-                          {/* Difficulty Stars */}
-                          <div className="flex items-center gap-1">
-                            {Array.from({ length: 5 }).map((_, idx) => (
-                              <Star
-                                key={idx}
-                                size={12}
-                                fill={idx < zone.difficulty ? 'var(--rpg-gold)' : 'none'}
-                                color={idx < zone.difficulty ? 'var(--rpg-gold)' : 'var(--rpg-border)'}
-                              />
-                            ))}
-                          </div>
-
-                          {/* Travel Cost */}
-                          <div className="flex items-center gap-1 text-[var(--rpg-gold)]">
-                            <Hourglass size={12} />
-                            <span>{zone.travelCost} turns</span>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  {/* Current badge */}
+                  {isCurrent && (
+                    <span
+                      style={{
+                        fontSize: 8,
+                        color: 'var(--rpg-gold)',
+                        fontWeight: 700,
+                        marginTop: 1,
+                      }}
+                    >
+                      HERE
+                    </span>
+                  )}
                 </div>
-              </PixelCard>
-            </button>
-          );
+              </button>
+            );
+          });
         })}
       </div>
 
-      {/* Travel Button */}
-      {selectedZone && !selectedZone.isCurrent && !selectedZone.isLocked && (
-        <PixelButton variant="gold" size="lg" className="w-full" onClick={() => onTravel(selectedZone.id)}>
-          Travel to {selectedZone.name}
-        </PixelButton>
+      {/* Selected zone details panel */}
+      {selectedZone && selectedZone.discovered && (
+        <div
+          style={{
+            background: 'var(--rpg-surface)',
+            border: '1px solid var(--rpg-border)',
+            borderRadius: 8,
+            padding: 12,
+          }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-semibold text-[var(--rpg-text-primary)]">
+              {selectedZone.name}
+              {selectedZone.id === currentZoneId && (
+                <span className="ml-2 text-xs text-[var(--rpg-gold)]">(Current)</span>
+              )}
+            </h3>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(selectedZone.difficulty, 5) }).map((_, idx) => (
+                <Star key={idx} size={12} fill="var(--rpg-gold)" color="var(--rpg-gold)" />
+              ))}
+            </div>
+          </div>
+
+          {selectedZone.description && (
+            <p className="text-xs text-[var(--rpg-text-secondary)] mb-2">
+              {selectedZone.description}
+            </p>
+          )}
+
+          <div className="flex items-center gap-4 text-xs mb-3">
+            {selectedZone.zoneType === 'town' && (
+              <span className="text-[var(--rpg-text-secondary)]">{'\u{1F3D8}\uFE0F'} Town</span>
+            )}
+            {selectedZone.travelCost > 0 && (
+              <div className="flex items-center gap-1 text-[var(--rpg-gold)]">
+                <Hourglass size={12} />
+                <span>{selectedZone.travelCost} turns</span>
+              </div>
+            )}
+          </div>
+
+          {selectedZone.id !== currentZoneId && (
+            <PixelButton
+              variant="gold"
+              size="md"
+              className="w-full"
+              onClick={() => onTravel(selectedZone.id)}
+              disabled={!canTravel}
+            >
+              {availableTurns < selectedZone.travelCost
+                ? `Need ${selectedZone.travelCost} turns (have ${availableTurns})`
+                : `Travel to ${selectedZone.name} (${selectedZone.travelCost} turns)`}
+            </PixelButton>
+          )}
+        </div>
       )}
     </div>
   );

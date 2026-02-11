@@ -168,6 +168,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     travelCost: number;
     isStarter: boolean;
     discovered: boolean;
+    zoneType: string;
   }>>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [zoneConnections, setZoneConnections] = useState<Array<{ fromId: string; toId: string }>>([]);

@@ -25,6 +25,7 @@ import { degradeEquippedDurability } from '../services/durabilityService';
 import { getHpState, setHp, enterRecoveringState } from '../services/hpService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
+import { respawnToHomeTown } from '../services/zoneDiscoveryService';
 
 export const combatRouter = Router();
 
@@ -576,6 +577,7 @@ combatRouter.post('/start', async (req, res, next) => {
     let xpGrant = null as null | Awaited<ReturnType<typeof grantSkillXp>>;
     const durabilityLost = await degradeEquippedDurability(playerId);
     let fleeResult = null as null | ReturnType<typeof calculateFleeResult>;
+    let respawnedTo: { townId: string; townName: string } | null = null;
 
     const baseXp = combatResult.outcome === 'victory' ? combatResult.xpGained : 0;
     const xpAwarded = Math.max(0, baseXp);
@@ -596,6 +598,7 @@ combatRouter.post('/start', async (req, res, next) => {
 
       if (fleeResult.outcome === 'knockout') {
         await enterRecoveringState(playerId, hpState.maxHp);
+        respawnedTo = await respawnToHomeTown(playerId);
       } else {
         await setHp(playerId, fleeResult.remainingHp);
       }
@@ -700,6 +703,7 @@ combatRouter.post('/start', async (req, res, next) => {
               recoveryCost: fleeResult.recoveryCost,
             }
           : null,
+        ...(respawnedTo ? { respawnedTo } : {}),
       },
       rewards: {
         xp: xpAwarded,

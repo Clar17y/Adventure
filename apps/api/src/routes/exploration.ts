@@ -25,7 +25,7 @@ import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
-import { discoverZone, getUndiscoveredNeighborZones } from '../services/zoneDiscoveryService';
+import { discoverZone, getUndiscoveredNeighborZones, respawnToHomeTown } from '../services/zoneDiscoveryService';
 
 export const explorationRouter = Router();
 
@@ -398,6 +398,7 @@ explorationRouter.post('/start', async (req, res, next) => {
     let currentHp = hpState.currentHp;
     let aborted = false;
     let abortedAtTurn: number | null = null;
+    let respawnedTo: { townId: string; townName: string } | null = null;
 
     for (const outcome of outcomes) {
       if (aborted) break;
@@ -495,6 +496,7 @@ explorationRouter.post('/start', async (req, res, next) => {
           if (fleeResult.outcome === 'knockout') {
             currentHp = 0;
             await enterRecoveringState(playerId, hpState.maxHp);
+            respawnedTo = await respawnToHomeTown(playerId);
           } else {
             currentHp = fleeResult.remainingHp;
             await setHp(playerId, currentHp);
@@ -752,6 +754,7 @@ explorationRouter.post('/start', async (req, res, next) => {
       resourceDiscoveries: persisted.resourceDiscoveries,
       hiddenCaches,
       zoneExitDiscovered,
+      ...(respawnedTo ? { respawnedTo } : {}),
     });
   } catch (err) {
     next(err);

@@ -69,6 +69,37 @@ export async function getDiscoveredZoneIds(playerId: string): Promise<Set<string
   return new Set(discoveries.map((d) => d.zoneId));
 }
 
+/** Get the starter zone ID (first zone with isStarter=true). */
+export async function getStarterZoneId(): Promise<string> {
+  const zone = await db.zone.findFirst({ where: { isStarter: true } });
+  if (!zone) throw new Error('No starter zone configured');
+  return zone.id;
+}
+
+/** Respawn player to their homeTownId (or starter zone fallback). Returns the town info. */
+export async function respawnToHomeTown(playerId: string): Promise<{ townId: string; townName: string }> {
+  const player = await db.player.findUniqueOrThrow({
+    where: { id: playerId },
+    select: { homeTownId: true },
+  });
+
+  const townId = player.homeTownId ?? (await getStarterZoneId());
+  const town = await db.zone.findUniqueOrThrow({
+    where: { id: townId },
+    select: { id: true, name: true },
+  });
+
+  await db.player.update({
+    where: { id: playerId },
+    data: {
+      currentZoneId: town.id,
+      lastTravelledFromZoneId: null,
+    },
+  });
+
+  return { townId: town.id, townName: town.name };
+}
+
 /** Get undiscovered neighbor zones (for zone_exit rolls during exploration). */
 export async function getUndiscoveredNeighborZones(
   playerId: string,

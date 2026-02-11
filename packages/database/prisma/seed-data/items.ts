@@ -1,0 +1,395 @@
+import { IDS } from './ids';
+
+type ItemRow = {
+  id: string;
+  name: string;
+  itemType: string;
+  slot?: string;
+  tier: number;
+  weightClass?: string;
+  baseStats?: Record<string, number>;
+  requiredSkill?: string;
+  requiredLevel?: number;
+  maxDurability?: number;
+  stackable?: boolean;
+};
+
+// Helper: build item template row with defaults
+function it(row: ItemRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    itemType: row.itemType,
+    slot: row.slot ?? null,
+    tier: row.tier,
+    weightClass: row.weightClass ?? null,
+    baseStats: row.baseStats ?? {},
+    requiredSkill: row.requiredSkill ?? null,
+    requiredLevel: row.requiredLevel ?? 1,
+    maxDurability: row.maxDurability ?? 100,
+    stackable: row.stackable ?? false,
+  };
+}
+
+function resource(id: string, name: string, tier: number) {
+  return it({ id, name, itemType: 'resource', tier, stackable: true, maxDurability: 0 });
+}
+
+function consumable(id: string, name: string, tier: number) {
+  return it({ id, name, itemType: 'consumable', tier, stackable: true, maxDurability: 0 });
+}
+
+// ── Raw Resources ────────────────────────────────────────────────────────────
+
+const rawResources = [
+  // Ores
+  resource(IDS.res.copperOre, 'Copper Ore', 1),
+  resource(IDS.res.tinOre, 'Tin Ore', 2),
+  resource(IDS.res.ironOre, 'Iron Ore', 3),
+  resource(IDS.res.sandstone, 'Sandstone', 3),
+  resource(IDS.res.darkIronOre, 'Dark Iron Ore', 4),
+  resource(IDS.res.mithrilOre, 'Mithril Ore', 4),
+  resource(IDS.res.ancientOre, 'Ancient Ore', 5),
+  // Logs
+  resource(IDS.res.oakLog, 'Oak Log', 1),
+  resource(IDS.res.mapleLog, 'Maple Log', 2),
+  resource(IDS.res.fungalWood, 'Fungal Wood', 2),
+  resource(IDS.res.elderwoodLog, 'Elderwood Log', 3),
+  resource(IDS.res.willowLog, 'Willow Log', 3),
+  resource(IDS.res.bogwoodLog, 'Bogwood Log', 4),
+  resource(IDS.res.crystalWood, 'Crystal Wood', 4),
+  resource(IDS.res.petrifiedWood, 'Petrified Wood', 5),
+  // Herbs
+  resource(IDS.res.forestSage, 'Forest Sage', 1),
+  resource(IDS.res.moonpetal, 'Moonpetal', 2),
+  resource(IDS.res.caveMoss, 'Cave Moss', 2),
+  resource(IDS.res.starbloom, 'Starbloom', 3),
+  resource(IDS.res.glowcapMushroom, 'Glowcap Mushroom', 3),
+  resource(IDS.res.windbloom, 'Windbloom', 3),
+  resource(IDS.res.gravemoss, 'Gravemoss', 4),
+  resource(IDS.res.shimmerFern, 'Shimmer Fern', 4),
+  resource(IDS.res.abyssalKelp, 'Abyssal Kelp', 5),
+];
+
+// ── Processed Materials ──────────────────────────────────────────────────────
+
+const processedMaterials = [
+  // Ingots
+  resource(IDS.proc.copperIngot, 'Copper Ingot', 1),
+  resource(IDS.proc.tinIngot, 'Tin Ingot', 2),
+  resource(IDS.proc.ironIngot, 'Iron Ingot', 3),
+  resource(IDS.proc.cutStone, 'Cut Stone', 3),
+  resource(IDS.proc.darkIronIngot, 'Dark Iron Ingot', 4),
+  resource(IDS.proc.mithrilIngot, 'Mithril Ingot', 4),
+  resource(IDS.proc.ancientIngot, 'Ancient Ingot', 5),
+  // Planks
+  resource(IDS.proc.oakPlank, 'Oak Plank', 1),
+  resource(IDS.proc.maplePlank, 'Maple Plank', 2),
+  resource(IDS.proc.fungalPlank, 'Fungal Plank', 2),
+  resource(IDS.proc.elderwoodPlank, 'Elderwood Plank', 3),
+  resource(IDS.proc.willowPlank, 'Willow Plank', 3),
+  resource(IDS.proc.bogwoodPlank, 'Bogwood Plank', 4),
+  resource(IDS.proc.crystalPlank, 'Crystal Plank', 4),
+  resource(IDS.proc.petrifiedPlank, 'Petrified Plank', 5),
+];
+
+// ── Mob Drop Materials ───────────────────────────────────────────────────────
+
+const mobDropMaterials = [
+  // Tier 1
+  resource(IDS.drop.ratPelt, 'Rat Pelt', 1),
+  resource(IDS.drop.boarHide, 'Boar Hide', 1),
+  resource(IDS.drop.spiderSilk, 'Spider Silk', 1),
+  resource(IDS.drop.ratTail, 'Rat Tail', 1),
+  resource(IDS.drop.boarTusk, 'Boar Tusk', 1),
+  // Tier 2
+  resource(IDS.drop.wolfPelt, 'Wolf Pelt', 2),
+  resource(IDS.drop.banditCloth, 'Bandit Cloth', 2),
+  resource(IDS.drop.wolfFang, 'Wolf Fang', 2),
+  resource(IDS.drop.ancientBark, 'Ancient Bark', 2),
+  resource(IDS.drop.batWing, 'Bat Wing', 2),
+  resource(IDS.drop.goblinRag, 'Goblin Rag', 2),
+  resource(IDS.drop.batFang, 'Bat Fang', 2),
+  resource(IDS.drop.stolenCoin, 'Stolen Coin', 2),
+  resource(IDS.drop.crudeGemstone, 'Crude Gemstone', 2),
+  // Tier 3
+  resource(IDS.drop.faeSilk, 'Fae Silk', 3),
+  resource(IDS.drop.dryadThread, 'Dryad Thread', 3),
+  resource(IDS.drop.spriteDust, 'Sprite Dust', 3),
+  resource(IDS.drop.pixieWing, 'Pixie Wing', 3),
+  resource(IDS.drop.crawlerChitin, 'Crawler Chitin', 3),
+  resource(IDS.drop.roughGem, 'Rough Gem', 3),
+  resource(IDS.drop.stolenOre, 'Stolen Ore', 3),
+  resource(IDS.drop.crystalShard, 'Crystal Shard', 3),
+  resource(IDS.drop.wargHide, 'Warg Hide', 3),
+  resource(IDS.drop.harpyFeather, 'Harpy Feather', 3),
+  resource(IDS.drop.harpyTalon, 'Harpy Talon', 3),
+  // Tier 4
+  resource(IDS.drop.crocHide, 'Croc Hide', 4),
+  resource(IDS.drop.hydraScale, 'Hydra Scale', 4),
+  resource(IDS.drop.witchCloth, 'Witch Cloth', 4),
+  resource(IDS.drop.wraithEssence, 'Wraith Essence', 4),
+  resource(IDS.drop.boneFragment, 'Bone Fragment', 4),
+  resource(IDS.drop.bogHeart, 'Bog Heart', 4),
+  resource(IDS.drop.cutGem, 'Cut Gem', 4),
+  resource(IDS.drop.goblinGold, 'Goblin Gold', 4),
+  resource(IDS.drop.darkCrystal, 'Dark Crystal', 4),
+  // Tier 5
+  resource(IDS.drop.nagaScale, 'Naga Scale', 5),
+  resource(IDS.drop.spectralSilk, 'Spectral Silk', 5),
+  resource(IDS.drop.oozeResidue, 'Ooze Residue', 5),
+  resource(IDS.drop.eldritchFragment, 'Eldritch Fragment', 5),
+  resource(IDS.drop.lichDust, 'Lich Dust', 5),
+  resource(IDS.drop.nagaPearl, 'Naga Pearl', 5),
+  resource(IDS.drop.ancientRelic, 'Ancient Relic', 5),
+];
+
+// ── Processed Leather/Cloth ──────────────────────────────────────────────────
+
+const processedLeather = [
+  resource(IDS.leather.ratLeather, 'Rat Leather', 1),
+  resource(IDS.leather.boarLeather, 'Boar Leather', 1),
+  resource(IDS.leather.silkCloth, 'Silk Cloth', 1),
+  resource(IDS.leather.wolfLeather, 'Wolf Leather', 2),
+  resource(IDS.leather.batLeather, 'Bat Leather', 2),
+  resource(IDS.leather.wovenCloth, 'Woven Cloth', 2),
+  resource(IDS.leather.wargLeather, 'Warg Leather', 3),
+  resource(IDS.leather.chitinPlate, 'Chitin Plate', 3),
+  resource(IDS.leather.faeFabric, 'Fae Fabric', 3),
+  resource(IDS.leather.crocLeather, 'Croc Leather', 4),
+  resource(IDS.leather.scaleMail, 'Scale Mail', 4),
+  resource(IDS.leather.cursedFabric, 'Cursed Fabric', 4),
+  resource(IDS.leather.etherealCloth, 'Ethereal Cloth', 4),
+  resource(IDS.leather.nagaLeather, 'Naga Leather', 5),
+  resource(IDS.leather.spectralFabric, 'Spectral Fabric', 5),
+];
+
+// ── Consumables ──────────────────────────────────────────────────────────────
+
+const consumables = [
+  consumable(IDS.pots.minorHealthPotion, 'Minor Health Potion', 1),
+  consumable(IDS.pots.healthPotion, 'Health Potion', 2),
+  consumable(IDS.pots.antivenomPotion, 'Antivenom Potion', 2),
+  consumable(IDS.pots.greaterHealthPotion, 'Greater Health Potion', 3),
+  consumable(IDS.pots.resistPotion, 'Resist Potion', 4),
+  consumable(IDS.pots.manaPotion, 'Mana Potion', 4),
+  consumable(IDS.pots.elixirOfPower, 'Elixir of Power', 5),
+];
+
+// ── Weapons ──────────────────────────────────────────────────────────────────
+
+function weapon(
+  id: string,
+  name: string,
+  tier: number,
+  skill: 'melee' | 'ranged' | 'magic',
+  level: number,
+  stats: Record<string, number>,
+) {
+  return it({
+    id,
+    name,
+    itemType: 'weapon',
+    slot: 'main_hand',
+    tier,
+    requiredSkill: skill,
+    requiredLevel: level,
+    baseStats: stats,
+    maxDurability: 50 + tier * 20,
+  });
+}
+
+const weapons = [
+  // Tier 1
+  weapon(IDS.wep.woodenSword, 'Wooden Sword', 1, 'melee', 1, { attack: 4 }),
+  weapon(IDS.wep.oakShortbow, 'Oak Shortbow', 1, 'ranged', 1, { attack: 3 }),
+  weapon(IDS.wep.oakStaff, 'Oak Staff', 1, 'magic', 1, { attack: 2, magicPower: 3 }),
+  weapon(IDS.wep.copperDagger, 'Copper Dagger', 1, 'melee', 3, { attack: 5, dodge: 1 }),
+  // Tier 2
+  weapon(IDS.wep.tinSword, 'Tin Sword', 2, 'melee', 5, { attack: 8 }),
+  weapon(IDS.wep.mapleLongbow, 'Maple Longbow', 2, 'ranged', 5, { attack: 7 }),
+  weapon(IDS.wep.mapleStaff, 'Maple Staff', 2, 'magic', 5, { attack: 4, magicPower: 6 }),
+  weapon(IDS.wep.boarTuskMace, 'Boar Tusk Mace', 2, 'melee', 8, { attack: 10, armor: 1 }),
+  weapon(IDS.wep.batWingCrossbow, 'Bat Wing Crossbow', 2, 'ranged', 8, { attack: 9, dodge: 1 }),
+  weapon(IDS.wep.goblinHexStaff, 'Goblin Hex Staff', 2, 'magic', 8, { attack: 5, magicPower: 8 }),
+  // Tier 3
+  weapon(IDS.wep.ironLongsword, 'Iron Longsword', 3, 'melee', 12, { attack: 14 }),
+  weapon(IDS.wep.willowWarbow, 'Willow Warbow', 3, 'ranged', 12, { attack: 12 }),
+  weapon(IDS.wep.elderwoodStaff, 'Elderwood Staff', 3, 'magic', 12, { attack: 7, magicPower: 10 }),
+  weapon(IDS.wep.crawlerFangBlade, 'Crawler Fang Blade', 3, 'melee', 16, { attack: 16, critChance: 0.02 }),
+  weapon(IDS.wep.harpyTalonBow, 'Harpy Talon Bow', 3, 'ranged', 16, { attack: 14, dodge: 2 }),
+  weapon(IDS.wep.faeCrystalStaff, 'Fae Crystal Staff', 3, 'magic', 16, { attack: 8, magicPower: 13 }),
+  // Tier 4
+  weapon(IDS.wep.darkIronGreatsword, 'Dark Iron Greatsword', 4, 'melee', 20, { attack: 22 }),
+  weapon(IDS.wep.bogwoodLongbow, 'Bogwood Longbow', 4, 'ranged', 20, { attack: 19 }),
+  weapon(IDS.wep.crystalStaffWep, 'Crystal Staff', 4, 'magic', 20, { attack: 10, magicPower: 16 }),
+  weapon(IDS.wep.hydraFangSabre, 'Hydra Fang Sabre', 4, 'melee', 25, { attack: 24, critChance: 0.03 }),
+  weapon(IDS.wep.wraithBow, 'Wraith Bow', 4, 'ranged', 25, { attack: 22, magicPower: 4 }),
+  weapon(IDS.wep.witchsSceptre, "Witch's Sceptre", 4, 'magic', 25, { attack: 12, magicPower: 20 }),
+  // Tier 5
+  weapon(IDS.wep.mithrilBlade, 'Mithril Blade', 5, 'melee', 30, { attack: 30 }),
+  weapon(IDS.wep.ancientBow, 'Ancient Bow', 5, 'ranged', 30, { attack: 27 }),
+  weapon(IDS.wep.lichStaff, 'Lich Staff', 5, 'magic', 30, { attack: 14, magicPower: 24 }),
+];
+
+// ── Armor (generated) ────────────────────────────────────────────────────────
+
+// Stat scaling factors by slot relative to chest (1.0)
+const SLOT_SCALE: Record<string, number> = {
+  head: 0.8,
+  chest: 1.0,
+  legs: 0.9,
+  boots: 0.6,
+  gloves: 0.5,
+  belt: 0.5,
+};
+
+type ArmorTierDef = {
+  tier: number;
+  reqLevel: number;
+  slots: string[];
+  heavy: { prefix: string; chestName: string; stats: Record<string, number> };
+  medium: { prefix: string; chestName: string; stats: Record<string, number> };
+  light: { prefix: string; chestName: string; stats: Record<string, number> };
+};
+
+const SLOT_NAMES: Record<string, Record<string, string>> = {
+  heavy: { head: 'Helm', chest: '', legs: 'Greaves', boots: 'Boots', gloves: 'Gauntlets', belt: 'Belt' },
+  medium: { head: 'Cap', chest: '', legs: 'Leggings', boots: 'Boots', gloves: 'Gloves', belt: 'Belt' },
+  light: { head: 'Hood', chest: '', legs: 'Pants', boots: 'Slippers', gloves: 'Gloves', belt: 'Belt' },
+};
+
+const armorTiers: ArmorTierDef[] = [
+  {
+    tier: 1,
+    reqLevel: 1,
+    slots: ['head', 'chest'],
+    heavy: { prefix: 'Copper', chestName: 'Copper Chainmail', stats: { armor: 5 } },
+    medium: { prefix: 'Boar Leather', chestName: 'Boar Leather Vest', stats: { armor: 3, evasion: 1 } },
+    light: { prefix: 'Silk', chestName: 'Silk Robe', stats: { armor: 1, magicDefence: 2, evasion: 2 } },
+  },
+  {
+    tier: 2,
+    reqLevel: 5,
+    slots: ['head', 'chest', 'legs'],
+    heavy: { prefix: 'Tin Plate', chestName: 'Tin Plate Cuirass', stats: { armor: 8 } },
+    medium: { prefix: 'Wolf Leather', chestName: 'Wolf Leather Vest', stats: { armor: 5, evasion: 2 } },
+    light: { prefix: 'Woven', chestName: 'Woven Tunic', stats: { armor: 2, magicDefence: 4, evasion: 3 } },
+  },
+  {
+    tier: 3,
+    reqLevel: 12,
+    slots: ['head', 'chest', 'legs', 'boots', 'gloves'],
+    heavy: { prefix: 'Iron', chestName: 'Iron Breastplate', stats: { armor: 12 } },
+    medium: { prefix: 'Warg Hide', chestName: 'Warg Hide Coat', stats: { armor: 8, evasion: 3 } },
+    light: { prefix: 'Fae Silk', chestName: 'Fae Silk Robe', stats: { armor: 3, magicDefence: 6, evasion: 5 } },
+  },
+  {
+    tier: 4,
+    reqLevel: 20,
+    slots: ['head', 'chest', 'legs', 'boots', 'gloves', 'belt'],
+    heavy: { prefix: 'Dark Iron', chestName: 'Dark Iron Platemail', stats: { armor: 18 } },
+    medium: { prefix: 'Croc Scale', chestName: 'Croc Scale Vest', stats: { armor: 12, evasion: 4 } },
+    light: { prefix: 'Cursed', chestName: 'Cursed Garb', stats: { armor: 5, magicDefence: 10, evasion: 7 } },
+  },
+  {
+    tier: 5,
+    reqLevel: 30,
+    slots: ['head', 'chest', 'legs', 'boots', 'gloves', 'belt'],
+    heavy: { prefix: 'Mithril', chestName: 'Mithril Warplate', stats: { armor: 24 } },
+    medium: { prefix: 'Naga Scale', chestName: 'Naga Scale Armour', stats: { armor: 16, evasion: 6 } },
+    light: { prefix: 'Spectral', chestName: 'Spectral Robe', stats: { armor: 7, magicDefence: 14, evasion: 9 } },
+  },
+];
+
+function generateArmor() {
+  const items: ReturnType<typeof it>[] = [];
+  for (const td of armorTiers) {
+    for (const weight of ['heavy', 'medium', 'light'] as const) {
+      const wDef = td[weight];
+      for (const slot of td.slots) {
+        const key = `t${td.tier}_${weight}_${slot}` as keyof typeof IDS.arm;
+        const id = IDS.arm[key];
+        if (!id) continue;
+
+        // Name: chest uses special name, others use "prefix slotName"
+        const name =
+          slot === 'chest'
+            ? wDef.chestName
+            : `${wDef.prefix} ${SLOT_NAMES[weight][slot]}`;
+
+        // Scale stats by slot
+        const scale = SLOT_SCALE[slot];
+        const baseStats: Record<string, number> = {};
+        for (const [stat, val] of Object.entries(wDef.stats)) {
+          baseStats[stat] = Math.max(1, Math.round(val * scale));
+        }
+
+        // Determine required skill based on weight
+        const reqSkill = weight === 'heavy' ? 'defence' : weight === 'medium' ? 'defence' : 'magic';
+
+        items.push(
+          it({
+            id,
+            name,
+            itemType: 'armor',
+            slot,
+            tier: td.tier,
+            weightClass: weight,
+            requiredSkill: reqSkill,
+            requiredLevel: td.reqLevel,
+            baseStats,
+            maxDurability: 60 + td.tier * 20,
+          }),
+        );
+      }
+    }
+  }
+  return items;
+}
+
+// ── Advanced (Soulbound) Gear ────────────────────────────────────────────────
+
+const advancedGear = [
+  // Tier 1
+  it({ id: IDS.adv.ratHideGloves, name: 'Rat Hide Gloves', itemType: 'armor', slot: 'gloves', tier: 1, weightClass: 'medium', requiredLevel: 1, baseStats: { attack: 2, evasion: 1 }, maxDurability: 60 }),
+  it({ id: IDS.adv.spiderSilkBelt, name: 'Spider Silk Belt', itemType: 'armor', slot: 'belt', tier: 1, weightClass: 'light', requiredLevel: 1, baseStats: { health: 3, dodge: 2 }, maxDurability: 60 }),
+  it({ id: IDS.adv.boarHideBoots, name: 'Boar Hide Boots', itemType: 'armor', slot: 'boots', tier: 1, weightClass: 'medium', requiredLevel: 1, baseStats: { armor: 2, health: 2 }, maxDurability: 60 }),
+  // Tier 2
+  it({ id: IDS.adv.wolfFangNecklace, name: 'Wolf Fang Necklace', itemType: 'armor', slot: 'neck', tier: 2, requiredLevel: 5, baseStats: { attack: 3, critChance: 0.01 }, maxDurability: 80 }),
+  it({ id: IDS.adv.banditsLuckyRing, name: "Bandit's Lucky Ring", itemType: 'armor', slot: 'ring', tier: 2, requiredLevel: 5, baseStats: { luck: 3, evasion: 2 }, maxDurability: 80 }),
+  it({ id: IDS.adv.ironbarkGloves, name: 'Ironbark Gloves', itemType: 'armor', slot: 'gloves', tier: 2, weightClass: 'heavy', requiredLevel: 5, baseStats: { armor: 4, magicDefence: 3 }, maxDurability: 80 }),
+  it({ id: IDS.adv.batWingBoots, name: 'Bat Wing Boots', itemType: 'armor', slot: 'boots', tier: 2, weightClass: 'light', requiredLevel: 5, baseStats: { dodge: 4, evasion: 2 }, maxDurability: 80 }),
+  it({ id: IDS.adv.goblinTrinketCharm, name: 'Goblin Trinket Charm', itemType: 'armor', slot: 'charm', tier: 2, requiredLevel: 5, baseStats: { luck: 2, health: 3 }, maxDurability: 80 }),
+  // Tier 3
+  it({ id: IDS.adv.spriteDustRing, name: 'Sprite Dust Ring', itemType: 'armor', slot: 'ring', tier: 3, requiredLevel: 12, baseStats: { magicPower: 4, luck: 2 }, maxDurability: 100 }),
+  it({ id: IDS.adv.faeCrown, name: 'Fae Crown', itemType: 'armor', slot: 'charm', tier: 3, requiredLevel: 12, baseStats: { magicDefence: 5, dodge: 3 }, maxDurability: 100 }),
+  it({ id: IDS.adv.heartwoodShield, name: 'Heartwood Shield', itemType: 'armor', slot: 'off_hand', tier: 3, weightClass: 'heavy', requiredLevel: 12, baseStats: { armor: 6, health: 4 }, maxDurability: 100 }),
+  it({ id: IDS.adv.crystalCoreBelt, name: 'Crystal Core Belt', itemType: 'armor', slot: 'belt', tier: 3, weightClass: 'heavy', requiredLevel: 12, baseStats: { armor: 5, health: 5 }, maxDurability: 100 }),
+  it({ id: IDS.adv.chitinGauntlets, name: 'Chitin Gauntlets', itemType: 'armor', slot: 'gloves', tier: 3, weightClass: 'medium', requiredLevel: 12, baseStats: { attack: 4, armor: 3 }, maxDurability: 100 }),
+  it({ id: IDS.adv.wargRiderBelt, name: 'Warg Rider Belt', itemType: 'armor', slot: 'belt', tier: 3, weightClass: 'medium', requiredLevel: 12, baseStats: { attack: 3, evasion: 3, health: 2 }, maxDurability: 100 }),
+  it({ id: IDS.adv.warlordsSignet, name: "Warlord's Signet", itemType: 'armor', slot: 'ring', tier: 3, requiredLevel: 12, baseStats: { attack: 3, critDamage: 0.1 }, maxDurability: 100 }),
+  it({ id: IDS.adv.windcallersCharm, name: "Windcaller's Charm", itemType: 'armor', slot: 'charm', tier: 3, requiredLevel: 12, baseStats: { dodge: 5, evasion: 3 }, maxDurability: 100 }),
+  // Tier 4
+  it({ id: IDS.adv.deathKnightsRing, name: "Death Knight's Ring", itemType: 'armor', slot: 'ring', tier: 4, requiredLevel: 20, baseStats: { attack: 5, critChance: 0.02 }, maxDurability: 120 }),
+  it({ id: IDS.adv.hydraScaleShield, name: 'Hydra Scale Shield', itemType: 'armor', slot: 'off_hand', tier: 4, weightClass: 'heavy', requiredLevel: 20, baseStats: { armor: 8, health: 6 }, maxDurability: 120 }),
+  it({ id: IDS.adv.covenAmulet, name: 'Coven Amulet', itemType: 'armor', slot: 'neck', tier: 4, requiredLevel: 20, baseStats: { magicPower: 6, critChance: 0.02 }, maxDurability: 120 }),
+  it({ id: IDS.adv.stormCrystalCharm, name: 'Storm Crystal Charm', itemType: 'armor', slot: 'charm', tier: 4, requiredLevel: 20, baseStats: { magicPower: 5, critDamage: 0.15 }, maxDurability: 120 }),
+  it({ id: IDS.adv.diamondGolemBelt, name: 'Diamond Golem Belt', itemType: 'armor', slot: 'belt', tier: 4, weightClass: 'heavy', requiredLevel: 20, baseStats: { armor: 8, magicDefence: 6 }, maxDurability: 120 }),
+  it({ id: IDS.adv.goblinKingsCrown, name: "Goblin King's Crown", itemType: 'armor', slot: 'head', tier: 4, weightClass: 'medium', requiredLevel: 20, baseStats: { luck: 5, attack: 4, health: 4 }, maxDurability: 120 }),
+];
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+export function getAllItemTemplates() {
+  return [
+    ...rawResources,
+    ...processedMaterials,
+    ...mobDropMaterials,
+    ...processedLeather,
+    ...consumables,
+    ...weapons,
+    ...generateArmor(),
+    ...advancedGear,
+  ];
+}

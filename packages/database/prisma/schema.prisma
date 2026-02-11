@@ -39,6 +39,7 @@ model Player {
   bestiaryPrefixes  PlayerBestiaryPrefix[]
   activityLogs      ActivityLog[]
   encounterSites    EncounterSite[]
+  knownRecipes      PlayerRecipe[]
   refreshTokens     RefreshToken[]
   resourceNodes     PlayerResourceNode[]
 
@@ -115,6 +116,7 @@ model ItemTemplate {
   name           String  @db.VarChar(64)
   itemType       String  @map("item_type") @db.VarChar(32)
   weightClass    String? @map("weight_class") @db.VarChar(16)
+  setId          String? @map("set_id") @db.VarChar(64)
   slot           String? @db.VarChar(16)
   tier           Int     @default(1)
   baseStats      Json    @default("{}") @map("base_stats")
@@ -123,9 +125,10 @@ model ItemTemplate {
   maxDurability  Int     @default(100) @map("max_durability")
   stackable      Boolean @default(false)
 
-  items       Item[]
-  dropTables  DropTable[]
-  recipes     CraftingRecipe[]
+  items           Item[]
+  dropTables      DropTable[]
+  chestDropTables ChestDropTable[]
+  recipes         CraftingRecipe[]
 
   @@map("item_templates")
 }
@@ -159,13 +162,28 @@ model Zone {
   difficulty  Int     @default(1)
   travelCost  Int     @map("travel_cost")
   isStarter   Boolean @default(false) @map("is_starter")
+  zoneType    String  @default("wild") @map("zone_type") @db.VarChar(16) // wild | town
 
-  mobs            MobTemplate[]
-  resourceNodes   ResourceNode[]
-  zoneMobFamilies ZoneMobFamily[]
-  encounterSites  EncounterSite[]
+  mobs              MobTemplate[]
+  resourceNodes     ResourceNode[]
+  zoneMobFamilies   ZoneMobFamily[]
+  encounterSites    EncounterSite[]
+  connectionsFrom   ZoneConnection[] @relation("from_zone")
+  connectionsTo     ZoneConnection[] @relation("to_zone")
 
   @@map("zones")
+}
+
+model ZoneConnection {
+  id       String @id @default(uuid())
+  fromId   String @map("from_zone_id")
+  toId     String @map("to_zone_id")
+
+  fromZone Zone @relation("from_zone", fields: [fromId], references: [id], onDelete: Cascade)
+  toZone   Zone @relation("to_zone", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId])
+  @@map("zone_connections")
 }
 
 // =============================================================================
@@ -289,12 +307,19 @@ model CraftingRecipe {
   skillType        String @map("skill_type") @db.VarChar(32)
   requiredLevel    Int    @map("required_level")
   resultTemplateId String @map("result_template_id")
+  isAdvanced       Boolean @default(false) @map("is_advanced")
+  soulbound        Boolean @default(false)
+  mobFamilyId      String? @map("mob_family_id")
   turnCost         Int    @map("turn_cost")
   materials        Json
   xpReward         Int    @map("xp_reward")
 
   resultTemplate ItemTemplate @relation(fields: [resultTemplateId], references: [id])
+  mobFamily      MobFamily?   @relation(fields: [mobFamilyId], references: [id], onDelete: SetNull)
+  learnedBy      PlayerRecipe[]
 
+  @@index([isAdvanced])
+  @@index([mobFamilyId])
   @@map("crafting_recipes")
 }
 
@@ -324,9 +349,11 @@ model MobFamily {
   siteNounMedium String @map("site_noun_medium") @db.VarChar(64)
   siteNounLarge  String @map("site_noun_large") @db.VarChar(64)
 
-  members      MobFamilyMember[]
-  zoneMappings ZoneMobFamily[]
+  members        MobFamilyMember[]
+  zoneMappings   ZoneMobFamily[]
   encounterSites EncounterSite[]
+  advancedRecipes CraftingRecipe[]
+  chestDropTables ChestDropTable[]
 
   @@map("mob_families")
 }
@@ -378,4 +405,33 @@ model EncounterSite {
   @@index([playerId, discoveredAt])
   @@index([playerId, zoneId])
   @@map("encounter_sites")
+}
+
+model PlayerRecipe {
+  playerId  String   @map("player_id")
+  recipeId  String   @map("recipe_id")
+  learnedAt DateTime @default(now()) @map("learned_at")
+
+  player Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  recipe CraftingRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([playerId, recipeId])
+  @@index([recipeId])
+  @@map("player_recipes")
+}
+
+model ChestDropTable {
+  id             String  @id @default(uuid())
+  mobFamilyId    String  @map("mob_family_id")
+  chestRarity    String  @map("chest_rarity") @db.VarChar(16)
+  itemTemplateId String  @map("item_template_id")
+  dropChance     Decimal @map("drop_chance") @db.Decimal(5, 4)
+  minQuantity    Int     @default(1) @map("min_quantity")
+  maxQuantity    Int     @default(1) @map("max_quantity")
+
+  mobFamily    MobFamily    @relation(fields: [mobFamilyId], references: [id], onDelete: Cascade)
+  itemTemplate ItemTemplate @relation(fields: [itemTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([mobFamilyId, chestRarity])
+  @@map("chest_drop_tables")
 }

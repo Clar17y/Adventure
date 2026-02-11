@@ -10,6 +10,7 @@ import {
   refreshTokenExpiresAt,
   verifyRefreshToken,
 } from '../middleware/auth';
+import { ensureStarterDiscoveries } from '../services/zoneDiscoveryService';
 
 export const authRouter = Router();
 
@@ -52,12 +53,18 @@ authRouter.post('/register', async (req, res, next) => {
     // Hash password
     const passwordHash = await bcrypt.hash(body.password, 10);
 
+    // Find starter zone
+    const starterZone = await prisma.zone.findFirst({ where: { isStarter: true } });
+    if (!starterZone) throw new AppError(500, 'No starter zone configured', 'NO_STARTER_ZONE');
+
     // Create player with all related records
     const player = await prisma.player.create({
       data: {
         username: body.username,
         email: body.email,
         passwordHash,
+        currentZoneId: starterZone.id,
+        homeTownId: starterZone.id,
         turnBank: {
           create: {
             currentTurns: TURN_CONSTANTS.STARTING_TURNS,
@@ -76,6 +83,9 @@ authRouter.post('/register', async (req, res, next) => {
         skills: true,
       },
     });
+
+    // Create initial zone discovery records
+    await ensureStarterDiscoveries(player.id);
 
     // Generate tokens
     const payload = { playerId: player.id, username: player.username };

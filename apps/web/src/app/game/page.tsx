@@ -509,6 +509,8 @@ export default function GamePage() {
                 id: r.id,
                 name: r.resultTemplate.name,
                 imageSrc: itemImageSrc(r.resultTemplate.name, r.resultTemplate.itemType),
+                isAdvanced: r.isAdvanced,
+                soulbound: r.soulbound,
                 resultQuantity: 1,
                 requiredLevel: r.requiredLevel,
                 turnCost: r.turnCost,

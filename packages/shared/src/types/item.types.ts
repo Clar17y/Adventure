@@ -5,6 +5,7 @@ export interface ItemTemplate {
   name: string;
   itemType: ItemType;
   weightClass: WeightClass | null;
+  setId?: string | null;
   slot: EquipmentSlot | null;
   tier: number;
   baseStats: ItemStats;
@@ -58,6 +59,9 @@ export interface CraftingRecipe {
   skillType: SkillType;
   requiredLevel: number;
   resultTemplateId: string;
+  isAdvanced?: boolean;
+  soulbound?: boolean;
+  mobFamilyId?: string | null;
   turnCost: number;
   materials: CraftingMaterial[];
   xpReward: number;

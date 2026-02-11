@@ -12,10 +12,11 @@ function capitalize(s: string): string {
 }
 
 export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryProps) {
-  const { skillXp, xp, loot } = rewards;
+  const { skillXp, xp, loot, siteCompletion } = rewards;
   const totalLootItems = loot.reduce((sum, drop) => sum + drop.quantity, 0);
+  const totalChestItems = siteCompletion?.loot.reduce((sum, drop) => sum + drop.quantity, 0) ?? 0;
 
-  const hasAnyRewards = xp > 0 || skillXp || loot.length > 0;
+  const hasAnyRewards = xp > 0 || skillXp || loot.length > 0 || Boolean(siteCompletion);
 
   if (!hasAnyRewards) return null;
 
@@ -67,6 +68,35 @@ export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryP
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {siteCompletion && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span>CHEST</span>
+            <span className="text-[var(--rpg-text-primary)] capitalize">
+              {siteCompletion.chestRarity} chest
+            </span>
+            <span className="text-[var(--rpg-gold)] text-xs">
+              {totalChestItems} item{totalChestItems !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="pl-9 space-y-0.5">
+            {siteCompletion.loot.map((drop, idx) => {
+              const name = drop.itemName?.trim() || drop.itemTemplateId;
+              return (
+                <div key={`${drop.itemTemplateId}-${idx}`} className="text-xs text-[var(--rpg-text-secondary)]">
+                  {name}{drop.quantity > 1 ? ` x${drop.quantity}` : ''}
+                </div>
+              );
+            })}
+            {siteCompletion.recipeUnlocked && (
+              <div className="text-xs text-[var(--rpg-gold)]">
+                Recipe unlocked: {siteCompletion.recipeUnlocked.recipeName}
+              </div>
+            )}
           </div>
         </div>
       )}

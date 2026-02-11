@@ -59,5 +59,6 @@ export function itemImageSrc(itemName: string, itemType: string): string {
 }
 
 export function monsterImageSrc(monsterName: string): string {
-  return `/assets/monsters/MONSTER - ${monsterName}-pixelated-128.png`;
+  const key = slugify(monsterName);
+  return `/assets/monsters/monster_${key}-pixelated-128.png`;
 }

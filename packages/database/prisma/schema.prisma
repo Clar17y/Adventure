@@ -31,6 +31,15 @@ model Player {
   isRecovering  Boolean  @default(false) @map("is_recovering")
   recoveryCost  Int?     @map("recovery_cost")
 
+  // Zone / Travel
+  currentZoneId          String? @map("current_zone_id")
+  lastTravelledFromZoneId String? @map("last_travelled_from_zone_id")
+  homeTownId             String? @map("home_town_id")
+
+  currentZone            Zone?   @relation("current_zone", fields: [currentZoneId], references: [id])
+  lastTravelledFromZone  Zone?   @relation("breadcrumb_zone", fields: [lastTravelledFromZoneId], references: [id])
+  homeTown               Zone?   @relation("home_town", fields: [homeTownId], references: [id])
+
   turnBank          TurnBank?
   skills            PlayerSkill[]
   equipment         PlayerEquipment[]
@@ -42,6 +51,7 @@ model Player {
   knownRecipes      PlayerRecipe[]
   refreshTokens     RefreshToken[]
   resourceNodes     PlayerResourceNode[]
+  zoneDiscoveries   PlayerZoneDiscovery[]
 
   @@map("players")
 }
@@ -162,14 +172,19 @@ model Zone {
   difficulty  Int     @default(1)
   travelCost  Int     @map("travel_cost")
   isStarter   Boolean @default(false) @map("is_starter")
-  zoneType    String  @default("wild") @map("zone_type") @db.VarChar(16) // wild | town
+  zoneType       String  @default("wild") @map("zone_type") @db.VarChar(16) // wild | town
+  zoneExitChance Float?  @map("zone_exit_chance")
 
-  mobs              MobTemplate[]
-  resourceNodes     ResourceNode[]
-  zoneMobFamilies   ZoneMobFamily[]
-  encounterSites    EncounterSite[]
-  connectionsFrom   ZoneConnection[] @relation("from_zone")
-  connectionsTo     ZoneConnection[] @relation("to_zone")
+  mobs               MobTemplate[]
+  resourceNodes      ResourceNode[]
+  zoneMobFamilies    ZoneMobFamily[]
+  encounterSites     EncounterSite[]
+  connectionsFrom    ZoneConnection[]        @relation("from_zone")
+  connectionsTo      ZoneConnection[]        @relation("to_zone")
+  discoveries        PlayerZoneDiscovery[]
+  playersHere        Player[]                @relation("current_zone")
+  playersBreadcrumb  Player[]                @relation("breadcrumb_zone")
+  playersHome        Player[]                @relation("home_town")
 
   @@map("zones")
 }
@@ -184,6 +199,20 @@ model ZoneConnection {
 
   @@unique([fromId, toId])
   @@map("zone_connections")
+}
+
+model PlayerZoneDiscovery {
+  id           String   @id @default(uuid())
+  playerId     String   @map("player_id")
+  zoneId       String   @map("zone_id")
+  discoveredAt DateTime @default(now()) @map("discovered_at")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, zoneId])
+  @@index([playerId])
+  @@map("player_zone_discoveries")
 }
 
 // =============================================================================

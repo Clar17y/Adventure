@@ -234,6 +234,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
       return res.json({
         zone: { id: destinationZone.id, name: destinationZone.name, zoneType: destinationZone.zoneType },
         turns: await getTurnSnapshot(),
+        travelCost: 0,
         breadcrumbReturn: true,
         events: [],
         aborted: false,
@@ -369,7 +370,17 @@ zonesRouter.post('/travel', async (req, res, next) => {
               turn: ambush.turnOccurred,
               type: 'ambush_victory',
               description: `Ambushed by ${prefixedMob.mobDisplayName}! You defeated it. (+${xpGain} XP)`,
-              details: { mobName: prefixedMob.mobDisplayName, xp: xpGain, loot, durabilityLost },
+              details: {
+                mobName: prefixedMob.mobDisplayName,
+                mobDisplayName: prefixedMob.mobDisplayName,
+                outcome: combatResult.outcome,
+                playerMaxHp: combatResult.playerMaxHp,
+                mobMaxHp: combatResult.mobMaxHp,
+                log: combatResult.log,
+                xp: xpGain,
+                loot,
+                durabilityLost,
+              },
             });
           } else {
             // Player lost — calculate flee result
@@ -419,7 +430,16 @@ zonesRouter.post('/travel', async (req, res, next) => {
                 turn: ambush.turnOccurred,
                 type: 'ambush_defeat',
                 description: `Ambushed by ${prefixedMob.mobDisplayName}! You were knocked out.`,
-                details: { mobName: prefixedMob.mobDisplayName, durabilityLost },
+                details: {
+                  mobName: prefixedMob.mobDisplayName,
+                  mobDisplayName: prefixedMob.mobDisplayName,
+                  outcome: combatResult.outcome,
+                  playerMaxHp: combatResult.playerMaxHp,
+                  mobMaxHp: combatResult.mobMaxHp,
+                  log: combatResult.log,
+                  fleeResult: { outcome: fleeResult.outcome, remainingHp: fleeResult.remainingHp },
+                  durabilityLost,
+                },
               });
 
               // Refund remaining turns
@@ -437,6 +457,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
               return res.json({
                 zone: { id: respawn.townId, name: respawn.townName, zoneType: 'town' },
                 turns: await getTurnSnapshot(),
+                travelCost,
                 breadcrumbReturn: false,
                 events,
                 aborted: true,
@@ -483,7 +504,17 @@ zonesRouter.post('/travel', async (req, res, next) => {
                 turn: ambush.turnOccurred,
                 type: 'ambush_defeat',
                 description: `Ambushed by ${prefixedMob.mobDisplayName}! You escaped with ${currentHp} HP.`,
-                details: { mobName: prefixedMob.mobDisplayName, remainingHp: currentHp, durabilityLost },
+                details: {
+                  mobName: prefixedMob.mobDisplayName,
+                  mobDisplayName: prefixedMob.mobDisplayName,
+                  outcome: combatResult.outcome,
+                  playerMaxHp: combatResult.playerMaxHp,
+                  mobMaxHp: combatResult.mobMaxHp,
+                  log: combatResult.log,
+                  remainingHp: currentHp,
+                  fleeResult: { outcome: fleeResult.outcome, remainingHp: fleeResult.remainingHp },
+                  durabilityLost,
+                },
               });
 
               // Refund remaining turns
@@ -495,6 +526,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
               return res.json({
                 zone: { id: currentZoneId, name: currentZone.name, zoneType: currentZone.zoneType },
                 turns: await getTurnSnapshot(),
+                travelCost,
                 breadcrumbReturn: false,
                 events,
                 aborted: true,
@@ -533,6 +565,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
     return res.json({
       zone: { id: destinationZone.id, name: destinationZone.name, zoneType: destinationZone.zoneType },
       turns: await getTurnSnapshot(),
+      travelCost,
       breadcrumbReturn: false,
       events,
       aborted: false,

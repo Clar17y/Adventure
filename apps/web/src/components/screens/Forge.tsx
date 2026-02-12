@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ITEM_RARITY_CONSTANTS } from '@adventure/shared';
 import { calculateForgeUpgradeSuccessChance, getForgeRerollCost, getForgeUpgradeCost, getNextRarity } from '@adventure/game-engine';
-import { Anvil, Clock, Sparkles, TrendingUp } from 'lucide-react';
+import { Anvil, Sparkles, TrendingUp } from 'lucide-react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
+import { ActivityLog } from '@/components/ActivityLog';
+import type { ActivityLogEntry } from '@/app/game/useGameController';
 
 interface ForgeItem {
   id: string;
@@ -21,16 +23,10 @@ interface ForgeItem {
   bonusStats?: Record<string, unknown> | null;
 }
 
-interface ForgeLogEntry {
-  timestamp: string;
-  message: string;
-  type: 'info' | 'success';
-}
-
 interface ForgeProps {
   items: ForgeItem[];
   equippedLuck: number;
-  activityLog: ForgeLogEntry[];
+  activityLog: ActivityLogEntry[];
   onUpgrade: (itemId: string, sacrificialItemId: string) => void | Promise<void>;
   onReroll: (itemId: string, sacrificialItemId: string) => void | Promise<void>;
   isRecovering?: boolean;
@@ -384,28 +380,7 @@ export function Forge({
         </PixelCard>
       )}
 
-      <PixelCard>
-        <h3 className="font-semibold text-[var(--rpg-text-primary)] mb-3">Recent Activity</h3>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {activityLog.length === 0 ? (
-            <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">No recent activity</div>
-          ) : (
-            activityLog.map((entry, index) => {
-              const typeColors = {
-                info: 'text-[var(--rpg-text-secondary)]',
-                success: 'text-[var(--rpg-green-light)]',
-              };
-              return (
-                <div key={index} className="flex gap-2 text-sm">
-                  <Clock size={14} className="text-[var(--rpg-text-secondary)] flex-shrink-0 mt-0.5" />
-                  <span className="text-[var(--rpg-text-secondary)] flex-shrink-0 font-mono">{entry.timestamp}</span>
-                  <span className={typeColors[entry.type]}>{entry.message}</span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </PixelCard>
+      <ActivityLog entries={activityLog} maxHeight="max-h-48" />
     </div>
   );
 }

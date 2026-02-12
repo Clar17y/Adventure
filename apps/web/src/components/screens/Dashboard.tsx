@@ -9,6 +9,8 @@ import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { Coins, TrendingUp, MapPin, Sword, Pickaxe, Hammer, Heart, Crosshair, Sparkles, Dice5, Wind } from 'lucide-react';
 import Image from 'next/image';
 import { uiIconSrc } from '@/lib/assets';
+import { ActivityLog } from '@/components/ActivityLog';
+import type { ActivityLogEntry } from '@/app/game/useGameController';
 
 interface DashboardProps {
   playerData: {
@@ -42,6 +44,7 @@ interface DashboardProps {
       evasion: number;
     };
   };
+  activityLog: ActivityLogEntry[];
   onAllocateAttribute?: (
     attribute: 'vitality' | 'strength' | 'dexterity' | 'intelligence' | 'luck' | 'evasion',
     points?: number
@@ -59,7 +62,7 @@ const ATTRIBUTE_META = {
 
 type AttributeType = keyof typeof ATTRIBUTE_META;
 
-export function Dashboard({ playerData, skills, onNavigate, characterProgression, onAllocateAttribute }: DashboardProps) {
+export function Dashboard({ playerData, skills, onNavigate, characterProgression, activityLog, onAllocateAttribute }: DashboardProps) {
   const [allocating, setAllocating] = useState<AttributeType | null>(null);
 
   const handleAllocate = async (attribute: AttributeType) => {
@@ -373,6 +376,9 @@ export function Dashboard({ playerData, skills, onNavigate, characterProgression
           })}
         </div>
       </div>
+
+      {/* Activity Log */}
+      <ActivityLog entries={activityLog} />
 
     </div>
   );

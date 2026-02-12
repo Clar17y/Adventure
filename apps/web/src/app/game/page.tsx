@@ -186,9 +186,8 @@ export default function GamePage() {
     craftingRecipes,
     activeCraftingSkill,
     setActiveCraftingSkill,
-    explorationLog,
-    gatheringLog,
-    craftingLog,
+    activityLog,
+    pushLog,
     pendingEncounters,
     pendingEncountersLoading,
     pendingEncountersError,
@@ -207,10 +206,19 @@ export default function GamePage() {
     bestiaryError,
     hpState,
     setHpState,
+    playbackActive,
+    combatPlaybackData,
+    explorationPlaybackData,
+    travelPlaybackData,
     currentZone,
     ownedByTemplateId,
     handleStartExploration,
+    handleExplorationPlaybackComplete,
+    handlePlaybackSkip,
     handleStartCombat,
+    handleCombatPlaybackComplete,
+    handleTravelPlaybackComplete,
+    handleTravelPlaybackSkip,
     handleMine,
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,
@@ -280,11 +288,12 @@ export default function GamePage() {
               })
               .filter(Boolean) as Array<{ name: string; level: number; icon: typeof Sword; imageSrc: string }>}
             onNavigate={handleNavigate}
+            activityLog={activityLog}
             onAllocateAttribute={handleAllocateAttribute}
           />
         );
       case 'explore':
-        if (currentZone?.zoneType === 'town') {
+        if (currentZone?.zoneType === 'town' && !explorationPlaybackData) {
           return (
             <PixelCard>
               <div className="text-center py-8">
@@ -314,9 +323,13 @@ export default function GamePage() {
             }}
             availableTurns={turns}
             onStartExploration={handleStartExploration}
-            activityLog={explorationLog}
+            activityLog={activityLog}
             isRecovering={hpState.isRecovering}
             recoveryCost={hpState.recoveryCost}
+            playbackData={explorationPlaybackData}
+            onPlaybackComplete={handleExplorationPlaybackComplete}
+            onPlaybackSkip={handlePlaybackSkip}
+            onPushLog={pushLog}
           />
         );
       case 'inventory':
@@ -478,6 +491,12 @@ export default function GamePage() {
             currentZoneId={activeZoneId ?? ''}
             availableTurns={turns}
             isRecovering={hpState.isRecovering}
+            playbackActive={playbackActive}
+            travelPlaybackData={travelPlaybackData}
+            onTravelPlaybackComplete={handleTravelPlaybackComplete}
+            onTravelPlaybackSkip={handleTravelPlaybackSkip}
+            onPushLog={pushLog}
+            activityLog={activityLog}
             onTravel={handleTravelToZone}
             onExploreCurrentZone={() => setActiveScreen('explore')}
           />
@@ -563,7 +582,7 @@ export default function GamePage() {
                 rarity: rarityFromTier(r.resultTemplate.tier),
               }))}
               onCraft={handleCraft}
-              activityLog={craftingLog}
+              activityLog={activityLog}
               isRecovering={hpState.isRecovering}
               recoveryCost={hpState.recoveryCost}
             />
@@ -592,7 +611,7 @@ export default function GamePage() {
               const bonusLuck = typeof bonus?.luck === 'number' ? bonus.luck : 0;
               return sum + baseLuck + bonusLuck;
             }, 0)}
-            activityLog={craftingLog}
+            activityLog={activityLog}
             onUpgrade={handleForgeUpgrade}
             onReroll={handleForgeReroll}
             isRecovering={hpState.isRecovering}
@@ -640,7 +659,7 @@ export default function GamePage() {
               }))}
               currentZoneId={activeZoneId}
               availableTurns={turns}
-              gatheringLog={gatheringLog}
+              activityLog={activityLog}
               nodesLoading={gatheringLoading}
               nodesError={gatheringError}
               page={gatheringPage}
@@ -680,6 +699,8 @@ export default function GamePage() {
             onPendingEncounterZoneFilterChange={handlePendingEncounterZoneFilterChange}
             onPendingEncounterMobFilterChange={handlePendingEncounterMobFilterChange}
             onPendingEncounterSortChange={handlePendingEncounterSortChange}
+            combatPlaybackData={combatPlaybackData}
+            onCombatPlaybackComplete={handleCombatPlaybackComplete}
           />
         );
       case 'rest':

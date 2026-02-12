@@ -58,7 +58,26 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Fade-in animation for exploration event popups */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
 /* Pixel art rendering */
 .image-rendering-pixelated {
   image-rendering: pixelated;
+}
+
+/* Combat HP bar shake */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
 }

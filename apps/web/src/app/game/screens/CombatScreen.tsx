@@ -3,12 +3,13 @@
 import { useCallback, useState } from 'react';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
+import { CombatPlayback } from '@/components/combat/CombatPlayback';
 import { CombatRewardsSummary } from '@/components/combat/CombatRewardsSummary';
 import { CombatHistory } from '@/components/screens/CombatHistory';
 import { Pagination } from '@/components/common/Pagination';
 import { formatCombatShareText, resolveMobMaxHp } from '@/lib/combatShare';
 import { getMobPrefixDefinition } from '@adventure/shared';
-import type { HpState, LastCombat, PendingEncounter } from '../useGameController';
+import type { HpState, LastCombat, LastCombatLogEntry, PendingEncounter } from '../useGameController';
 
 interface CombatScreenProps {
   hpState: HpState;
@@ -41,6 +42,16 @@ interface CombatScreenProps {
   onPendingEncounterZoneFilterChange: (zoneId: string) => void;
   onPendingEncounterMobFilterChange: (mobTemplateId: string) => void;
   onPendingEncounterSortChange: (sort: 'recent' | 'danger') => void;
+  combatPlaybackData?: {
+    mobDisplayName: string;
+    outcome: string;
+    playerMaxHp: number;
+    playerStartHp: number;
+    mobMaxHp: number;
+    log: LastCombatLogEntry[];
+    rewards: LastCombat['rewards'];
+  } | null;
+  onCombatPlaybackComplete?: () => void;
 }
 
 export function CombatScreen({
@@ -64,6 +75,8 @@ export function CombatScreen({
   onPendingEncounterZoneFilterChange,
   onPendingEncounterMobFilterChange,
   onPendingEncounterSortChange,
+  combatPlaybackData,
+  onCombatPlaybackComplete,
 }: CombatScreenProps) {
   const [activeView, setActiveView] = useState<'encounters' | 'history'>('encounters');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
@@ -213,7 +226,7 @@ export function CombatScreen({
                     ? (prefix ? `${prefix.displayName} ${e.nextMobName}` : e.nextMobName)
                     : null;
                   const isWrongZone = Boolean(currentZoneId) && e.zoneId !== currentZoneId;
-                  const isDisabled = hpState.isRecovering || busyAction === 'combat' || !e.nextMobTemplateId || isWrongZone;
+                  const isDisabled = hpState.isRecovering || busyAction === 'combat' || !e.nextMobTemplateId || isWrongZone || !!combatPlaybackData;
                   return (
                     <div
                       key={e.encounterSiteId}
@@ -265,7 +278,27 @@ export function CombatScreen({
             )}
           </div>
 
-          {lastCombat && (
+          {/* Combat Playback (animated) */}
+          {combatPlaybackData && (
+            <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3">
+              <CombatPlayback
+                mobDisplayName={combatPlaybackData.mobDisplayName}
+                outcome={combatPlaybackData.outcome}
+                playerMaxHp={combatPlaybackData.playerMaxHp}
+                playerStartHp={combatPlaybackData.playerStartHp}
+                mobMaxHp={combatPlaybackData.mobMaxHp}
+                log={combatPlaybackData.log}
+                rewards={combatPlaybackData.rewards}
+                onComplete={onCombatPlaybackComplete ?? (() => {})}
+                onSkip={() => {
+                  onCombatPlaybackComplete?.();
+                }}
+              />
+            </div>
+          )}
+
+          {/* Last Combat (detailed log — shown after playback completes) */}
+          {!combatPlaybackData && lastCombat && (
             <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="text-[var(--rpg-text-primary)] font-semibold">

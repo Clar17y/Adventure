@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
-import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle } from 'lucide-react';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
+import { ActivityLog } from '@/components/ActivityLog';
+import type { ActivityLogEntry } from '@/app/game/useGameController';
 
 interface Material {
   name: string;
@@ -33,18 +35,12 @@ interface Recipe {
   rarity: Rarity;
 }
 
-interface CraftingLogEntry {
-  timestamp: string;
-  message: string;
-  type: 'info' | 'success';
-}
-
 interface CraftingProps {
   skillName: string;
   skillLevel: number;
   recipes: Recipe[];
   onCraft: (recipeId: string) => void;
-  activityLog: CraftingLogEntry[];
+  activityLog: ActivityLogEntry[];
   isRecovering?: boolean;
   recoveryCost?: number | null;
 }
@@ -326,28 +322,7 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
         </PixelCard>
       )}
 
-      <PixelCard>
-        <h3 className="font-semibold text-[var(--rpg-text-primary)] mb-3">Recent Activity</h3>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {activityLog.length === 0 ? (
-            <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">No recent activity</div>
-          ) : (
-            activityLog.map((entry, index) => {
-              const typeColors = {
-                info: 'text-[var(--rpg-text-secondary)]',
-                success: 'text-[var(--rpg-green-light)]',
-              };
-              return (
-                <div key={index} className="flex gap-2 text-sm">
-                  <Clock size={14} className="text-[var(--rpg-text-secondary)] flex-shrink-0 mt-0.5" />
-                  <span className="text-[var(--rpg-text-secondary)] flex-shrink-0 font-mono">{entry.timestamp}</span>
-                  <span className={typeColors[entry.type]}>{entry.message}</span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </PixelCard>
+      <ActivityLog entries={activityLog} maxHeight="max-h-48" />
     </div>
   );
 }

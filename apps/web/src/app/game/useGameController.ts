@@ -133,6 +133,12 @@ export interface LastCombat {
   };
 }
 
+export type ActivityLogEntry = {
+  timestamp: string;
+  message: string;
+  type: 'info' | 'success' | 'danger';
+};
+
 export interface CharacterProgression {
   characterXp: number;
   characterLevel: number;
@@ -290,9 +296,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     xpReward: number;
   }>>([]);
   const [activeCraftingSkill, setActiveCraftingSkill] = useState<'refining' | 'tanning' | 'weaving' | 'weaponsmithing' | 'armorsmithing' | 'leatherworking' | 'tailoring' | 'alchemy'>('weaponsmithing');
-  const [explorationLog, setExplorationLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>>([]);
-  const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
-  const [craftingLog, setCraftingLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [pendingEncounters, setPendingEncounters] = useState<PendingEncounter[]>([]);
   const [pendingEncountersLoading, setPendingEncountersLoading] = useState(false);
   const [pendingEncountersError, setPendingEncountersError] = useState<string | null>(null);
@@ -345,6 +349,35 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [bestiaryLoading, setBestiaryLoading] = useState(false);
   const [bestiaryError, setBestiaryError] = useState<string | null>(null);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
+  const [playbackActive, setPlaybackActive] = useState(false);
+  const [combatPlaybackData, setCombatPlaybackData] = useState<{
+    mobDisplayName: string;
+    outcome: string;
+    playerMaxHp: number;
+    playerStartHp: number;
+    mobMaxHp: number;
+    log: LastCombatLogEntry[];
+    rewards: LastCombat['rewards'];
+  } | null>(null);
+  const [explorationPlaybackData, setExplorationPlaybackData] = useState<{
+    totalTurns: number;
+    zoneName: string;
+    events: Array<{ turn: number; type: string; description: string; details?: Record<string, unknown> }>;
+    aborted: boolean;
+    refundedTurns: number;
+    playerHpBeforeExploration: number;
+    playerMaxHp: number;
+  } | null>(null);
+  const [travelPlaybackData, setTravelPlaybackData] = useState<{
+    totalTurns: number;
+    destinationName: string;
+    events: Array<{ turn: number; type: string; description: string; details?: Record<string, unknown> }>;
+    aborted: boolean;
+    refundedTurns: number;
+    playerHpBefore: number;
+    playerMaxHp: number;
+    respawnedToName?: string;
+  } | null>(null);
 
   const loadTurnsAndHp = useCallback(async () => {
     const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
@@ -589,10 +622,6 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setPendingEncounterPage(1);
   }, []);
 
-  const handleNavigate = useCallback((screen: string) => {
-    setActiveScreen(screen as Screen);
-  }, []);
-
   const getActiveTab = () => {
     if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
@@ -602,6 +631,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const pushLog = (...entries: ActivityLogEntry[]) => {
+    setActivityLog((prev) => [...entries, ...prev].slice(0, 100));
+  };
+
   const PERCENT_STATS = new Set(['critChance', 'critDamage']);
   const formatStatName = (stat: string) => {
     if (stat === 'magicDefence') return 'Magic Defence';
@@ -644,6 +678,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (!currentZone) return;
 
     await runAction('exploration', async () => {
+      const hpBefore = hpState.currentHp;
+      const maxHpBefore = hpState.maxHp;
       const res = await startExploration(currentZone.id, turnSpend);
       const data = res.data;
       if (!data) {
@@ -652,43 +688,85 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
-      const stampedEvents = data.events
+
+      // Always trigger animated playback — even empty results get a brief progress bar
+      setExplorationPlaybackData({
+        totalTurns: turnSpend,
+        zoneName: data.zone.name,
+        events: data.events,
+        aborted: data.aborted,
+        refundedTurns: data.refundedTurns,
+        playerHpBeforeExploration: hpBefore,
+        playerMaxHp: maxHpBefore,
+      });
+      setPlaybackActive(true);
+
+      // Refresh encounter sites and gathering nodes discovered during exploration.
+      // Don't call loadAll() here — defer until playback completes so the zone
+      // doesn't update to the respawn town mid-playback.
+      if (data.encounterSites.length > 0) {
+        await refreshPendingEncounters();
+      }
+      if (data.resourceDiscoveries.length > 0) {
+        await loadGatheringNodes();
+      }
+    });
+  };
+
+  const handleExplorationPlaybackComplete = async () => {
+    if (explorationPlaybackData) {
+      pushLog({
+        timestamp: nowStamp(),
+        type: 'info',
+        message: `Explored ${explorationPlaybackData.totalTurns.toLocaleString()} turns in ${explorationPlaybackData.zoneName}.`,
+      });
+      if (explorationPlaybackData.aborted && explorationPlaybackData.refundedTurns > 0) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Exploration aborted. ${explorationPlaybackData.refundedTurns.toLocaleString()} turns refunded.`,
+        });
+      }
+    }
+    setExplorationPlaybackData(null);
+    setPlaybackActive(false);
+    await loadAll();
+  };
+
+  const handlePlaybackSkip = async () => {
+    // Dump all remaining events to activity log at once
+    if (explorationPlaybackData) {
+      const entries = explorationPlaybackData.events
         .slice()
         .reverse()
         .map((event) => ({
           timestamp: nowStamp(),
-          type: event.type === 'ambush_defeat' ? 'danger' as const : event.type === 'ambush_victory' || event.type === 'encounter_site' || event.type === 'resource_node' ? 'success' as const : 'info' as const,
+          type: (event.type === 'ambush_defeat'
+            ? 'danger'
+            : event.type === 'ambush_victory' || event.type === 'encounter_site' || event.type === 'resource_node'
+              ? 'success'
+              : 'info') as 'info' | 'success' | 'danger',
           message: `Turn ${event.turn}: ${event.description}`,
         }));
-
-      setExplorationLog((prev) => [
-        ...(data.aborted
-          ? []
-          : [{ timestamp: nowStamp(), type: 'info' as const, message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}.` }]),
-        ...stampedEvents,
-        ...prev,
-      ]);
-
-      if (data.aborted && data.refundedTurns > 0) {
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'info', message: `Exploration aborted. ${data.refundedTurns.toLocaleString()} turns refunded.` },
-          ...prev,
-        ]);
+      pushLog(
+        {
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Explored ${explorationPlaybackData.totalTurns.toLocaleString()} turns in ${explorationPlaybackData.zoneName}.`,
+        },
+        ...entries,
+      );
+      if (explorationPlaybackData.aborted && explorationPlaybackData.refundedTurns > 0) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Exploration aborted. ${explorationPlaybackData.refundedTurns.toLocaleString()} turns refunded.`,
+        });
       }
-
-      if (data.encounterSites.length > 0 && activeScreen === 'combat') {
-        await refreshPendingEncounters();
-      }
-
-      if (data.resourceDiscoveries.length > 0) {
-        await loadGatheringNodes();
-      }
-
-      const hadAmbush = data.events.some((event) => event.type === 'ambush_victory' || event.type === 'ambush_defeat');
-      if (hadAmbush || data.zoneExitDiscovered) {
-        await loadAll();
-      }
-    });
+    }
+    setExplorationPlaybackData(null);
+    setPlaybackActive(false);
+    await loadAll();
   };
 
   const handleStartCombat = async (encounterSiteId: string) => {
@@ -697,6 +775,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setActionError(`Travel to ${selectedSite.zoneName} before fighting this encounter.`);
       return;
     }
+
+    const hpBefore = hpState.currentHp;
 
     await runAction('combat', async () => {
       const res = await startCombatFromEncounterSite(encounterSiteId, 'melee');
@@ -710,74 +790,102 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
-      setLastCombat({
-        mobTemplateId: data.combat.mobTemplateId,
-        mobPrefix: data.combat.mobPrefix,
+
+      const rewards: LastCombat['rewards'] = {
+        xp: data.rewards.xp,
+        loot: data.rewards.loot,
+        siteCompletion: data.rewards.siteCompletion ?? null,
+        skillXp: data.rewards.skillXp
+          ? {
+              skillType: data.rewards.skillXp.skillType,
+              xpGained: data.rewards.skillXp.xpGained,
+              xpAfterEfficiency: data.rewards.skillXp.xpAfterEfficiency,
+              efficiency: data.rewards.skillXp.efficiency,
+              leveledUp: data.rewards.skillXp.leveledUp,
+              newLevel: data.rewards.skillXp.newLevel,
+              characterXpGain: data.rewards.skillXp.characterXpGain,
+              characterXpAfter: data.rewards.skillXp.characterXpAfter,
+              characterLevelBefore: data.rewards.skillXp.characterLevelBefore,
+              characterLevelAfter: data.rewards.skillXp.characterLevelAfter,
+              attributePointsAfter: data.rewards.skillXp.attributePointsAfter,
+              characterLeveledUp: data.rewards.skillXp.characterLeveledUp,
+            }
+          : null,
+      };
+
+      // Store for animated playback instead of setting lastCombat directly
+      setCombatPlaybackData({
         mobDisplayName: data.combat.mobDisplayName,
         outcome: data.combat.outcome,
         playerMaxHp: data.combat.playerMaxHp,
+        playerStartHp: hpBefore,
         mobMaxHp: data.combat.mobMaxHp,
         log: data.combat.log,
-        rewards: {
-          xp: data.rewards.xp,
-          loot: data.rewards.loot,
-          siteCompletion: data.rewards.siteCompletion ?? null,
-          skillXp: data.rewards.skillXp
-            ? {
-                skillType: data.rewards.skillXp.skillType,
-                xpGained: data.rewards.skillXp.xpGained,
-                xpAfterEfficiency: data.rewards.skillXp.xpAfterEfficiency,
-                efficiency: data.rewards.skillXp.efficiency,
-                leveledUp: data.rewards.skillXp.leveledUp,
-                newLevel: data.rewards.skillXp.newLevel,
-                characterXpGain: data.rewards.skillXp.characterXpGain,
-                characterXpAfter: data.rewards.skillXp.characterXpAfter,
-                characterLevelBefore: data.rewards.skillXp.characterLevelBefore,
-                characterLevelAfter: data.rewards.skillXp.characterLevelAfter,
-                attributePointsAfter: data.rewards.skillXp.attributePointsAfter,
-                characterLeveledUp: data.rewards.skillXp.characterLeveledUp,
-              }
-            : null,
-        },
+        rewards,
       });
+      setPlaybackActive(true);
 
       if (data.rewards.siteCompletion) {
         const chest = data.rewards.siteCompletion;
         const chestLabel = `${chest.chestRarity.charAt(0).toUpperCase()}${chest.chestRarity.slice(1)} Chest`;
         const lootCount = chest.loot.reduce((sum, entry) => sum + entry.quantity, 0);
-        setExplorationLog((prev) => [
-          {
-            timestamp: nowStamp(),
-            type: 'success',
-            message: `Encounter site cleared. ${chestLabel} opened with ${lootCount} item${lootCount === 1 ? '' : 's'}.`,
-          },
-          ...prev,
-        ]);
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Encounter site cleared. ${chestLabel} opened with ${lootCount} item${lootCount === 1 ? '' : 's'}.`,
+        });
 
         if (chest.recipeUnlocked) {
           const unlockedRecipe = chest.recipeUnlocked;
-          setExplorationLog((prev) => [
-            {
-              timestamp: nowStamp(),
-              type: 'success',
-              message: `Learned advanced recipe: ${unlockedRecipe.recipeName}.`,
-            },
-            ...prev,
-          ]);
+          pushLog({
+            timestamp: nowStamp(),
+            type: 'success',
+            message: `Learned advanced recipe: ${unlockedRecipe.recipeName}.`,
+          });
         }
       }
 
       const skillXp = data.rewards?.skillXp;
       if (skillXp?.leveledUp) {
         const skillName = skillXp.skillType.charAt(0).toUpperCase() + skillXp.skillType.slice(1);
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'success', message: `🎉 ${skillName} leveled up to ${skillXp.newLevel}!` },
-          ...prev,
-        ]);
+        pushLog({ timestamp: nowStamp(), type: 'success', message: `🎉 ${skillName} leveled up to ${skillXp.newLevel}!` });
       }
 
       await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters(), loadBestiary()]);
     });
+  };
+
+  const handleCombatPlaybackComplete = () => {
+    if (combatPlaybackData) {
+      setLastCombat({
+        mobTemplateId: '',
+        mobPrefix: null,
+        mobDisplayName: combatPlaybackData.mobDisplayName,
+        outcome: combatPlaybackData.outcome,
+        playerMaxHp: combatPlaybackData.playerMaxHp,
+        mobMaxHp: combatPlaybackData.mobMaxHp,
+        log: combatPlaybackData.log,
+        rewards: combatPlaybackData.rewards,
+      });
+    }
+    setCombatPlaybackData(null);
+    setPlaybackActive(false);
+  };
+
+  const handleNavigate = (screen: string) => {
+    // Auto-skip any active playback when navigating away
+    if (playbackActive) {
+      if (explorationPlaybackData) {
+        handlePlaybackSkip();
+      }
+      if (combatPlaybackData) {
+        handleCombatPlaybackComplete();
+      }
+      if (travelPlaybackData) {
+        handleTravelPlaybackSkip();
+      }
+    }
+    setActiveScreen(screen as Screen);
   };
 
   const handleMine = async (playerNodeId: string, turnSpend: number) => {
@@ -793,7 +901,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
 
-      const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
+      const newLogs: ActivityLogEntry[] = [];
       const gatheredSkillName = data.xp?.skillType
         ? data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1)
         : 'Gathering';
@@ -820,7 +928,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         });
       }
 
-      setGatheringLog((prev) => [...newLogs, ...prev]);
+      pushLog(...newLogs);
       await Promise.all([loadAll(), loadGatheringNodes()]);
     });
   };
@@ -837,7 +945,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
 
-      const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
+      const newLogs: ActivityLogEntry[] = [];
       const timestamp = nowStamp();
       const skillName = data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1);
 
@@ -894,7 +1002,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         });
       }
 
-      setCraftingLog((prev) => [...newLogs, ...prev]);
+      pushLog(...newLogs);
       await loadAll();
     });
   };
@@ -912,14 +1020,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       const materialSummary = data.salvage.returnedMaterials
         .map((entry) => `${entry.name} x${entry.quantity}`)
         .join(', ');
-      setCraftingLog((prev) => [
-        {
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `Salvaged item for: ${materialSummary}.`,
-        },
-        ...prev,
-      ]);
+      pushLog({
+        timestamp: nowStamp(),
+        type: 'success',
+        message: `Salvaged item for: ${materialSummary}.`,
+      });
       await loadAll();
     });
   };
@@ -939,23 +1044,17 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       const chancePct = (data.forge.successChance * 100).toFixed(1);
 
       if (data.forge.success) {
-        setCraftingLog((prev) => [
-          {
-            timestamp: nowStamp(),
-            type: 'success',
-            message: `Forge success: ${fromLabel} -> ${toLabel} (${chancePct}% chance). Sacrificial item consumed.`,
-          },
-          ...prev,
-        ]);
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Forge success: ${fromLabel} -> ${toLabel} (${chancePct}% chance). Sacrificial item consumed.`,
+        });
       } else {
-        setCraftingLog((prev) => [
-          {
-            timestamp: nowStamp(),
-            type: 'info',
-            message: `Forge failed at ${fromLabel} (${chancePct}% chance). Target and sacrifice consumed.`,
-          },
-          ...prev,
-        ]);
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Forge failed at ${fromLabel} (${chancePct}% chance). Target and sacrifice consumed.`,
+        });
       }
 
       await loadAll();
@@ -973,14 +1072,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
       const rarityLabel = data.forge.rarity.charAt(0).toUpperCase() + data.forge.rarity.slice(1);
-      setCraftingLog((prev) => [
-        {
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `Re-rolled ${rarityLabel} item bonus stats. Sacrificial duplicate consumed.`,
-        },
-        ...prev,
-      ]);
+      pushLog({
+        timestamp: nowStamp(),
+        type: 'success',
+        message: `Re-rolled ${rarityLabel} item bonus stats. Sacrificial duplicate consumed.`,
+      });
 
       await loadAll();
     });
@@ -1044,6 +1140,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const handleTravelToZone = async (id: string) => {
+    const hpBefore = hpState.currentHp;
+
     await runAction('travel', async () => {
       const res = await travelToZone(id);
       const data = res.data;
@@ -1053,31 +1151,108 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
-      setActiveZoneId(data.zone.id);
 
-      // Add travel events to exploration log
-      if (data.events.length > 0) {
-        const stampedEvents = data.events.map((event) => ({
+      // Breadcrumb return — instant, no playback
+      if (data.breadcrumbReturn) {
+        setActiveZoneId(data.zone.id);
+        pushLog({ timestamp: nowStamp(), type: 'success', message: `Returned to ${data.zone.name}.` });
+        await loadAll();
+        return;
+      }
+
+      // Trigger travel playback (progress bar + combat if ambushed)
+      // Don't update activeZoneId or loadAll yet — defer until playback completes
+      // so the map doesn't show "HERE" on the destination prematurely.
+      const travelCost = data.travelCost ?? 0;
+      if (travelCost > 0) {
+        pushLog({
           timestamp: nowStamp(),
-          type: event.type === 'ambush_defeat' ? 'danger' as const
-              : event.type === 'ambush_victory' ? 'success' as const
-              : 'info' as const,
+          type: 'info',
+          message: `Travelling to ${data.zone.name}...`,
+        });
+
+        setTravelPlaybackData({
+          totalTurns: travelCost,
+          destinationName: data.zone.name,
+          events: data.events,
+          aborted: data.aborted,
+          refundedTurns: data.refundedTurns,
+          playerHpBefore: hpBefore,
+          playerMaxHp: hpState.maxHp,
+          respawnedToName: data.respawnedTo?.townName,
+        });
+        setPlaybackActive(true);
+      } else {
+        // Zero-cost travel (shouldn't happen normally, but handle gracefully)
+        setActiveZoneId(data.zone.id);
+        pushLog({ timestamp: nowStamp(), type: 'success', message: `Arrived at ${data.zone.name}.` });
+        await loadAll();
+      }
+    });
+  };
+
+  const handleTravelPlaybackComplete = async () => {
+    if (travelPlaybackData) {
+      if (travelPlaybackData.aborted && travelPlaybackData.respawnedToName) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `You were knocked out and woke up in ${travelPlaybackData.respawnedToName}.`,
+        });
+      } else if (travelPlaybackData.aborted) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `Travel to ${travelPlaybackData.destinationName} failed. You fled back to safety.`,
+        });
+      } else {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Arrived at ${travelPlaybackData.destinationName}.`,
+        });
+      }
+    }
+    setTravelPlaybackData(null);
+    setPlaybackActive(false);
+    await loadAll();
+  };
+
+  const handleTravelPlaybackSkip = async () => {
+    if (travelPlaybackData) {
+      const entries = travelPlaybackData.events
+        .slice()
+        .reverse()
+        .map((event) => ({
+          timestamp: nowStamp(),
+          type: (event.type === 'ambush_defeat' ? 'danger' : event.type === 'ambush_victory' ? 'success' : 'info') as 'info' | 'success' | 'danger',
           message: `Turn ${event.turn}: ${event.description}`,
         }));
-        setExplorationLog((prev) => [...stampedEvents.reverse(), ...prev]);
-      }
+      pushLog(...entries);
 
-      if (data.respawnedTo) {
-        setExplorationLog((prev) => [{
+      if (travelPlaybackData.aborted && travelPlaybackData.respawnedToName) {
+        pushLog({
           timestamp: nowStamp(),
-          type: 'danger' as const,
-          message: `You were knocked out and woke up in ${data.respawnedTo!.townName}.`,
-        }, ...prev]);
+          type: 'danger',
+          message: `You were knocked out and woke up in ${travelPlaybackData.respawnedToName}.`,
+        });
+      } else if (travelPlaybackData.aborted) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `Travel to ${travelPlaybackData.destinationName} failed. You fled back to safety.`,
+        });
+      } else {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Arrived at ${travelPlaybackData.destinationName}.`,
+        });
       }
-
-      // Refresh all state after travel
-      await loadAll();
-    });
+    }
+    setTravelPlaybackData(null);
+    setPlaybackActive(false);
+    await loadAll();
   };
 
   const handleAllocateAttribute = async (attribute: AttributeType, points = 1) => {
@@ -1127,9 +1302,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     craftingRecipes,
     activeCraftingSkill,
     setActiveCraftingSkill,
-    explorationLog,
-    gatheringLog,
-    craftingLog,
+    activityLog,
+    pushLog,
     pendingEncounters,
     pendingEncountersLoading,
     pendingEncountersError,
@@ -1148,6 +1322,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     bestiaryError,
     hpState,
     setHpState,
+    playbackActive,
+    combatPlaybackData,
+    explorationPlaybackData,
+    travelPlaybackData,
 
     // Derived
     currentZone,
@@ -1155,7 +1333,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
     // Actions
     handleStartExploration,
+    handleExplorationPlaybackComplete,
+    handlePlaybackSkip,
     handleStartCombat,
+    handleCombatPlaybackComplete,
+    handleTravelPlaybackComplete,
+    handleTravelPlaybackSkip,
     handleMine,
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,

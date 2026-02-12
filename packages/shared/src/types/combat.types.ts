@@ -1,5 +1,7 @@
 import type { ItemRarity } from './item.types';
 
+export type DamageType = 'physical' | 'magic';
+
 export interface MobTemplate {
   id: string;
   name: string;
@@ -15,7 +17,7 @@ export interface MobTemplate {
   xpReward: number;
   encounterWeight: number;
   spellPattern: SpellAction[];
-  damageType: 'physical' | 'magic';
+  damageType: DamageType;
 }
 
 export interface SpellAction {
@@ -107,5 +109,5 @@ export interface CombatantStats {
   speed: number;
   critChance?: number;
   critDamage?: number;
-  damageType: 'physical' | 'magic';
+  damageType: DamageType;
 }

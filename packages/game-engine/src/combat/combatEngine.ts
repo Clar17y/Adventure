@@ -241,9 +241,9 @@ function executeMobAttack(
 
   const rawDamage = rollDamage(mobStats.damageMin, mobStats.damageMax);
   const crit = isCriticalHit(0);
-  const effectiveMobDefTarget = mobStats.damageType === 'magic' ? playerStats.magicDefence : playerStats.defence;
-  const { damage: finalDamage, actualMultiplier: mobCritMultiplier } = calculateFinalDamage(rawDamage, effectiveMobDefTarget, crit, 0);
-  const armorReduction = Math.floor(rawDamage * mobCritMultiplier * calculateDefenceReduction(effectiveMobDefTarget));
+  const effectiveDefence = mobStats.damageType === 'magic' ? playerStats.magicDefence : playerStats.defence;
+  const { damage: finalDamage, actualMultiplier: mobCritMultiplier } = calculateFinalDamage(rawDamage, effectiveDefence, crit, 0);
+  const armorReduction = Math.floor(rawDamage * mobCritMultiplier * calculateDefenceReduction(effectiveDefence));
 
   state.playerHp -= finalDamage;
 

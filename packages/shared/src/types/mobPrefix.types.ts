@@ -1,3 +1,5 @@
+import type { DamageType } from './combat.types';
+
 export interface SpellTemplate {
   startRound: number;
   interval: number;
@@ -23,5 +25,5 @@ export interface MobPrefixDefinition {
   xpMultiplier: number;
   dropChanceMultiplier: number;
   spellTemplate: SpellTemplate | null;
-  damageTypeOverride?: 'physical' | 'magic';
+  damageTypeOverride?: DamageType;
 }

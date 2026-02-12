@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
-import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle } from 'lucide-react';
+import { Hammer, Hourglass, Sparkles, CheckCircle, XCircle, Lock, Minus, Plus } from 'lucide-react';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 import { ActivityLog } from '@/components/ActivityLog';
 import type { ActivityLogEntry } from '@/app/game/useGameController';
@@ -39,7 +39,7 @@ interface CraftingProps {
   skillName: string;
   skillLevel: number;
   recipes: Recipe[];
-  onCraft: (recipeId: string) => void;
+  onCraft: (recipeId: string, quantity: number) => void;
   activityLog: ActivityLogEntry[];
   isRecovering?: boolean;
   recoveryCost?: number | null;
@@ -79,6 +79,7 @@ function statEntries(stats: Record<string, unknown> | undefined): Array<[string,
 
 export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog, isRecovering = false, recoveryCost }: CraftingProps) {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (recipes.length === 0) {
@@ -93,6 +94,21 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
   const selectedRecipe = selectedRecipeId ? recipes.find((recipe) => recipe.id === selectedRecipeId) ?? null : null;
   const selectedBaseStats = statEntries(selectedRecipe?.baseStats);
   const selectedRecipeLocked = selectedRecipe?.isAdvanced && selectedRecipe?.isDiscovered === false;
+  const selectedLevelLocked = selectedRecipe ? selectedRecipe.requiredLevel > skillLevel : false;
+
+  const maxCraftable = (recipe: Recipe): number => {
+    if (recipe.requiredLevel > skillLevel) return 0;
+    if (recipe.isAdvanced && recipe.isDiscovered === false) return 0;
+    if (recipe.materials.length === 0) return 99;
+    return Math.min(...recipe.materials.map((m) => Math.floor(m.owned / m.required)));
+  };
+
+  const selectedMax = selectedRecipe ? maxCraftable(selectedRecipe) : 0;
+
+  // Reset quantity when recipe changes or when max changes
+  useEffect(() => {
+    setQuantity((prev) => Math.max(1, Math.min(prev, selectedMax || 1)));
+  }, [selectedRecipeId, selectedMax]);
 
   const canCraft = (recipe: Recipe) => {
     if (recipe.requiredLevel > skillLevel) return false;
@@ -132,9 +148,8 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
             return (
               <button
                 key={recipe.id}
-                onClick={() => setSelectedRecipeId(recipe.id)}
-                disabled={levelLocked}
-                className={`w-full text-left transition-all ${listLocked ? 'opacity-50' : ''} ${levelLocked ? 'cursor-not-allowed' : ''}`}
+                onClick={() => { setSelectedRecipeId(recipe.id); setQuantity(1); }}
+                className={`w-full text-left transition-all ${listLocked ? 'opacity-50' : ''}`}
               >
                 <PixelCard
                   padding="sm"
@@ -177,18 +192,20 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                         <span className="text-xs text-[var(--rpg-text-secondary)]">Lv. {recipe.requiredLevel}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        {craftable ? (
+                        {levelLocked ? (
+                          <Lock size={12} color="var(--rpg-text-secondary)" />
+                        ) : craftable ? (
                           <CheckCircle size={12} color="var(--rpg-green-light)" />
                         ) : (
                           <XCircle size={12} color="var(--rpg-red)" />
                         )}
                         <span className="text-xs text-[var(--rpg-text-secondary)]">
                           {levelLocked
-                            ? 'Level too low'
+                            ? `Unlocks at Lv. ${recipe.requiredLevel}`
                             : discoveryLocked
                             ? 'Recipe not discovered'
                             : craftable
-                            ? 'Can craft'
+                            ? `Can craft (${maxCraftable(recipe)})`
                             : 'Missing materials'}
                         </span>
                       </div>
@@ -223,6 +240,9 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
               <h3 className="font-bold text-[var(--rpg-text-primary)] text-lg">{selectedRecipe.name}</h3>
               <p className="text-xs text-[var(--rpg-text-secondary)] capitalize">
                 {selectedRecipe.rarity} - Lv. {selectedRecipe.requiredLevel} Required
+                {selectedLevelLocked && (
+                  <span className="text-[var(--rpg-red)] ml-1">(Need {selectedRecipe.requiredLevel - skillLevel} more levels)</span>
+                )}
               </p>
               {selectedRecipe.isAdvanced && (
                 <p className="text-xs text-[var(--rpg-gold)]">
@@ -256,7 +276,8 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
           <div className="space-y-2 mb-4">
             <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm">Required Materials</h4>
             {selectedRecipe.materials.map((material, idx) => {
-              const hasEnough = material.owned >= material.required;
+              const totalRequired = material.required * quantity;
+              const hasEnough = material.owned >= totalRequired;
               return (
                 <div key={idx} className="flex items-center gap-3">
                   {material.imageSrc ? (
@@ -276,7 +297,7 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                           hasEnough ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'
                         }`}
                       >
-                        {material.owned} / {material.required}
+                        {material.owned} / {totalRequired}
                       </span>
                     </div>
                   </div>
@@ -297,7 +318,14 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                 <Hourglass size={16} color="var(--rpg-gold)" />
                 <span className="text-xs text-[var(--rpg-text-secondary)]">Turn Cost</span>
               </div>
-              <div className="text-xl font-bold text-[var(--rpg-gold)] font-mono">{selectedRecipe.turnCost}</div>
+              <div className="text-xl font-bold text-[var(--rpg-gold)] font-mono">
+                {selectedRecipe.turnCost * quantity}
+                {quantity > 1 && (
+                  <span className="text-xs font-normal text-[var(--rpg-text-secondary)] ml-1">
+                    ({selectedRecipe.turnCost} ea)
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="bg-[var(--rpg-surface)] rounded-lg p-3">
@@ -305,19 +333,64 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                 <Sparkles size={16} color="var(--rpg-blue-light)" />
                 <span className="text-xs text-[var(--rpg-text-secondary)]">XP Reward</span>
               </div>
-              <div className="text-xl font-bold text-[var(--rpg-blue-light)] font-mono">{selectedRecipe.xpReward}</div>
+              <div className="text-xl font-bold text-[var(--rpg-blue-light)] font-mono">
+                {selectedRecipe.xpReward * quantity}
+                {quantity > 1 && (
+                  <span className="text-xs font-normal text-[var(--rpg-text-secondary)] ml-1">
+                    ({selectedRecipe.xpReward} ea)
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Quantity Selector */}
+          {selectedMax > 1 && !selectedRecipeLocked && !selectedLevelLocked && (
+            <div className="flex items-center justify-between mb-4 bg-[var(--rpg-surface)] rounded-lg p-3">
+              <span className="text-sm font-semibold text-[var(--rpg-text-primary)]">Quantity</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  disabled={quantity <= 1}
+                  className="w-8 h-8 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center text-[var(--rpg-text-primary)] disabled:opacity-30 hover:bg-[var(--rpg-border)] transition-colors"
+                >
+                  <Minus size={14} />
+                </button>
+                <span className="text-lg font-bold font-mono text-[var(--rpg-gold)] w-10 text-center">{quantity}</span>
+                <button
+                  onClick={() => setQuantity((q) => Math.min(selectedMax, q + 1))}
+                  disabled={quantity >= selectedMax}
+                  className="w-8 h-8 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center text-[var(--rpg-text-primary)] disabled:opacity-30 hover:bg-[var(--rpg-border)] transition-colors"
+                >
+                  <Plus size={14} />
+                </button>
+                <button
+                  onClick={() => setQuantity(selectedMax)}
+                  className="px-2 py-1 rounded text-xs font-semibold bg-[var(--rpg-background)] text-[var(--rpg-text-secondary)] hover:text-[var(--rpg-gold)] transition-colors"
+                >
+                  Max ({selectedMax})
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Craft Button */}
           <PixelButton
             variant="gold"
             size="lg"
             className="w-full"
-            onClick={() => onCraft(selectedRecipe.id)}
-            disabled={isRecovering || !canCraft(selectedRecipe)}
+            onClick={() => onCraft(selectedRecipe.id, quantity)}
+            disabled={isRecovering || selectedMax < 1}
           >
-            {isRecovering ? 'Recover First' : selectedRecipeLocked ? 'Discover Recipe First' : `Craft ${selectedRecipe.name}`}
+            {isRecovering
+              ? 'Recover First'
+              : selectedLevelLocked
+              ? `Requires Lv. ${selectedRecipe.requiredLevel}`
+              : selectedRecipeLocked
+              ? 'Discover Recipe First'
+              : quantity > 1
+              ? `Craft ${quantity}x ${selectedRecipe.name}`
+              : `Craft ${selectedRecipe.name}`}
           </PixelButton>
         </PixelCard>
       )}

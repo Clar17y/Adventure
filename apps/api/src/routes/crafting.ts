@@ -238,9 +238,6 @@ craftingRouter.get('/recipes', async (req, res, next) => {
     }>;
 
     const visible = recipes
-      .filter((r: typeof recipes[number]) => {
-        return (skillLevels.get(r.skillType) ?? 1) >= r.requiredLevel;
-      })
       .map((r: typeof recipes[number]) => {
         const isAdvanced = Boolean(r.isAdvanced);
         const isDiscovered = !isAdvanced || learnedRecipeIds.has(r.id);

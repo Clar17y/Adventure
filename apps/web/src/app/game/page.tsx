@@ -734,6 +734,17 @@ export default function GamePage() {
   return (
     <>
       <AppShell turns={turns} username={player?.username}>
+        {/* Broken gear warning banner */}
+        {equipment.some((e) => {
+          if (!e.item) return false;
+          const cur = e.item.currentDurability ?? e.item.template?.maxDurability ?? 1;
+          return cur <= 0;
+        }) && (
+          <div className="mb-3 p-2 rounded-lg bg-[var(--rpg-red)]/10 border border-[var(--rpg-red)] text-[var(--rpg-red)] text-sm text-center">
+            You have broken equipment! Broken gear provides no stats. Visit your inventory to repair.
+          </div>
+        )}
+
         {/* Sub-navigation for screens */}
         {getActiveTab() === 'home' && (
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">

@@ -581,7 +581,7 @@ export interface CombatResultResponse {
         soulbound: boolean;
       } | null;
     } | null;
-    durabilityLost: Array<{ itemId: string; amount: number }>;
+    durabilityLost: Array<{ itemId: string; amount: number; itemName?: string; newDurability?: number; maxDurability?: number; isBroken?: boolean; crossedWarningThreshold?: boolean }>;
     skillXp: SkillXpGrantResponse | null;
   };
 }
@@ -625,7 +625,7 @@ export interface CombatResponse {
         soulbound: boolean;
       } | null;
     } | null;
-    durabilityLost: Array<{ itemId: string; amount: number }>;
+    durabilityLost: Array<{ itemId: string; amount: number; itemName?: string; newDurability?: number; maxDurability?: number; isBroken?: boolean; crossedWarningThreshold?: boolean }>;
     skillXp: SkillXpGrantResponse | null;
   };
 }

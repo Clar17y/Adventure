@@ -21,12 +21,19 @@ export function StatBar({
 }: StatBarProps) {
   const percentage = Math.min((current / max) * 100, 100);
 
+  const durabilityColor =
+    current <= 0
+      ? 'bg-[var(--rpg-red)]'
+      : percentage < 10
+        ? 'bg-[var(--rpg-gold)]'
+        : 'bg-[var(--rpg-text-secondary)]';
+
   const colorClasses = {
     health: 'bg-[var(--rpg-green-light)]',
     mana: 'bg-[var(--rpg-blue-light)]',
     xp: 'bg-[var(--rpg-gold)]',
     gold: 'bg-[var(--rpg-gold)]',
-    durability: 'bg-[var(--rpg-text-secondary)]',
+    durability: durabilityColor,
   };
 
   const sizeClasses = {

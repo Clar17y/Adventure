@@ -42,18 +42,27 @@ export async function degradeEquippedDurability(
         });
       }
 
-      const newCurrent = currentDurability - amount;
-      losses.push({ itemId: item.id, amount });
+      const newCurrent = Math.max(0, currentDurability - amount);
 
-      if (newCurrent <= 0) {
-        // Unequip everywhere and destroy the item
-        await tx.playerEquipment.updateMany({
-          where: { playerId, itemId: item.id },
-          data: { itemId: null },
-        });
-        await tx.item.delete({ where: { id: item.id } });
-        continue;
-      }
+      const wasBroken = currentDurability <= 0;
+      const nowBroken = newCurrent <= 0;
+      const warningThreshold = maxDurability * DURABILITY_CONSTANTS.WARNING_THRESHOLD;
+      const crossedWarning =
+        !nowBroken &&
+        currentDurability > warningThreshold &&
+        newCurrent <= warningThreshold;
+
+      losses.push({
+        itemId: item.id,
+        amount,
+        itemName: template.name,
+        newDurability: newCurrent,
+        maxDurability,
+        isBroken: nowBroken && !wasBroken,
+        crossedWarningThreshold: crossedWarning,
+      });
+
+      if (newCurrent === currentDurability) continue;
 
       await tx.item.update({
         where: { id: item.id },

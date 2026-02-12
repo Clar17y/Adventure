@@ -82,6 +82,13 @@ export interface LootDrop {
 export interface DurabilityLoss {
   itemId: string;
   amount: number;
+  itemName?: string;
+  newDurability?: number;
+  maxDurability?: number;
+  /** True only on the transition to 0 (not every combat while already broken) */
+  isBroken?: boolean;
+  /** True only when crossing below the warning threshold this tick */
+  crossedWarningThreshold?: boolean;
 }
 
 export interface CombatantStats {

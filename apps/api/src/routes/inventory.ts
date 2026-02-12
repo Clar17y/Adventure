@@ -136,7 +136,10 @@ inventoryRouter.post('/repair', async (req, res, next) => {
         };
       }
 
-      const turnSpend = await spendPlayerTurnsTx(tx, playerId, DURABILITY_CONSTANTS.REPAIR_TURN_COST);
+      const turnCost = current <= 0
+        ? DURABILITY_CONSTANTS.BROKEN_REPAIR_TURN_COST
+        : DURABILITY_CONSTANTS.REPAIR_TURN_COST;
+      const turnSpend = await spendPlayerTurnsTx(tx, playerId, turnCost);
       const decay = Math.min(
         DURABILITY_CONSTANTS.REPAIR_MAX_DECAY,
         Math.max(1, Math.floor(Math.random() * (DURABILITY_CONSTANTS.REPAIR_MAX_DECAY + 1)))
@@ -162,6 +165,7 @@ inventoryRouter.post('/repair', async (req, res, next) => {
       return {
         repaired: true as const,
         turns: turnSpend,
+        turnCost,
         itemId: item.id,
         currentDurability: newMax,
         maxDurability: newMax,

@@ -75,6 +75,7 @@ interface ZoneFamilyMember {
   mobTemplate: {
     id: string;
     name: string;
+    zoneId: string;
   };
 }
 
@@ -108,6 +109,11 @@ interface PendingEncounterSiteDiscovery {
   siteName: string;
   size: EncounterSiteSize;
   mobs: EncounterMobSlot[];
+}
+
+interface PendingAmbushCombatLog {
+  turnsSpent: number;
+  result: Prisma.InputJsonValue;
 }
 
 function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
@@ -223,7 +229,14 @@ function pickFamilyMemberByRole(
   return members[randomIntInclusive(0, members.length - 1)] ?? null;
 }
 
-function buildEncounterSiteMobs(family: ZoneFamilyRow['mobFamily'], size: EncounterSiteSize): EncounterMobSlot[] {
+function buildEncounterSiteMobs(
+  family: ZoneFamilyRow['mobFamily'],
+  size: EncounterSiteSize,
+  zoneId: string
+): EncounterMobSlot[] {
+  const zoneMembers = family.members.filter((member) => member.mobTemplate.zoneId === zoneId);
+  if (zoneMembers.length === 0) return [];
+
   const { min, max } = getEncounterRange(size);
   const total = randomIntInclusive(min, max);
 
@@ -245,7 +258,7 @@ function buildEncounterSiteMobs(family: ZoneFamilyRow['mobFamily'], size: Encoun
   let slot = 0;
 
   for (let i = 0; i < trashCount; i++) {
-    const member = pickFamilyMemberByRole(family.members, 'trash', ['elite', 'boss']);
+    const member = pickFamilyMemberByRole(zoneMembers, 'trash', ['elite', 'boss']);
     if (!member) continue;
     mobs.push({
       slot: slot++,
@@ -257,7 +270,7 @@ function buildEncounterSiteMobs(family: ZoneFamilyRow['mobFamily'], size: Encoun
   }
 
   for (let i = 0; i < eliteCount; i++) {
-    const member = pickFamilyMemberByRole(family.members, 'elite', ['trash', 'boss']);
+    const member = pickFamilyMemberByRole(zoneMembers, 'elite', ['trash', 'boss']);
     if (!member) continue;
     mobs.push({
       slot: slot++,
@@ -269,7 +282,7 @@ function buildEncounterSiteMobs(family: ZoneFamilyRow['mobFamily'], size: Encoun
   }
 
   for (let i = 0; i < bossCount; i++) {
-    const member = pickFamilyMemberByRole(family.members, 'boss', ['elite', 'trash']);
+    const member = pickFamilyMemberByRole(zoneMembers, 'boss', ['elite', 'trash']);
     if (!member) continue;
     mobs.push({
       slot: slot++,
@@ -280,8 +293,8 @@ function buildEncounterSiteMobs(family: ZoneFamilyRow['mobFamily'], size: Encoun
     });
   }
 
-  if (mobs.length === 0 && family.members.length > 0) {
-    const member = family.members[0]!;
+  if (mobs.length === 0 && zoneMembers.length > 0) {
+    const member = zoneMembers[0]!;
     mobs.push({
       slot: 0,
       mobTemplateId: member.mobTemplate.id,
@@ -365,7 +378,7 @@ explorationRouter.post('/start', async (req, res, next) => {
               members: {
                 include: {
                   mobTemplate: {
-                    select: { id: true, name: true },
+                    select: { id: true, name: true, zoneId: true },
                   },
                 },
               },
@@ -390,6 +403,7 @@ explorationRouter.post('/start', async (req, res, next) => {
 
     const pendingResources: PendingResourceDiscovery[] = [];
     const pendingSites: PendingEncounterSiteDiscovery[] = [];
+    const pendingCombatLogs: PendingAmbushCombatLog[] = [];
     const events: NarrativeEvent[] = [];
 
     const hiddenCaches: Array<{ turnOccurred: number }> = [];
@@ -431,13 +445,14 @@ explorationRouter.post('/start', async (req, res, next) => {
         const durabilityLost = await degradeEquippedDurability(playerId);
         let loot: Array<{ itemTemplateId: string; quantity: number; rarity?: string }> = [];
         let xpGain = 0;
+        let xpGrant: Awaited<ReturnType<typeof grantSkillXp>> | null = null;
 
         if (combatResult.outcome === 'victory') {
           currentHp = combatResult.playerHpRemaining;
           await setHp(playerId, currentHp);
 
           loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
-          const xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
+          xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
           xpGain = xpGrant.xpResult.xpAfterEfficiency;
 
           await prisma.playerBestiary.upsert({
@@ -468,6 +483,47 @@ explorationRouter.post('/start', async (req, res, next) => {
               update: { kills: { increment: 1 } },
             });
           }
+
+          const skillXpReward = xpGrant
+            ? {
+                skillType: xpGrant.skillType,
+                ...xpGrant.xpResult,
+                newTotalXp: xpGrant.newTotalXp,
+                newDailyXpGained: xpGrant.newDailyXpGained,
+                characterXpGain: xpGrant.characterXpGain,
+                characterXpAfter: xpGrant.characterXpAfter,
+                characterLevelBefore: xpGrant.characterLevelBefore,
+                characterLevelAfter: xpGrant.characterLevelAfter,
+                attributePointsAfter: xpGrant.attributePointsAfter,
+                characterLeveledUp: xpGrant.characterLeveledUp,
+              }
+            : null;
+
+          pendingCombatLogs.push({
+            turnsSpent: 0,
+            result: {
+              zoneId: body.zoneId,
+              zoneName: zone.name,
+              mobTemplateId: prefixedMob.id,
+              mobName: baseMob.name,
+              mobPrefix: prefixedMob.mobPrefix,
+              mobDisplayName: prefixedMob.mobDisplayName,
+              source: 'exploration_ambush',
+              encounterSiteId: null,
+              attackSkill,
+              outcome: combatResult.outcome,
+              playerMaxHp: combatResult.playerMaxHp,
+              mobMaxHp: combatResult.mobMaxHp,
+              log: combatResult.log,
+              rewards: {
+                xp: combatResult.xpGained,
+                baseXp: combatResult.xpGained,
+                loot,
+                durabilityLost,
+                skillXp: skillXpReward,
+              },
+            } as unknown as Prisma.InputJsonValue,
+          });
 
           events.push({
             turn: outcome.turnOccurred,
@@ -506,6 +562,32 @@ explorationRouter.post('/start', async (req, res, next) => {
             ? `A ${prefixedMob.mobDisplayName} ambushed you - you were defeated and knocked out!`
             : `A ${prefixedMob.mobDisplayName} ambushed you - you were defeated but escaped with ${fleeResult.remainingHp} HP.`;
 
+          pendingCombatLogs.push({
+            turnsSpent: 0,
+            result: {
+              zoneId: body.zoneId,
+              zoneName: zone.name,
+              mobTemplateId: prefixedMob.id,
+              mobName: baseMob.name,
+              mobPrefix: prefixedMob.mobPrefix,
+              mobDisplayName: prefixedMob.mobDisplayName,
+              source: 'exploration_ambush',
+              encounterSiteId: null,
+              attackSkill,
+              outcome: combatResult.outcome,
+              playerMaxHp: combatResult.playerMaxHp,
+              mobMaxHp: combatResult.mobMaxHp,
+              log: combatResult.log,
+              rewards: {
+                xp: 0,
+                baseXp: 0,
+                loot: [],
+                durabilityLost,
+                skillXp: null,
+              },
+            } as unknown as Prisma.InputJsonValue,
+          });
+
           events.push({
             turn: outcome.turnOccurred,
             type: 'ambush_defeat',
@@ -539,7 +621,7 @@ explorationRouter.post('/start', async (req, res, next) => {
         if (!pickedFamily) continue;
 
         const size = pickEncounterSize(pickedFamily.minSize, pickedFamily.maxSize);
-        const mobs = buildEncounterSiteMobs(pickedFamily.mobFamily, size);
+        const mobs = buildEncounterSiteMobs(pickedFamily.mobFamily, size, body.zoneId);
         if (mobs.length === 0) continue;
 
         const siteName = getSiteName(pickedFamily.mobFamily.name, size, pickedFamily.mobFamily);
@@ -698,6 +780,17 @@ explorationRouter.post('/start', async (req, res, next) => {
           size: discovery.size,
           totalMobs: discovery.mobs.length,
           discoveredAt: site.discoveredAt.toISOString(),
+        });
+      }
+
+      for (const combatLog of pendingCombatLogs) {
+        await tx.activityLog.create({
+          data: {
+            playerId,
+            activityType: 'combat',
+            turnsSpent: combatLog.turnsSpent,
+            result: combatLog.result,
+          },
         });
       }
 

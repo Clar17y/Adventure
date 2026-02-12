@@ -33,7 +33,8 @@ export function zoneImageSrc(zoneName: string): string {
 }
 
 export function resourceImageSrc(resourceType: string): string {
-  return `/assets/resources/resource_${resourceType}-pixelated-128.png`;
+  const key = slugify(resourceType);
+  return `/assets/resources/resource_${key}-pixelated-128.png`;
 }
 
 const itemNameOverrides: Record<string, string> = {

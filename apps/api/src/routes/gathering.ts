@@ -196,12 +196,13 @@ function toResourceTemplateKey(name: string): string {
 }
 
 async function getResourceTemplateId(resourceType: string): Promise<string> {
+  const normalizedResourceType = toResourceTemplateKey(resourceType);
   const templates = await prisma.itemTemplate.findMany({
     where: { itemType: 'resource' },
     select: { id: true, name: true },
   });
 
-  const match = templates.find((t: typeof templates[number]) => toResourceTemplateKey(t.name) === resourceType);
+  const match = templates.find((t: typeof templates[number]) => toResourceTemplateKey(t.name) === normalizedResourceType);
   if (!match) {
     throw new AppError(400, `No resource item template found for resourceType=${resourceType}`, 'MISSING_TEMPLATE');
   }

@@ -114,8 +114,20 @@ export async function equipItem(
     throw new AppError(400, 'Cannot equip stacked items', 'INVALID_STACK');
   }
 
-  // Validate requirements
-  if (item.template.requiredSkill) {
+  // Armor is gated by character level only.
+  if (item.template.itemType === 'armor') {
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: { characterLevel: true },
+    });
+    if (!player) {
+      throw new AppError(404, 'Player not found', 'NOT_FOUND');
+    }
+    if (player.characterLevel < item.template.requiredLevel) {
+      throw new AppError(400, 'Insufficient character level to equip armor', 'INSUFFICIENT_LEVEL');
+    }
+  } else if (item.template.requiredSkill) {
+    // Weapons still use skill-based requirements.
     if (!isSkillType(item.template.requiredSkill)) {
       throw new AppError(400, 'Item template has invalid requiredSkill', 'INVALID_TEMPLATE');
     }

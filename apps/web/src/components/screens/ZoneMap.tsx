@@ -18,7 +18,9 @@ interface ZoneMapProps {
   connections: Array<{ fromId: string; toId: string }>;
   currentZoneId: string;
   availableTurns: number;
+  isRecovering: boolean;
   onTravel: (zoneId: string) => void;
+  onExploreCurrentZone: () => void;
 }
 
 /** BFS from the starter zone to compute shortest-path tier for each zone. */
@@ -57,17 +59,19 @@ function computeTiers(
 }
 
 // Fixed grid dimensions for line drawing
-const NODE_W = 100;
-const NODE_H = 100;
-const ROW_GAP = 48;
-const COL_GAP = 12;
+const NODE_W = 168;
+const NODE_H = 220;
+const ROW_GAP = 44;
+const COL_GAP = 16;
 
 export function ZoneMap({
   zones,
   connections,
   currentZoneId,
   availableTurns,
+  isRecovering,
   onTravel,
+  onExploreCurrentZone,
 }: ZoneMapProps) {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
 
@@ -129,6 +133,7 @@ export function ZoneMap({
     selectedZone &&
     selectedZone.discovered &&
     selectedZone.id !== currentZoneId &&
+    !isRecovering &&
     availableTurns >= selectedZone.travelCost;
 
   return (
@@ -139,179 +144,200 @@ export function ZoneMap({
       </div>
 
       {/* Tiered map */}
-      <div
-        className="relative mx-auto"
-        style={{ width: svgSize.width, minHeight: svgSize.height }}
-      >
-        {/* SVG connection lines */}
-        <svg
-          className="absolute inset-0 pointer-events-none"
-          width={svgSize.width}
-          height={svgSize.height}
-          style={{ zIndex: 0 }}
+      <div className="overflow-x-auto pb-1">
+        <div
+          className="relative mx-auto"
+          style={{ width: svgSize.width, minHeight: svgSize.height }}
         >
-          {connections.map((conn) => {
-            const from = zonePositions.get(conn.fromId);
-            const to = zonePositions.get(conn.toId);
-            if (!from || !to) return null;
-            return (
-              <line
-                key={`${conn.fromId}-${conn.toId}`}
-                x1={from.x}
-                y1={from.y}
-                x2={to.x}
-                y2={to.y}
-                stroke="var(--rpg-border)"
-                strokeWidth={2}
-                strokeDasharray="6 4"
-              />
-            );
-          })}
-        </svg>
+          {/* SVG connection lines */}
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            width={svgSize.width}
+            height={svgSize.height}
+            style={{ zIndex: 0 }}
+          >
+            {connections.map((conn) => {
+              const from = zonePositions.get(conn.fromId);
+              const to = zonePositions.get(conn.toId);
+              if (!from || !to) return null;
+              return (
+                <line
+                  key={`${conn.fromId}-${conn.toId}`}
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  stroke="var(--rpg-border)"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                />
+              );
+            })}
+          </svg>
 
-        {/* Zone nodes */}
-        {tierRows.map(([tier, rowZones]) => {
-          const rowWidth = rowZones.length * NODE_W + (rowZones.length - 1) * COL_GAP;
-          let maxRowWidth = 0;
-          for (const [, rz] of tierRows) {
-            const w = rz.length * NODE_W + (rz.length - 1) * COL_GAP;
-            if (w > maxRowWidth) maxRowWidth = w;
-          }
-          const offsetX = (maxRowWidth - rowWidth) / 2;
-          const rowY = tierRows.findIndex(([t]) => t === tier) * (NODE_H + ROW_GAP);
+          {/* Zone nodes */}
+          {tierRows.map(([tier, rowZones]) => {
+            const rowWidth = rowZones.length * NODE_W + (rowZones.length - 1) * COL_GAP;
+            let maxRowWidth = 0;
+            for (const [, rz] of tierRows) {
+              const w = rz.length * NODE_W + (rz.length - 1) * COL_GAP;
+              if (w > maxRowWidth) maxRowWidth = w;
+            }
+            const offsetX = (maxRowWidth - rowWidth) / 2;
+            const rowY = tierRows.findIndex(([t]) => t === tier) * (NODE_H + ROW_GAP);
 
-          return rowZones.map((zone, colIdx) => {
-            const x = offsetX + colIdx * (NODE_W + COL_GAP);
-            const isCurrent = zone.id === currentZoneId;
-            const isSelected = zone.id === selectedZoneId;
-            const isUndiscovered = !zone.discovered;
+            return rowZones.map((zone, colIdx) => {
+              const x = offsetX + colIdx * (NODE_W + COL_GAP);
+              const isCurrent = zone.id === currentZoneId;
+              const isSelected = zone.id === selectedZoneId;
+              const isUndiscovered = !zone.discovered;
 
-            return (
-              <button
-                key={zone.id}
-                onClick={() => {
-                  if (!isUndiscovered) setSelectedZoneId(zone.id);
-                }}
-                disabled={isUndiscovered}
-                className="absolute flex flex-col items-center justify-center text-center transition-all"
-                style={{
-                  left: x,
-                  top: rowY,
-                  width: NODE_W,
-                  height: NODE_H,
-                  zIndex: 1,
-                }}
-              >
-                {/* Node card */}
-                <div
+              return (
+                <button
+                  key={zone.id}
+                  onClick={() => {
+                    if (!isUndiscovered) setSelectedZoneId(zone.id);
+                  }}
+                  disabled={isUndiscovered}
+                  className="absolute flex flex-col items-center justify-center text-center transition-all"
                   style={{
-                    width: '100%',
-                    height: '100%',
-                    background: isUndiscovered
-                      ? 'var(--rpg-background)'
-                      : 'var(--rpg-bg-medium, var(--rpg-surface))',
-                    border: isCurrent
-                      ? '2px solid var(--rpg-gold)'
-                      : isSelected
-                        ? '2px solid var(--rpg-blue-light)'
-                        : '1px solid var(--rpg-border)',
-                    borderRadius: 8,
-                    opacity: isUndiscovered ? 0.4 : 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 4,
-                    cursor: isUndiscovered ? 'not-allowed' : 'pointer',
-                    boxShadow: isCurrent
-                      ? '0 0 8px var(--rpg-gold)'
-                      : isSelected
-                        ? '0 0 6px var(--rpg-blue-light)'
-                        : 'none',
+                    left: x,
+                    top: rowY,
+                    width: NODE_W,
+                    height: NODE_H,
+                    zIndex: 1,
                   }}
                 >
-                  {/* Zone icon */}
-                  {zone.imageSrc && !isUndiscovered ? (
-                    <img
-                      src={zone.imageSrc}
-                      alt={zone.name}
-                      className="image-rendering-pixelated"
-                      style={{ width: 32, height: 32, objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <span style={{ fontSize: 20 }}>
-                      {isUndiscovered ? '?' : zone.zoneType === 'town' ? '\u{1F3D8}\uFE0F' : '\u{1F332}'}
-                    </span>
-                  )}
-
-                  {/* Zone name */}
-                  <span
+                  {/* Node card */}
+                  <div
                     style={{
-                      fontSize: 10,
-                      lineHeight: '12px',
-                      fontWeight: 600,
-                      color: isUndiscovered
-                        ? 'var(--rpg-text-secondary)'
-                        : 'var(--rpg-text-primary)',
-                      marginTop: 2,
-                      maxWidth: '100%',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      width: '100%',
+                      height: '100%',
+                      background: isUndiscovered
+                        ? 'var(--rpg-background)'
+                        : 'var(--rpg-bg-medium, var(--rpg-surface))',
+                      border: isCurrent
+                        ? '2px solid var(--rpg-gold)'
+                        : isSelected
+                          ? '2px solid var(--rpg-blue-light)'
+                          : '1px solid var(--rpg-border)',
+                      borderRadius: 8,
+                      opacity: isUndiscovered ? 0.4 : 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      paddingTop: 6,
+                      paddingRight: 4,
+                      paddingBottom: 6,
+                      paddingLeft: 4,
+                      boxSizing: 'border-box',
+                      cursor: isUndiscovered ? 'not-allowed' : 'pointer',
+                      boxShadow: isCurrent
+                        ? '0 0 8px var(--rpg-gold)'
+                        : isSelected
+                          ? '0 0 6px var(--rpg-blue-light)'
+                          : 'none',
                     }}
                   >
-                    {isUndiscovered ? '???' : zone.name}
-                  </span>
-
-                  {/* Difficulty stars */}
-                  {!isUndiscovered && (
-                    <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>
-                      {Array.from({ length: Math.min(zone.difficulty, 5) }).map((_, idx) => (
-                        <Star
-                          key={idx}
-                          size={8}
-                          fill="var(--rpg-gold)"
-                          color="var(--rpg-gold)"
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Travel cost badge */}
-                  {!isUndiscovered && zone.travelCost > 0 && (
+                    {/* Zone icon */}
                     <div
                       style={{
+                        width: 144,
+                        height: 144,
+                        padding: 8,
+                        border: '1px solid var(--rpg-border)',
+                        borderRadius: 6,
+                        background: 'var(--rpg-background)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 2,
-                        marginTop: 2,
-                        fontSize: 9,
-                        color: 'var(--rpg-gold)',
+                        justifyContent: 'center',
+                        boxSizing: 'border-box',
                       }}
                     >
-                      <Hourglass size={8} />
-                      <span>{zone.travelCost}</span>
+                      {zone.imageSrc && !isUndiscovered ? (
+                        <img
+                          src={zone.imageSrc}
+                          alt={zone.name}
+                          className="image-rendering-pixelated"
+                          style={{ width: 128, height: 128, objectFit: 'contain' }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: 48 }}>
+                          {isUndiscovered ? '?' : zone.zoneType === 'town' ? '\u{1F3D8}\uFE0F' : '\u{1F332}'}
+                        </span>
+                      )}
                     </div>
-                  )}
 
-                  {/* Current badge */}
-                  {isCurrent && (
+                    {/* Zone name */}
                     <span
                       style={{
-                        fontSize: 8,
-                        color: 'var(--rpg-gold)',
+                        fontSize: 12,
+                        lineHeight: '14px',
                         fontWeight: 700,
-                        marginTop: 1,
+                        color: isUndiscovered
+                          ? 'var(--rpg-text-secondary)'
+                          : 'var(--rpg-text-primary)',
+                        marginTop: 4,
+                        maxWidth: '96%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      HERE
+                      {isUndiscovered ? '???' : zone.name}
                     </span>
-                  )}
-                </div>
-              </button>
-            );
-          });
-        })}
+
+                    {/* Difficulty stars */}
+                    {!isUndiscovered && (
+                      <div style={{ display: 'flex', gap: 1, marginTop: 2 }}>
+                        {Array.from({ length: Math.min(zone.difficulty, 5) }).map((_, idx) => (
+                          <Star
+                            key={idx}
+                            size={9}
+                            fill="var(--rpg-gold)"
+                            color="var(--rpg-gold)"
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Travel cost badge */}
+                    {!isUndiscovered && zone.travelCost > 0 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          marginTop: 2,
+                          fontSize: 10,
+                          color: 'var(--rpg-gold)',
+                        }}
+                      >
+                        <Hourglass size={9} />
+                        <span>{zone.travelCost}</span>
+                      </div>
+                    )}
+
+                    {/* Current badge */}
+                    {isCurrent && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: 'var(--rpg-gold)',
+                          fontWeight: 700,
+                          marginTop: 1,
+                        }}
+                      >
+                        HERE
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            });
+          })}
+        </div>
       </div>
 
       {/* Selected zone details panel */}
@@ -339,12 +365,12 @@ export function ZoneMap({
           </div>
 
           {selectedZone.description && (
-            <p className="text-xs text-[var(--rpg-text-secondary)] mb-2">
+            <p className="text-sm leading-snug text-[var(--rpg-text-secondary)] mb-2">
               {selectedZone.description}
             </p>
           )}
 
-          <div className="flex items-center gap-4 text-xs mb-3">
+          <div className="flex items-center gap-4 text-sm mb-3">
             {selectedZone.zoneType === 'town' && (
               <span className="text-[var(--rpg-text-secondary)]">{'\u{1F3D8}\uFE0F'} Town</span>
             )}
@@ -356,6 +382,17 @@ export function ZoneMap({
             )}
           </div>
 
+          {selectedZone.id === currentZoneId && (
+            <PixelButton
+              variant="primary"
+              size="md"
+              className="w-full"
+              onClick={onExploreCurrentZone}
+            >
+              Explore {selectedZone.name}
+            </PixelButton>
+          )}
+
           {selectedZone.id !== currentZoneId && (
             <PixelButton
               variant="gold"
@@ -364,7 +401,9 @@ export function ZoneMap({
               onClick={() => onTravel(selectedZone.id)}
               disabled={!canTravel}
             >
-              {availableTurns < selectedZone.travelCost
+              {isRecovering
+                ? 'Recover first to travel'
+                : availableTurns < selectedZone.travelCost
                 ? `Need ${selectedZone.travelCost} turns (have ${availableTurns})`
                 : `Travel to ${selectedZone.name} (${selectedZone.travelCost} turns)`}
             </PixelButton>

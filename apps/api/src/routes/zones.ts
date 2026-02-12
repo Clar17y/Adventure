@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '@adventure/database';
+import { Prisma, prisma } from '@adventure/database';
 import {
   buildPlayerCombatStats,
   runCombat,
@@ -324,6 +324,47 @@ zonesRouter.post('/travel', async (req, res, next) => {
               });
             }
 
+            await prisma.activityLog.create({
+              data: {
+                playerId,
+                activityType: 'combat',
+                turnsSpent: 0,
+                result: {
+                  zoneId: currentZoneId,
+                  zoneName: currentZone.name,
+                  mobTemplateId: prefixedMob.id,
+                  mobName: baseMob.name,
+                  mobPrefix: prefixedMob.mobPrefix,
+                  mobDisplayName: prefixedMob.mobDisplayName,
+                  source: 'travel_ambush',
+                  encounterSiteId: null,
+                  attackSkill,
+                  outcome: combatResult.outcome,
+                  playerMaxHp: combatResult.playerMaxHp,
+                  mobMaxHp: combatResult.mobMaxHp,
+                  log: combatResult.log,
+                  rewards: {
+                    xp: combatResult.xpGained,
+                    baseXp: combatResult.xpGained,
+                    loot,
+                    durabilityLost,
+                    skillXp: {
+                      skillType: xpGrant.skillType,
+                      ...xpGrant.xpResult,
+                      newTotalXp: xpGrant.newTotalXp,
+                      newDailyXpGained: xpGrant.newDailyXpGained,
+                      characterXpGain: xpGrant.characterXpGain,
+                      characterXpAfter: xpGrant.characterXpAfter,
+                      characterLevelBefore: xpGrant.characterLevelBefore,
+                      characterLevelAfter: xpGrant.characterLevelAfter,
+                      attributePointsAfter: xpGrant.attributePointsAfter,
+                      characterLeveledUp: xpGrant.characterLeveledUp,
+                    },
+                  },
+                } as unknown as Prisma.InputJsonValue,
+              },
+            });
+
             events.push({
               turn: ambush.turnOccurred,
               type: 'ambush_victory',
@@ -343,6 +384,36 @@ zonesRouter.post('/travel', async (req, res, next) => {
               currentHp = 0;
               await enterRecoveringState(playerId, hpState.maxHp);
               const respawn = await respawnToHomeTown(playerId);
+
+              await prisma.activityLog.create({
+                data: {
+                  playerId,
+                  activityType: 'combat',
+                  turnsSpent: 0,
+                  result: {
+                    zoneId: currentZoneId,
+                    zoneName: currentZone.name,
+                    mobTemplateId: prefixedMob.id,
+                    mobName: baseMob.name,
+                    mobPrefix: prefixedMob.mobPrefix,
+                    mobDisplayName: prefixedMob.mobDisplayName,
+                    source: 'travel_ambush',
+                    encounterSiteId: null,
+                    attackSkill,
+                    outcome: combatResult.outcome,
+                    playerMaxHp: combatResult.playerMaxHp,
+                    mobMaxHp: combatResult.mobMaxHp,
+                    log: combatResult.log,
+                    rewards: {
+                      xp: 0,
+                      baseXp: 0,
+                      loot: [],
+                      durabilityLost,
+                      skillXp: null,
+                    },
+                  } as unknown as Prisma.InputJsonValue,
+                },
+              });
 
               events.push({
                 turn: ambush.turnOccurred,
@@ -377,6 +448,36 @@ zonesRouter.post('/travel', async (req, res, next) => {
               // Fled — abort travel, stay in current zone
               currentHp = fleeResult.remainingHp;
               await setHp(playerId, currentHp);
+
+              await prisma.activityLog.create({
+                data: {
+                  playerId,
+                  activityType: 'combat',
+                  turnsSpent: 0,
+                  result: {
+                    zoneId: currentZoneId,
+                    zoneName: currentZone.name,
+                    mobTemplateId: prefixedMob.id,
+                    mobName: baseMob.name,
+                    mobPrefix: prefixedMob.mobPrefix,
+                    mobDisplayName: prefixedMob.mobDisplayName,
+                    source: 'travel_ambush',
+                    encounterSiteId: null,
+                    attackSkill,
+                    outcome: combatResult.outcome,
+                    playerMaxHp: combatResult.playerMaxHp,
+                    mobMaxHp: combatResult.mobMaxHp,
+                    log: combatResult.log,
+                    rewards: {
+                      xp: 0,
+                      baseXp: 0,
+                      loot: [],
+                      durabilityLost,
+                      skillXp: null,
+                    },
+                  } as unknown as Prisma.InputJsonValue,
+                },
+              });
 
               events.push({
                 turn: ambush.turnOccurred,

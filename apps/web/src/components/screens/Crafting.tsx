@@ -24,6 +24,7 @@ interface Recipe {
   requiredLevel: number;
   turnCost: number;
   xpReward: number;
+  baseStats: Record<string, unknown>;
   materials: Material[];
   rarity: Rarity;
 }
@@ -44,6 +45,38 @@ interface CraftingProps {
   recoveryCost?: number | null;
 }
 
+const PERCENT_STATS = new Set(['critChance', 'critDamage']);
+const STAT_ORDER = ['attack', 'armor', 'magicDefence', 'health', 'dodge', 'accuracy', 'magicPower', 'luck', 'evasion', 'critChance', 'critDamage'];
+
+function prettyStatName(stat: string): string {
+  if (stat === 'magicDefence') return 'Magic Defence';
+  if (stat === 'critChance') return 'Crit Chance';
+  if (stat === 'critDamage') return 'Crit Damage';
+  if (stat === 'magicPower') return 'Magic Power';
+  return stat
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (char) => char.toUpperCase())
+    .trim();
+}
+
+function formatStatValue(stat: string, value: number): string {
+  if (PERCENT_STATS.has(stat)) return `${Math.round(value * 100)}%`;
+  return String(value);
+}
+
+function statEntries(stats: Record<string, unknown> | undefined): Array<[string, number]> {
+  return Object.entries(stats ?? {})
+    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] !== 0)
+    .sort((a, b) => {
+      const aOrder = STAT_ORDER.indexOf(a[0]);
+      const bOrder = STAT_ORDER.indexOf(b[0]);
+      if (aOrder === -1 && bOrder === -1) return a[0].localeCompare(b[0]);
+      if (aOrder === -1) return 1;
+      if (bOrder === -1) return -1;
+      return aOrder - bOrder;
+    });
+}
+
 export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog, isRecovering = false, recoveryCost }: CraftingProps) {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
 
@@ -58,6 +91,7 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
   }, [recipes, selectedRecipeId]);
 
   const selectedRecipe = selectedRecipeId ? recipes.find((recipe) => recipe.id === selectedRecipeId) ?? null : null;
+  const selectedBaseStats = statEntries(selectedRecipe?.baseStats);
 
   const canCraft = (recipe: Recipe) => {
     if (recipe.requiredLevel > skillLevel) return false;
@@ -176,6 +210,21 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                 {selectedRecipe.rarity} • Lv. {selectedRecipe.requiredLevel} Required
               </p>
             </div>
+          </div>
+
+          {/* Base Stats */}
+          <div className="space-y-2 mb-4">
+            <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm">Base Stats</h4>
+            {selectedBaseStats.length === 0 ? (
+              <div className="text-sm text-[var(--rpg-text-secondary)]">No base stats</div>
+            ) : (
+              selectedBaseStats.map(([stat, value]) => (
+                <div key={stat} className="flex items-center justify-between text-sm">
+                  <span className="text-[var(--rpg-text-primary)]">{prettyStatName(stat)}</span>
+                  <span className="text-[var(--rpg-green-light)] font-mono font-semibold">+{formatStatValue(stat, value)}</span>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Required Materials */}

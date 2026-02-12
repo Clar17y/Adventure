@@ -306,6 +306,10 @@ export default function GamePage() {
               name: currentZone?.name ?? 'Unknown',
               description: currentZone?.description ?? 'Select a zone from Map.',
               minLevel: Math.max(1, (currentZone?.difficulty ?? 1) * 5),
+              imageSrc:
+                currentZone?.name && currentZone.name !== '???'
+                  ? zoneImageSrc(currentZone.name)
+                  : undefined,
             }}
             availableTurns={turns}
             onStartExploration={handleStartExploration}
@@ -471,7 +475,9 @@ export default function GamePage() {
             connections={zoneConnections}
             currentZoneId={activeZoneId ?? ''}
             availableTurns={turns}
+            isRecovering={hpState.isRecovering}
             onTravel={handleTravelToZone}
+            onExploreCurrentZone={() => setActiveScreen('explore')}
           />
         );
       case 'bestiary':
@@ -536,6 +542,7 @@ export default function GamePage() {
                 requiredLevel: r.requiredLevel,
                 turnCost: r.turnCost,
                 xpReward: r.xpReward,
+                baseStats: r.resultTemplate.baseStats,
                 materials: r.materials.map((m) => {
                   const meta = r.materialTemplates.find((t) => t.id === m.templateId);
                   const owned = ownedByTemplateId.get(m.templateId) ?? 0;
@@ -648,6 +655,7 @@ export default function GamePage() {
         return (
           <CombatScreen
             hpState={hpState}
+            currentZoneId={activeZoneId}
             pendingEncounters={pendingEncounters}
             pendingEncountersLoading={pendingEncountersLoading}
             pendingEncountersError={pendingEncountersError}

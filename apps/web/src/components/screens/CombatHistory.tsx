@@ -39,6 +39,14 @@ function outcomeColor(outcome: string | null): string {
   return 'text-[var(--rpg-text-secondary)]';
 }
 
+function formatCombatSource(source: string | null | undefined): string {
+  if (source === 'encounter_site') return 'Encounter Site';
+  if (source === 'exploration_ambush') return 'Ambush (Exploring)';
+  if (source === 'travel_ambush') return 'Ambush (Travel)';
+  if (source === 'zone_combat') return 'Direct Encounter';
+  return 'Unknown Source';
+}
+
 function relativeTime(iso: string): string {
   const deltaMs = Date.now() - new Date(iso).getTime();
   const seconds = Math.max(0, Math.floor(deltaMs / 1000));
@@ -319,7 +327,7 @@ export function CombatHistory() {
                   {entry.zoneName ?? 'Unknown Zone'} | {relativeTime(entry.createdAt)}
                 </div>
                 <div className="text-xs text-[var(--rpg-text-secondary)] mt-1">
-                  Rounds: {entry.roundCount} | XP: {entry.xpGained.toLocaleString()}
+                  Source: {formatCombatSource(entry.source)} | Rounds: {entry.roundCount} | XP: {entry.xpGained.toLocaleString()}
                 </div>
               </button>
             ))}
@@ -359,7 +367,7 @@ export function CombatHistory() {
           </div>
 
           <div className="text-xs text-[var(--rpg-text-secondary)]">
-            {fullTimestamp(selectedEntry.createdAt)} | {selectedEntry.zoneName ?? 'Unknown Zone'}
+            {fullTimestamp(selectedEntry.createdAt)} | {selectedEntry.zoneName ?? 'Unknown Zone'} | {formatCombatSource(selectedEntry.source)}
           </div>
 
           {selectedError && <div className="text-sm text-[var(--rpg-red)]">{selectedError}</div>}

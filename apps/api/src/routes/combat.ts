@@ -647,6 +647,7 @@ combatRouter.post('/start', async (req, res, next) => {
           mobName: baseMob.name,
           mobPrefix,
           mobDisplayName: prefixedMob.mobDisplayName,
+          source: consumedEncounterSiteId ? 'encounter_site' : 'zone_combat',
           encounterSiteId: consumedEncounterSiteId,
           encounterSiteCleared,
           attackSkill,
@@ -792,6 +793,7 @@ interface CombatHistoryListRow {
   mobName: string | null;
   mobDisplayName: string | null;
   outcome: string | null;
+  source: string | null;
   xpGained: number;
   roundCount: number;
 }
@@ -856,6 +858,13 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'mobName') AS "mobName",
             COALESCE(("result"->>'mobDisplayName'), ("result"->>'mobName')) AS "mobDisplayName",
             ("result"->>'outcome') AS "outcome",
+            COALESCE(
+              NULLIF(("result"->>'source'), ''),
+              CASE
+                WHEN COALESCE(("result"->>'encounterSiteId'), '') <> '' THEN 'encounter_site'
+                ELSE 'zone_combat'
+              END
+            ) AS "source",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
             COALESCE((
               SELECT MAX(
@@ -883,6 +892,13 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'mobName') AS "mobName",
             COALESCE(("result"->>'mobDisplayName'), ("result"->>'mobName')) AS "mobDisplayName",
             ("result"->>'outcome') AS "outcome",
+            COALESCE(
+              NULLIF(("result"->>'source'), ''),
+              CASE
+                WHEN COALESCE(("result"->>'encounterSiteId'), '') <> '' THEN 'encounter_site'
+                ELSE 'zone_combat'
+              END
+            ) AS "source",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
             COALESCE((
               SELECT MAX(
@@ -951,6 +967,7 @@ combatRouter.get('/logs', async (req, res, next) => {
         mobName: row.mobName,
         mobDisplayName: row.mobDisplayName ?? row.mobName,
         outcome: row.outcome,
+        source: row.source,
         roundCount: row.roundCount,
         xpGained: row.xpGained,
       })),

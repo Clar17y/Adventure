@@ -670,6 +670,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const handleStartCombat = async (encounterSiteId: string) => {
+    const selectedSite = pendingEncounters.find((site) => site.encounterSiteId === encounterSiteId);
+    if (selectedSite && activeZoneId && selectedSite.zoneId !== activeZoneId) {
+      setActionError(`Travel to ${selectedSite.zoneName} before fighting this encounter.`);
+      return;
+    }
+
     await runAction('combat', async () => {
       const res = await startCombatFromEncounterSite(encounterSiteId, 'melee');
       const data = res.data;

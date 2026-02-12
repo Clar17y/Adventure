@@ -44,6 +44,7 @@ interface BestiaryProps {
 
 export function Bestiary({ monsters }: BestiaryProps) {
   const [selectedMonster, setSelectedMonster] = useState<Monster | null>(null);
+  const sortedMonsters = [...monsters].sort((a, b) => Number(b.isDiscovered) - Number(a.isDiscovered));
 
   const discoveredCount = monsters.filter((m) => m.isDiscovered).length;
   const totalCount = monsters.length;
@@ -90,7 +91,7 @@ export function Bestiary({ monsters }: BestiaryProps) {
 
       {/* Monster Grid */}
       <div className="grid grid-cols-3 gap-3">
-        {monsters.map((monster) => (
+        {sortedMonsters.map((monster) => (
           <button
             key={monster.id}
             onClick={() => monster.isDiscovered && setSelectedMonster(monster)}

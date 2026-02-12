@@ -7,12 +7,14 @@ import { Slider } from '@/components/ui/Slider';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { Mountain, Play, Clock } from 'lucide-react';
 import { EXPLORATION_CONSTANTS } from '@adventure/shared';
+import Image from 'next/image';
 
 interface ExplorationProps {
   currentZone: {
     name: string;
     description: string;
     minLevel: number;
+    imageSrc?: string;
   };
   availableTurns: number;
   onStartExploration: (turns: number) => void;
@@ -52,7 +54,17 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
         </div>
         <div className="relative flex items-start gap-3">
           <div className="w-16 h-16 rounded-lg bg-[var(--rpg-background)] flex items-center justify-center flex-shrink-0">
-            <Mountain size={32} color="var(--rpg-purple)" />
+            {currentZone.imageSrc ? (
+              <Image
+                src={currentZone.imageSrc}
+                alt={currentZone.name}
+                width={56}
+                height={56}
+                className="object-contain image-rendering-pixelated"
+              />
+            ) : (
+              <Mountain size={32} color="var(--rpg-purple)" />
+            )}
           </div>
           <div className="flex-1">
             <h2 className="text-xl font-bold text-[var(--rpg-text-primary)] mb-1">

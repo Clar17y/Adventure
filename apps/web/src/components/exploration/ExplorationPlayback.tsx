@@ -143,18 +143,8 @@ export function ExplorationPlayback({
         </div>
       </div>
 
-      {/* Progress bar with event popup */}
-      <div className="relative">
-        {/* Event popup above bar */}
-        {activeEventLabel && (
-          <div className="absolute -top-8 left-0 right-0 text-center animate-fadeIn">
-            <span className={`text-sm font-semibold ${activeEventLabel.color} line-clamp-1`}>
-              {activeEventLabel.icon} {activeEventLabel.text}
-            </span>
-          </div>
-        )}
-
-        {/* Progress bar */}
+      {/* Progress bar */}
+      <div>
         <div className="h-3 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded overflow-hidden">
           <div
             className="h-full bg-[var(--rpg-gold)] transition-[width] duration-700 ease-linear"
@@ -178,6 +168,17 @@ export function ExplorationPlayback({
             );
           })}
         </div>
+      </div>
+
+      {/* Event popup — below bar with reserved space */}
+      <div className="min-h-[2.5rem]">
+        {activeEventLabel && (
+          <div className="text-center animate-fadeIn">
+            <span className={`text-sm font-semibold ${activeEventLabel.color}`}>
+              {activeEventLabel.icon} {activeEventLabel.text}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Status text */}

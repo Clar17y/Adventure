@@ -110,6 +110,10 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
             refundedTurns={playbackData.refundedTurns}
             resumeFromCombat={resumeFromCombat}
             onEventRevealed={(event) => {
+              // Skip logging ambush events here — they'll be logged after combat playback
+              const isAmbushWithCombat = (event.type === 'ambush_defeat' || event.type === 'ambush_victory') && event.details?.log;
+              if (isAmbushWithCombat) return;
+
               const typeMap: Record<string, 'info' | 'success' | 'danger'> = {
                 ambush_defeat: 'danger',
                 ambush_victory: 'success',
@@ -167,6 +171,17 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
               mobHpAfter?: number;
             }>) ?? []}
             onComplete={() => {
+              // Now that combat playback is done, log the ambush result
+              const typeMap: Record<string, 'info' | 'success' | 'danger'> = {
+                ambush_defeat: 'danger',
+                ambush_victory: 'success',
+              };
+              onPushLog?.({
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                type: typeMap[combatEvent.type] ?? 'info',
+                message: `Turn ${combatEvent.turn}: ${combatEvent.description}`,
+              });
+
               setCombatEvent(null);
               if (combatEvent.type === 'ambush_defeat') {
                 // Knockout — playback is done

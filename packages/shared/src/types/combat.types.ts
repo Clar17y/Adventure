@@ -8,12 +8,14 @@ export interface MobTemplate {
   hp: number;
   accuracy: number;
   defence: number;
+  magicDefence: number;
   evasion: number;
   damageMin: number;
   damageMax: number;
   xpReward: number;
   encounterWeight: number;
   spellPattern: SpellAction[];
+  damageType: 'physical' | 'magic';
 }
 
 export interface SpellAction {
@@ -105,4 +107,5 @@ export interface CombatantStats {
   speed: number;
   critChance?: number;
   critDamage?: number;
+  damageType: 'physical' | 'magic';
 }

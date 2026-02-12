@@ -15,6 +15,7 @@ export interface MobPrefixDefinition {
     hp?: number;
     accuracy?: number;
     defence?: number;
+    magicDefence?: number;
     evasion?: number;
     damageMin?: number;
     damageMax?: number;
@@ -22,4 +23,5 @@ export interface MobPrefixDefinition {
   xpMultiplier: number;
   dropChanceMultiplier: number;
   spellTemplate: SpellTemplate | null;
+  damageTypeOverride?: 'physical' | 'magic';
 }

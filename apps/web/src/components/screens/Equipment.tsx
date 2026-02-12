@@ -182,13 +182,24 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
               ) : (
                 <span className="text-2xl">{item.icon ?? '❓'}</span>
               )}
+              {item.durability <= 0 && (
+                <div className="absolute -top-1 -right-1 bg-[var(--rpg-red)] text-white text-[8px] font-bold px-1 rounded leading-tight">
+                  !
+                </div>
+              )}
               {item.durability < item.maxDurability && (
                 <div className="absolute -bottom-1 left-1 right-1">
                   <div className="h-1 bg-[var(--rpg-background)] rounded-full overflow-hidden border border-[var(--rpg-border)]">
                     <div
-                      className="h-full bg-[var(--rpg-text-secondary)]"
+                      className={`h-full ${
+                        item.durability <= 0
+                          ? 'bg-[var(--rpg-red)]'
+                          : (item.durability / item.maxDurability) < 0.10
+                            ? 'bg-[var(--rpg-gold)]'
+                            : 'bg-[var(--rpg-text-secondary)]'
+                      }`}
                       style={{
-                        width: `${(item.durability / item.maxDurability) * 100}%`,
+                        width: `${item.durability <= 0 ? 100 : (item.durability / item.maxDurability) * 100}%`,
                       }}
                     />
                   </div>
@@ -287,8 +298,8 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                         {currentItem.weightClass && (
                           <div className="text-xs text-[var(--rpg-gold)]">{prettyWeightClass(currentItem.weightClass)}</div>
                         )}
-                        <div className="text-xs text-[var(--rpg-text-secondary)] font-mono">
-                          {currentItem.durability}/{currentItem.maxDurability}
+                        <div className={`text-xs font-mono ${currentItem.durability <= 0 ? 'text-[var(--rpg-red)] font-bold' : 'text-[var(--rpg-text-secondary)]'}`}>
+                          {currentItem.durability <= 0 ? 'BROKEN' : `${currentItem.durability}/${currentItem.maxDurability}`}
                         </div>
                       </div>
                     </div>
@@ -630,7 +641,12 @@ export function Equipment({ slots, inventoryItems, onEquip, onUnequip, stats }: 
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between mb-1">
-                    <span className="font-semibold text-[var(--rpg-text-primary)] text-sm">{slot.item?.name}</span>
+                    <span className="font-semibold text-[var(--rpg-text-primary)] text-sm">
+                      {slot.item?.name}
+                      {slot.item && slot.item.durability <= 0 && (
+                        <span className="ml-1.5 text-[10px] font-bold text-[var(--rpg-red)] bg-[var(--rpg-red)]/10 px-1 py-0.5 rounded">BROKEN</span>
+                      )}
+                    </span>
                     <span className="text-xs text-[var(--rpg-text-secondary)] capitalize">{slot.name}</span>
                   </div>
                   {slot.item && (

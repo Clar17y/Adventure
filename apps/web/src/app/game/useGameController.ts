@@ -136,7 +136,7 @@ export interface LastCombat {
 export type ActivityLogEntry = {
   timestamp: string;
   message: string;
-  type: 'info' | 'success' | 'danger';
+  type: 'info' | 'success' | 'danger' | 'warning';
 };
 
 export interface CharacterProgression {
@@ -641,6 +641,35 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setActivityLog((prev) => [...entries, ...prev].slice(0, 100));
   };
 
+  const logDurabilityWarnings = (
+    losses: Array<{
+      itemName?: string;
+      newDurability?: number;
+      maxDurability?: number;
+      isBroken?: boolean;
+      crossedWarningThreshold?: boolean;
+    }>,
+  ) => {
+    const entries: ActivityLogEntry[] = [];
+    for (const loss of losses) {
+      if (!loss.itemName) continue;
+      if (loss.isBroken) {
+        entries.push({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `Your ${loss.itemName} has broken!`,
+        });
+      } else if (loss.crossedWarningThreshold) {
+        entries.push({
+          timestamp: nowStamp(),
+          type: 'warning',
+          message: `Your ${loss.itemName} is about to break! (${loss.newDurability}/${loss.maxDurability})`,
+        });
+      }
+    }
+    if (entries.length > 0) pushLog(...entries);
+  };
+
   const PERCENT_STATS = new Set(['critChance', 'critDamage']);
   const formatStatName = (stat: string) => {
     if (stat === 'magicDefence') return 'Magic Defence';
@@ -731,6 +760,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           type: 'info',
           message: `Exploration aborted. ${explorationPlaybackData.refundedTurns.toLocaleString()} turns refunded.`,
         });
+      }
+      for (const event of explorationPlaybackData.events) {
+        const losses = event.details?.durabilityLost;
+        if (Array.isArray(losses)) logDurabilityWarnings(losses);
       }
     }
     setExplorationPlaybackData(null);
@@ -856,6 +889,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         pushLog({ timestamp: nowStamp(), type: 'success', message: `🎉 ${skillName} leveled up to ${skillXp.newLevel}!` });
       }
 
+      logDurabilityWarnings(data.rewards.durabilityLost);
+
       await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters(), loadBestiary()]);
     });
   };
@@ -938,10 +973,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     });
   };
 
-  const handleCraft = async (recipeId: string) => {
+  const handleCraft = async (recipeId: string, quantity: number = 1) => {
     await runAction('crafting', async () => {
       const recipe = craftingRecipes.find((entry) => entry.id === recipeId);
-      const res = await craft(recipeId, 1);
+      const res = await craft(recipeId, quantity);
       const data = res.data;
       if (!data) {
         setActionError(res.error?.message ?? 'Crafting failed');
@@ -1216,6 +1251,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           type: 'success',
           message: `Arrived at ${travelPlaybackData.destinationName}.`,
         });
+      }
+      for (const event of travelPlaybackData.events) {
+        const losses = event.details?.durabilityLost;
+        if (Array.isArray(losses)) logDurabilityWarnings(losses);
       }
     }
     setTravelPlaybackData(null);

@@ -147,11 +147,17 @@ export const DURABILITY_CONSTANTS = {
   /** Turn cost to repair an item */
   REPAIR_TURN_COST: 100,
 
+  /** Turn cost to repair a broken (0 durability) item */
+  BROKEN_REPAIR_TURN_COST: 150,
+
   /** Max durability lost per repair */
   REPAIR_MAX_DECAY: 5,
 
   /** Minimum max durability before item is destroyed */
   MIN_MAX_DURABILITY: 10,
+
+  /** Percentage threshold for low-durability warnings */
+  WARNING_THRESHOLD: 0.10,
 } as const;
 
 // =============================================================================

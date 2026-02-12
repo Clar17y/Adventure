@@ -112,7 +112,10 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
   const isEquippable = Boolean(selectedItem?.slot && isEquipment);
   const isEquipped = Boolean(selectedItem?.equippedSlot);
 
-  const canRepair = Boolean(onRepair && isEquipment);
+  const canRepair = Boolean(
+    onRepair && isEquipment && selectedItem?.durability &&
+    selectedItem.durability.current < selectedItem.durability.max
+  );
   const canEquip = Boolean(onEquip && isEquippable && !isEquipped);
   const canUnequip = Boolean(onUnequip && isEquippable && isEquipped);
   const canSalvage = Boolean(onSalvage && isEquipment && !isEquipped);
@@ -215,9 +218,17 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                   <div>
                     <div className="flex items-baseline justify-between text-xs mb-1">
                       <span className="text-[var(--rpg-text-secondary)]">Durability</span>
-                      <span className="text-[var(--rpg-text-primary)] font-mono">
-                        {selectedItem.durability.current}/{selectedItem.durability.max}
-                      </span>
+                      {selectedItem.durability.current <= 0 ? (
+                        <span className="text-[var(--rpg-red)] font-mono font-bold">BROKEN</span>
+                      ) : (
+                        <span className={`font-mono ${
+                          (selectedItem.durability.current / selectedItem.durability.max) < 0.10
+                            ? 'text-[var(--rpg-gold)]'
+                            : 'text-[var(--rpg-text-primary)]'
+                        }`}>
+                          {selectedItem.durability.current}/{selectedItem.durability.max}
+                        </span>
+                      )}
                     </div>
                     <StatBar
                       current={selectedItem.durability.current}
@@ -335,7 +346,7 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                     }
                   }}
                 >
-                  Repair
+                  {selectedItem.durability && selectedItem.durability.current <= 0 ? 'Fix (150)' : 'Repair (100)'}
                 </PixelButton>
 
                 <PixelButton

@@ -9,6 +9,7 @@ const TYPE_COLORS: Record<ActivityLogEntry['type'], string> = {
   info: 'text-[var(--rpg-text-secondary)]',
   success: 'text-[var(--rpg-green-light)]',
   danger: 'text-[var(--rpg-red)]',
+  warning: 'text-[var(--rpg-gold)]',
 };
 
 interface ActivityLogProps {

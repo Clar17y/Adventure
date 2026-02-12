@@ -59,6 +59,10 @@ export async function getEquipmentStats(playerId: string): Promise<EquipmentStat
   let critDamage = 0;
 
   for (const slot of equipped) {
+    // Broken gear contributes zero stats
+    const cur = slot.item?.currentDurability ?? slot.item?.template?.maxDurability ?? 1;
+    if (cur <= 0) continue;
+
     const baseStats = slot.item?.template?.baseStats as Record<string, unknown> | null | undefined;
     const bonusStats = slot.item?.bonusStats as Record<string, unknown> | null | undefined;
     const statSources = [baseStats, bonusStats];

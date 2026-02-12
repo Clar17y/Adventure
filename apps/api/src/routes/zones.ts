@@ -369,7 +369,17 @@ zonesRouter.post('/travel', async (req, res, next) => {
               turn: ambush.turnOccurred,
               type: 'ambush_victory',
               description: `Ambushed by ${prefixedMob.mobDisplayName}! You defeated it. (+${xpGain} XP)`,
-              details: { mobName: prefixedMob.mobDisplayName, xp: xpGain, loot, durabilityLost },
+              details: {
+                mobName: prefixedMob.mobDisplayName,
+                mobDisplayName: prefixedMob.mobDisplayName,
+                outcome: combatResult.outcome,
+                playerMaxHp: combatResult.playerMaxHp,
+                mobMaxHp: combatResult.mobMaxHp,
+                log: combatResult.log,
+                xp: xpGain,
+                loot,
+                durabilityLost,
+              },
             });
           } else {
             // Player lost — calculate flee result
@@ -419,7 +429,15 @@ zonesRouter.post('/travel', async (req, res, next) => {
                 turn: ambush.turnOccurred,
                 type: 'ambush_defeat',
                 description: `Ambushed by ${prefixedMob.mobDisplayName}! You were knocked out.`,
-                details: { mobName: prefixedMob.mobDisplayName, durabilityLost },
+                details: {
+                  mobName: prefixedMob.mobDisplayName,
+                  mobDisplayName: prefixedMob.mobDisplayName,
+                  outcome: combatResult.outcome,
+                  playerMaxHp: combatResult.playerMaxHp,
+                  mobMaxHp: combatResult.mobMaxHp,
+                  log: combatResult.log,
+                  durabilityLost,
+                },
               });
 
               // Refund remaining turns
@@ -483,7 +501,16 @@ zonesRouter.post('/travel', async (req, res, next) => {
                 turn: ambush.turnOccurred,
                 type: 'ambush_defeat',
                 description: `Ambushed by ${prefixedMob.mobDisplayName}! You escaped with ${currentHp} HP.`,
-                details: { mobName: prefixedMob.mobDisplayName, remainingHp: currentHp, durabilityLost },
+                details: {
+                  mobName: prefixedMob.mobDisplayName,
+                  mobDisplayName: prefixedMob.mobDisplayName,
+                  outcome: combatResult.outcome,
+                  playerMaxHp: combatResult.playerMaxHp,
+                  mobMaxHp: combatResult.mobMaxHp,
+                  log: combatResult.log,
+                  remainingHp: currentHp,
+                  durabilityLost,
+                },
               });
 
               // Refund remaining turns

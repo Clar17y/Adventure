@@ -623,7 +623,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const pushLog = (...entries: ActivityLogEntry[]) => {
-    setActivityLog((prev) => [...entries, ...prev]);
+    setActivityLog((prev) => [...entries, ...prev].slice(0, 100));
   };
 
   const PERCENT_STATS = new Set(['critChance', 'critDamage']);
@@ -680,9 +680,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setTurns(data.turns.currentTurns);
 
       // Check if there are any meaningful events (not just "found nothing")
-      const hasRealEvents = data.events.some(
-        (e) => e.type !== 'hidden_cache' || data.events.length > 1
-      );
+      const hasRealEvents = data.events.some((e) => e.type !== 'hidden_cache');
 
       if (hasRealEvents) {
         // Store for animated playback

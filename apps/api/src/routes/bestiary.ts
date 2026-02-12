@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '@adventure/database';
-import { getMobPrefixDefinition } from '@adventure/shared';
+import { getAllMobPrefixes } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 
 export const bestiaryRouter = Router();
@@ -48,23 +48,19 @@ bestiaryRouter.get('/', async (req, res, next) => {
 
     const killsByMobId = new Map<string, number>();
     for (const p of progress) killsByMobId.set(p.mobTemplateId, p.kills);
-    const prefixesByMobId = new Map<string, Array<{ prefix: string; displayName: string; kills: number }>>();
+    const prefixKeysByMobId = new Map<string, string[]>();
+    const prefixTotals = new Map<string, number>();
     for (const prefixEntry of prefixProgress as Array<{ mobTemplateId: string; prefix: string; kills: number }>) {
-      const definition = getMobPrefixDefinition(prefixEntry.prefix);
-      const prefixEncounters = prefixesByMobId.get(prefixEntry.mobTemplateId) ?? [];
-      prefixEncounters.push({
-        prefix: prefixEntry.prefix,
-        displayName: definition?.displayName ?? prefixEntry.prefix,
-        kills: prefixEntry.kills,
-      });
-      prefixesByMobId.set(prefixEntry.mobTemplateId, prefixEncounters);
+      const keys = prefixKeysByMobId.get(prefixEntry.mobTemplateId) ?? [];
+      if (!keys.includes(prefixEntry.prefix)) keys.push(prefixEntry.prefix);
+      prefixKeysByMobId.set(prefixEntry.mobTemplateId, keys);
+      prefixTotals.set(prefixEntry.prefix, (prefixTotals.get(prefixEntry.prefix) ?? 0) + prefixEntry.kills);
     }
 
+    const allPrefixes = getAllMobPrefixes();
     res.json({
       mobs: mobTemplates.map((mob: typeof mobTemplates[number]) => {
         const kills = killsByMobId.get(mob.id) ?? 0;
-        const prefixEncounters = (prefixesByMobId.get(mob.id) ?? [])
-          .sort((a, b) => b.kills - a.kills || a.displayName.localeCompare(b.displayName));
         const mobStats = mob as unknown as { accuracy?: number; attack?: number };
         const mobAccuracy = typeof mobStats.accuracy === 'number'
           ? mobStats.accuracy
@@ -89,9 +85,15 @@ bestiaryRouter.get('/', async (req, res, next) => {
             minQuantity: dt.minQuantity,
             maxQuantity: dt.maxQuantity,
           })),
-          prefixEncounters,
+          prefixesEncountered: prefixKeysByMobId.get(mob.id) ?? [],
         };
       }),
+      prefixSummary: allPrefixes.map(p => ({
+        prefix: p.key,
+        displayName: p.displayName,
+        totalKills: prefixTotals.get(p.key) ?? 0,
+        discovered: (prefixTotals.get(p.key) ?? 0) > 0,
+      })),
     });
   } catch (err) {
     next(err);

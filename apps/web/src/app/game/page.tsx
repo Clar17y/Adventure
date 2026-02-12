@@ -207,6 +207,7 @@ export default function GamePage() {
     hpState,
     setHpState,
     playbackActive,
+    combatPlaybackData,
     explorationPlaybackData,
     currentZone,
     ownedByTemplateId,
@@ -214,6 +215,7 @@ export default function GamePage() {
     handleExplorationPlaybackComplete,
     handlePlaybackSkip,
     handleStartCombat,
+    handleCombatPlaybackComplete,
     handleMine,
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,
@@ -688,6 +690,8 @@ export default function GamePage() {
             onPendingEncounterZoneFilterChange={handlePendingEncounterZoneFilterChange}
             onPendingEncounterMobFilterChange={handlePendingEncounterMobFilterChange}
             onPendingEncounterSortChange={handlePendingEncounterSortChange}
+            combatPlaybackData={combatPlaybackData}
+            onCombatPlaybackComplete={handleCombatPlaybackComplete}
           />
         );
       case 'rest':

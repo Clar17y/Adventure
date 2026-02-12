@@ -350,6 +350,15 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [bestiaryError, setBestiaryError] = useState<string | null>(null);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
   const [playbackActive, setPlaybackActive] = useState(false);
+  const [combatPlaybackData, setCombatPlaybackData] = useState<{
+    mobDisplayName: string;
+    outcome: string;
+    playerMaxHp: number;
+    playerStartHp: number;
+    mobMaxHp: number;
+    log: LastCombatLogEntry[];
+    rewards: LastCombat['rewards'];
+  } | null>(null);
   const [explorationPlaybackData, setExplorationPlaybackData] = useState<{
     totalTurns: number;
     zoneName: string;
@@ -777,6 +786,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       return;
     }
 
+    const hpBefore = hpState.currentHp;
+
     await runAction('combat', async () => {
       const res = await startCombatFromEncounterSite(encounterSiteId, 'melee');
       const data = res.data;
@@ -789,36 +800,40 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
-      setLastCombat({
-        mobTemplateId: data.combat.mobTemplateId,
-        mobPrefix: data.combat.mobPrefix,
+
+      const rewards: LastCombat['rewards'] = {
+        xp: data.rewards.xp,
+        loot: data.rewards.loot,
+        siteCompletion: data.rewards.siteCompletion ?? null,
+        skillXp: data.rewards.skillXp
+          ? {
+              skillType: data.rewards.skillXp.skillType,
+              xpGained: data.rewards.skillXp.xpGained,
+              xpAfterEfficiency: data.rewards.skillXp.xpAfterEfficiency,
+              efficiency: data.rewards.skillXp.efficiency,
+              leveledUp: data.rewards.skillXp.leveledUp,
+              newLevel: data.rewards.skillXp.newLevel,
+              characterXpGain: data.rewards.skillXp.characterXpGain,
+              characterXpAfter: data.rewards.skillXp.characterXpAfter,
+              characterLevelBefore: data.rewards.skillXp.characterLevelBefore,
+              characterLevelAfter: data.rewards.skillXp.characterLevelAfter,
+              attributePointsAfter: data.rewards.skillXp.attributePointsAfter,
+              characterLeveledUp: data.rewards.skillXp.characterLeveledUp,
+            }
+          : null,
+      };
+
+      // Store for animated playback instead of setting lastCombat directly
+      setCombatPlaybackData({
         mobDisplayName: data.combat.mobDisplayName,
         outcome: data.combat.outcome,
         playerMaxHp: data.combat.playerMaxHp,
+        playerStartHp: hpBefore,
         mobMaxHp: data.combat.mobMaxHp,
         log: data.combat.log,
-        rewards: {
-          xp: data.rewards.xp,
-          loot: data.rewards.loot,
-          siteCompletion: data.rewards.siteCompletion ?? null,
-          skillXp: data.rewards.skillXp
-            ? {
-                skillType: data.rewards.skillXp.skillType,
-                xpGained: data.rewards.skillXp.xpGained,
-                xpAfterEfficiency: data.rewards.skillXp.xpAfterEfficiency,
-                efficiency: data.rewards.skillXp.efficiency,
-                leveledUp: data.rewards.skillXp.leveledUp,
-                newLevel: data.rewards.skillXp.newLevel,
-                characterXpGain: data.rewards.skillXp.characterXpGain,
-                characterXpAfter: data.rewards.skillXp.characterXpAfter,
-                characterLevelBefore: data.rewards.skillXp.characterLevelBefore,
-                characterLevelAfter: data.rewards.skillXp.characterLevelAfter,
-                attributePointsAfter: data.rewards.skillXp.attributePointsAfter,
-                characterLeveledUp: data.rewards.skillXp.characterLeveledUp,
-              }
-            : null,
-        },
+        rewards,
       });
+      setPlaybackActive(true);
 
       if (data.rewards.siteCompletion) {
         const chest = data.rewards.siteCompletion;
@@ -848,6 +863,23 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters(), loadBestiary()]);
     });
+  };
+
+  const handleCombatPlaybackComplete = () => {
+    if (combatPlaybackData) {
+      setLastCombat({
+        mobTemplateId: '',
+        mobPrefix: null,
+        mobDisplayName: combatPlaybackData.mobDisplayName,
+        outcome: combatPlaybackData.outcome,
+        playerMaxHp: combatPlaybackData.playerMaxHp,
+        mobMaxHp: combatPlaybackData.mobMaxHp,
+        log: combatPlaybackData.log,
+        rewards: combatPlaybackData.rewards,
+      });
+    }
+    setCombatPlaybackData(null);
+    setPlaybackActive(false);
   };
 
   const handleMine = async (playerNodeId: string, turnSpend: number) => {
@@ -1206,6 +1238,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     hpState,
     setHpState,
     playbackActive,
+    combatPlaybackData,
     explorationPlaybackData,
 
     // Derived
@@ -1217,6 +1250,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleExplorationPlaybackComplete,
     handlePlaybackSkip,
     handleStartCombat,
+    handleCombatPlaybackComplete,
     handleMine,
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,

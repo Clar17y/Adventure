@@ -40,13 +40,13 @@ export function CombatPlayback({
   const completeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logScrollRef = useRef<HTMLDivElement>(null);
 
-  // Playback: reveal one entry every 1500ms
+  // Playback: reveal one entry every 800ms
   useEffect(() => {
     if (phase !== 'playing' || revealedCount >= log.length) return;
 
     playbackTimer.current = setTimeout(() => {
       setRevealedCount(prev => prev + 1);
-    }, 1500);
+    }, 800);
 
     return () => {
       if (playbackTimer.current) clearTimeout(playbackTimer.current);
@@ -179,11 +179,10 @@ export function CombatPlayback({
       {/* Outcome display */}
       {phase !== 'playing' && (
         <div className="text-center mt-4 space-y-3">
-          <div className={`text-xl font-bold ${
-            outcome === 'victory' ? 'text-[var(--rpg-gold)]'
-            : outcome === 'fled' ? 'text-[var(--rpg-gold)]'
-            : 'text-[var(--rpg-red)]'
-          }`}>
+          <div className={`text-xl font-bold ${outcome === 'victory' ? 'text-[var(--rpg-gold)]'
+              : outcome === 'fled' ? 'text-[var(--rpg-gold)]'
+                : 'text-[var(--rpg-red)]'
+            }`}>
             {outcome === 'victory' ? 'Victory!' : outcome === 'fled' ? 'Fled!' : 'Defeated!'}
           </div>
 

@@ -95,10 +95,12 @@ export function applyMobPrefix<TMob extends MobTemplate>(
   const accuracy = scaleStat(mob.accuracy, prefix.statMultipliers.accuracy, 0);
   const defence = scaleStat(mob.defence, prefix.statMultipliers.defence, 0);
   const evasion = scaleStat(mob.evasion, prefix.statMultipliers.evasion, 0);
+  const magicDefence = scaleStat(mob.magicDefence, prefix.statMultipliers.magicDefence, 0);
   const damageMin = scaleStat(mob.damageMin, prefix.statMultipliers.damageMin, 1);
   const damageMax = scaleStat(mob.damageMax, prefix.statMultipliers.damageMax, 1);
   const normalizedDamageMax = Math.max(damageMin, damageMax);
   const xpReward = scaleStat(mob.xpReward, prefix.xpMultiplier, 1);
+  const damageType = prefix.damageTypeOverride ?? mob.damageType;
 
   const baseSpells = Array.isArray(mob.spellPattern) ? mob.spellPattern : [];
   const prefixSpells = prefix.spellTemplate
@@ -118,11 +120,13 @@ export function applyMobPrefix<TMob extends MobTemplate>(
     level: mob.level,
     accuracy,
     defence,
+    magicDefence,
     evasion,
     damageMin,
     damageMax: normalizedDamageMax,
     xpReward,
     spellPattern,
+    damageType,
     mobPrefix: prefix.key,
     mobDisplayName: `${prefix.displayName} ${mob.name}`,
     dropChanceMultiplier: prefix.dropChanceMultiplier,

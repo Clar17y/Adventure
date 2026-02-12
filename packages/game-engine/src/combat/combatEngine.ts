@@ -65,7 +65,7 @@ export function runCombat(
 
   state.log.push({
     round: 0,
-    actor: 'player',
+    actor: playerGoesFirst ? 'player' : 'mob',
     action: 'attack',
     roll: playerInit,
     message: `Combat begins! Initiative: Player ${playerInit}, ${mob.name} ${mobInit}`,

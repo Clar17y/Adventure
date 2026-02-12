@@ -1153,16 +1153,18 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
-      setActiveZoneId(data.zone.id);
 
       // Breadcrumb return — instant, no playback
       if (data.breadcrumbReturn) {
+        setActiveZoneId(data.zone.id);
         pushLog({ timestamp: nowStamp(), type: 'success', message: `Returned to ${data.zone.name}.` });
         await loadAll();
         return;
       }
 
       // Trigger travel playback (progress bar + combat if ambushed)
+      // Don't update activeZoneId or loadAll yet — defer until playback completes
+      // so the map doesn't show "HERE" on the destination prematurely.
       const travelCost = data.travelCost ?? 0;
       if (travelCost > 0) {
         pushLog({
@@ -1184,14 +1186,14 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         setPlaybackActive(true);
       } else {
         // Zero-cost travel (shouldn't happen normally, but handle gracefully)
+        setActiveZoneId(data.zone.id);
         pushLog({ timestamp: nowStamp(), type: 'success', message: `Arrived at ${data.zone.name}.` });
+        await loadAll();
       }
-
-      await loadAll();
     });
   };
 
-  const handleTravelPlaybackComplete = () => {
+  const handleTravelPlaybackComplete = async () => {
     if (travelPlaybackData) {
       if (travelPlaybackData.aborted && travelPlaybackData.respawnedToName) {
         pushLog({
@@ -1215,9 +1217,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
     setTravelPlaybackData(null);
     setPlaybackActive(false);
+    await loadAll();
   };
 
-  const handleTravelPlaybackSkip = () => {
+  const handleTravelPlaybackSkip = async () => {
     if (travelPlaybackData) {
       const entries = travelPlaybackData.events
         .slice()
@@ -1251,6 +1254,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
     setTravelPlaybackData(null);
     setPlaybackActive(false);
+    await loadAll();
   };
 
   const handleAllocateAttribute = async (attribute: AttributeType, points = 1) => {

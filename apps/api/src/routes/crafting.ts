@@ -36,6 +36,7 @@ import { getHpState } from '../services/hpService';
 export const craftingRouter = Router();
 
 craftingRouter.use(authenticate);
+const prismaAny = prisma as unknown as any;
 
 function isSkillType(value: string): value is SkillType {
   return ALL_SKILLS.includes(value as SkillType);
@@ -180,25 +181,51 @@ craftingRouter.get('/recipes', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
 
-    const skills = await prisma.playerSkill.findMany({
-      where: { playerId },
-      select: { skillType: true, level: true },
-    });
+    const [skills, learnedAdvancedRecipes] = await Promise.all([
+      prisma.playerSkill.findMany({
+        where: { playerId },
+        select: { skillType: true, level: true },
+      }),
+      prismaAny.playerRecipe.findMany({
+        where: { playerId },
+        select: { recipeId: true },
+      }) as Promise<Array<{ recipeId: string }>>,
+    ]);
 
     const skillLevels = new Map<string, number>(skills.map((s: typeof skills[number]) => [s.skillType, s.level]));
+    const learnedRecipeIds = new Set(learnedAdvancedRecipes.map((entry) => entry.recipeId));
 
-    const recipes = await prisma.craftingRecipe.findMany({
+    const recipes = await prismaAny.craftingRecipe.findMany({
       include: { resultTemplate: true },
       orderBy: [{ requiredLevel: 'asc' }],
-    });
+    }) as Array<{
+      id: string;
+      skillType: string;
+      requiredLevel: number;
+      resultTemplate: any;
+      isAdvanced?: boolean;
+      soulbound?: boolean;
+      mobFamilyId?: string | null;
+      turnCost: number;
+      materials: unknown;
+      xpReward: number;
+    }>;
 
     const visible = recipes
-      .filter((r: typeof recipes[number]) => (skillLevels.get(r.skillType) ?? 1) >= r.requiredLevel)
+      .filter((r: typeof recipes[number]) => {
+        const skillGatePassed = (skillLevels.get(r.skillType) ?? 1) >= r.requiredLevel;
+        if (!skillGatePassed) return false;
+        if (!r.isAdvanced) return true;
+        return learnedRecipeIds.has(r.id);
+      })
       .map((r: typeof recipes[number]) => ({
         id: r.id,
         skillType: r.skillType,
         requiredLevel: r.requiredLevel,
         resultTemplate: r.resultTemplate,
+        isAdvanced: Boolean(r.isAdvanced),
+        soulbound: Boolean(r.soulbound),
+        mobFamilyId: r.mobFamilyId ?? null,
         turnCost: r.turnCost,
         materials: parseMaterials(r.materials),
         materialTemplates: [] as Array<{ id: string; name: string; itemType: string; stackable: boolean }>,
@@ -263,9 +290,21 @@ craftingRouter.post('/craft', async (req, res, next) => {
       throw new AppError(400, 'Cannot craft while recovering', 'IS_RECOVERING');
     }
 
-    const recipe = await prisma.craftingRecipe.findUnique({
+    const recipe = await prismaAny.craftingRecipe.findUnique({
       where: { id: body.recipeId },
       include: { resultTemplate: true },
+    }) as (null | {
+      id: string;
+      skillType: string;
+      requiredLevel: number;
+      resultTemplateId: string;
+      isAdvanced?: boolean;
+      soulbound?: boolean;
+      mobFamilyId?: string | null;
+      turnCost: number;
+      materials: unknown;
+      xpReward: number;
+      resultTemplate: any;
     });
     if (!recipe) {
       throw new AppError(404, 'Recipe not found', 'NOT_FOUND');
@@ -278,6 +317,20 @@ craftingRouter.post('/craft', async (req, res, next) => {
     const skillLevel = await getSkillLevel(playerId, recipe.skillType);
     if (skillLevel < recipe.requiredLevel) {
       throw new AppError(400, 'Insufficient crafting level', 'INSUFFICIENT_LEVEL');
+    }
+    if (recipe.isAdvanced) {
+      const unlocked = await prismaAny.playerRecipe.findUnique({
+        where: {
+          playerId_recipeId: {
+            playerId,
+            recipeId: recipe.id,
+          },
+        },
+        select: { recipeId: true },
+      });
+      if (!unlocked) {
+        throw new AppError(403, 'Advanced recipe is not unlocked yet', 'RECIPE_NOT_UNLOCKED');
+      }
     }
 
     const quantity = body.quantity;

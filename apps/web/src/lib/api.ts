@@ -562,6 +562,22 @@ export interface CombatResultResponse {
       rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
       itemName?: string | null;
     }>;
+    siteCompletion?: {
+      chestRarity: 'common' | 'uncommon' | 'rare';
+      materialRolls: number;
+      loot: Array<{
+        itemTemplateId: string;
+        quantity: number;
+        rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+        itemName?: string | null;
+      }>;
+      recipeUnlocked: {
+        recipeId: string;
+        resultTemplateId: string;
+        recipeName: string;
+        soulbound: boolean;
+      } | null;
+    } | null;
     durabilityLost: Array<{ itemId: string; amount: number }>;
     skillXp: SkillXpGrantResponse | null;
   };
@@ -590,6 +606,22 @@ export interface CombatResponse {
       rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
       itemName?: string | null;
     }>;
+    siteCompletion?: {
+      chestRarity: 'common' | 'uncommon' | 'rare';
+      materialRolls: number;
+      loot: Array<{
+        itemTemplateId: string;
+        quantity: number;
+        rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+        itemName?: string | null;
+      }>;
+      recipeUnlocked: {
+        recipeId: string;
+        resultTemplateId: string;
+        recipeName: string;
+        soulbound: boolean;
+      } | null;
+    } | null;
     durabilityLost: Array<{ itemId: string; amount: number }>;
     skillXp: SkillXpGrantResponse | null;
   };
@@ -838,11 +870,15 @@ export async function getCraftingRecipes() {
       id: string;
       skillType: string;
       requiredLevel: number;
+      isAdvanced: boolean;
+      soulbound: boolean;
+      mobFamilyId: string | null;
       resultTemplate: {
         id: string;
         name: string;
         itemType: string;
         weightClass: 'heavy' | 'medium' | 'light' | null;
+        setId: string | null;
         slot: string | null;
         tier: number;
         baseStats: Record<string, unknown>;

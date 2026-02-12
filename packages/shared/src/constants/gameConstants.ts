@@ -127,6 +127,15 @@ export const EXPLORATION_CONSTANTS = {
   MAX_EXPLORATION_TURNS: 10_000,
 } as const;
 
+export const CHEST_CONSTANTS = {
+  CHEST_RECIPE_CHANCE_SMALL: 0,
+  CHEST_RECIPE_CHANCE_MEDIUM: 0.02,
+  CHEST_RECIPE_CHANCE_LARGE: 0.05,
+  CHEST_MATERIAL_ROLLS_SMALL: { min: 1, max: 2 },
+  CHEST_MATERIAL_ROLLS_MEDIUM: { min: 2, max: 4 },
+  CHEST_MATERIAL_ROLLS_LARGE: { min: 3, max: 6 },
+} as const;
+
 // =============================================================================
 // DURABILITY
 // =============================================================================

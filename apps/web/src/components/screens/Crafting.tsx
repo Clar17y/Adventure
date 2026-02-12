@@ -20,6 +20,8 @@ interface Recipe {
   name: string;
   icon?: string;
   imageSrc?: string;
+  isAdvanced?: boolean;
+  soulbound?: boolean;
   resultQuantity: number;
   requiredLevel: number;
   turnCost: number;
@@ -159,10 +161,15 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                     </div>
                     <div className="flex-1">
                       <div className="flex items-baseline justify-between">
-                        <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm">
+                        <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm flex items-center gap-2">
                           {recipe.name}
                           {recipe.resultQuantity > 1 && (
                             <span className="text-[var(--rpg-text-secondary)] ml-1">x{recipe.resultQuantity}</span>
+                          )}
+                          {recipe.isAdvanced && (
+                            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[var(--rpg-red)] text-white">
+                              Advanced
+                            </span>
                           )}
                         </h4>
                         <span className="text-xs text-[var(--rpg-text-secondary)]">Lv. {recipe.requiredLevel}</span>
@@ -209,6 +216,11 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
               <p className="text-xs text-[var(--rpg-text-secondary)] capitalize">
                 {selectedRecipe.rarity} • Lv. {selectedRecipe.requiredLevel} Required
               </p>
+              {selectedRecipe.isAdvanced && (
+                <p className="text-xs text-[var(--rpg-gold)]">
+                  Advanced recipe{selectedRecipe.soulbound ? ' • Soulbound result' : ''}
+                </p>
+              )}
             </div>
           </div>
 

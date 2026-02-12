@@ -99,6 +99,22 @@ export interface LastCombat {
       rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
       itemName?: string | null;
     }>;
+    siteCompletion?: {
+      chestRarity: 'common' | 'uncommon' | 'rare';
+      materialRolls: number;
+      loot: Array<{
+        itemTemplateId: string;
+        quantity: number;
+        rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+        itemName?: string | null;
+      }>;
+      recipeUnlocked: {
+        recipeId: string;
+        resultTemplateId: string;
+        recipeName: string;
+        soulbound: boolean;
+      } | null;
+    } | null;
     skillXp: {
       skillType: string;
       xpGained: number;
@@ -261,7 +277,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     id: string;
     skillType: string;
     requiredLevel: number;
-    resultTemplate: { id: string; name: string; itemType: string; weightClass?: 'heavy' | 'medium' | 'light' | null; slot: string | null; tier: number; baseStats: Record<string, unknown>; stackable: boolean; maxDurability: number; requiredSkill: string | null; requiredLevel: number };
+    isAdvanced: boolean;
+    soulbound: boolean;
+    mobFamilyId: string | null;
+    resultTemplate: { id: string; name: string; itemType: string; weightClass?: 'heavy' | 'medium' | 'light' | null; setId?: string | null; slot: string | null; tier: number; baseStats: Record<string, unknown>; stackable: boolean; maxDurability: number; requiredSkill: string | null; requiredLevel: number };
     turnCost: number;
     materials: Array<{ templateId: string; quantity: number }>;
     materialTemplates: Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
@@ -699,6 +718,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         rewards: {
           xp: data.rewards.xp,
           loot: data.rewards.loot,
+          siteCompletion: data.rewards.siteCompletion ?? null,
           skillXp: data.rewards.skillXp
             ? {
                 skillType: data.rewards.skillXp.skillType,
@@ -717,6 +737,32 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
             : null,
         },
       });
+
+      if (data.rewards.siteCompletion) {
+        const chest = data.rewards.siteCompletion;
+        const chestLabel = `${chest.chestRarity.charAt(0).toUpperCase()}${chest.chestRarity.slice(1)} Chest`;
+        const lootCount = chest.loot.reduce((sum, entry) => sum + entry.quantity, 0);
+        setExplorationLog((prev) => [
+          {
+            timestamp: nowStamp(),
+            type: 'success',
+            message: `Encounter site cleared. ${chestLabel} opened with ${lootCount} item${lootCount === 1 ? '' : 's'}.`,
+          },
+          ...prev,
+        ]);
+
+        if (chest.recipeUnlocked) {
+          const unlockedRecipe = chest.recipeUnlocked;
+          setExplorationLog((prev) => [
+            {
+              timestamp: nowStamp(),
+              type: 'success',
+              message: `Learned advanced recipe: ${unlockedRecipe.recipeName}.`,
+            },
+            ...prev,
+          ]);
+        }
+      }
 
       const skillXp = data.rewards?.skillXp;
       if (skillXp?.leveledUp) {

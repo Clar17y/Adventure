@@ -26,6 +26,7 @@ import { getHpState, setHp, enterRecoveringState } from '../services/hpService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { respawnToHomeTown } from '../services/zoneDiscoveryService';
+import { grantEncounterSiteChestRewardsTx } from '../services/chestService';
 
 export const combatRouter = Router();
 
@@ -36,6 +37,7 @@ const prismaAny = prisma as unknown as any;
 const attackSkillSchema = z.enum(['melee', 'ranged', 'magic']);
 type AttackSkill = z.infer<typeof attackSkillSchema>;
 type LootDropWithName = LootDrop & { itemName: string | null };
+type EncounterSiteSize = 'small' | 'medium' | 'large';
 
 const lootDropWithNameSchema = z.object({
   itemTemplateId: z.string().min(1),
@@ -76,6 +78,11 @@ function pickWeighted<T extends { encounterWeight: number }>(items: T[]): T | nu
     if (roll <= 0) return item;
   }
   return items[items.length - 1] ?? null;
+}
+
+function toEncounterSiteSize(value: string): EncounterSiteSize {
+  if (value === 'small' || value === 'medium' || value === 'large') return value;
+  return 'small';
 }
 
 type EncounterMobRole = 'trash' | 'elite' | 'boss';
@@ -444,6 +451,7 @@ combatRouter.post('/start', async (req, res, next) => {
     let consumedEncounterSiteId = null as null | string;
     let consumedEncounterMobSlot = null as null | number;
     let encounterSiteCleared = false;
+    let siteCompletionRewards = null as null | Awaited<ReturnType<typeof grantEncounterSiteChestRewardsTx>>;
 
     if (body.encounterSiteId) {
       const site = await prismaAny.encounterSite.findFirst({
@@ -542,6 +550,8 @@ combatRouter.post('/start', async (req, res, next) => {
           select: {
             id: true,
             playerId: true,
+            mobFamilyId: true,
+            size: true,
             discoveredAt: true,
             mobs: true,
           },
@@ -560,6 +570,11 @@ combatRouter.post('/start', async (req, res, next) => {
         target.status = 'defeated';
         const counts = countEncounterSiteState(mobs);
         if (counts.alive <= 0) {
+          siteCompletionRewards = await grantEncounterSiteChestRewardsTx(tx, {
+            playerId,
+            mobFamilyId: site.mobFamilyId,
+            size: toEncounterSiteSize(site.size),
+          });
           await txAny.encounterSite.deleteMany({ where: { id: consumedEncounterSiteId, playerId } });
           encounterSiteCleared = true;
         } else {
@@ -605,6 +620,14 @@ combatRouter.post('/start', async (req, res, next) => {
     }
 
     const lootWithNames = await enrichLootWithNames(loot);
+    const siteCompletionWithNames = siteCompletionRewards
+      ? {
+          chestRarity: siteCompletionRewards.chestRarity,
+          materialRolls: siteCompletionRewards.materialRolls,
+          loot: await enrichLootWithNames(siteCompletionRewards.loot),
+          recipeUnlocked: siteCompletionRewards.recipeUnlocked,
+        }
+      : null;
 
     await prisma.playerBestiary.upsert({
       where: { playerId_mobTemplateId: { playerId, mobTemplateId: prefixedMob.id } },
@@ -659,6 +682,7 @@ combatRouter.post('/start', async (req, res, next) => {
             xp: xpAwarded,
             baseXp,
             loot: lootWithNames,
+            siteCompletion: siteCompletionWithNames,
             durabilityLost,
             skillXp: xpGrant
               ? {
@@ -709,6 +733,7 @@ combatRouter.post('/start', async (req, res, next) => {
       rewards: {
         xp: xpAwarded,
         loot: lootWithNames,
+        siteCompletion: siteCompletionWithNames,
         durabilityLost,
         skillXp: xpGrant
           ? {
@@ -1023,6 +1048,8 @@ combatRouter.get('/logs/:id', async (req, res, next) => {
       if (rewards && typeof rewards === 'object' && !Array.isArray(rewards)) {
         const rewardsRecord = rewards as Record<string, unknown>;
         const lootUnknown = rewardsRecord.loot;
+        const siteCompletionUnknown = rewardsRecord.siteCompletion;
+        let nextRewards = rewardsRecord;
         if (Array.isArray(lootUnknown)) {
           const parsedLoot = lootUnknown
             .map((entry) => lootDropWithNameSchema.safeParse(entry))
@@ -1030,14 +1057,36 @@ combatRouter.get('/logs/:id', async (req, res, next) => {
             .map((entry) => entry.data);
 
           const lootWithNames = await enrichLootWithNames(parsedLoot);
-          combat = {
-            ...combatRecord,
-            rewards: {
-              ...rewardsRecord,
-              loot: lootWithNames,
-            },
-          } as unknown as Prisma.JsonValue;
+          nextRewards = {
+            ...nextRewards,
+            loot: lootWithNames,
+          };
         }
+
+        if (siteCompletionUnknown && typeof siteCompletionUnknown === 'object' && !Array.isArray(siteCompletionUnknown)) {
+          const siteCompletionRecord = siteCompletionUnknown as Record<string, unknown>;
+          const chestLootUnknown = siteCompletionRecord.loot;
+          if (Array.isArray(chestLootUnknown)) {
+            const parsedChestLoot = chestLootUnknown
+              .map((entry) => lootDropWithNameSchema.safeParse(entry))
+              .filter((entry): entry is { success: true; data: z.infer<typeof lootDropWithNameSchema> } => entry.success)
+              .map((entry) => entry.data);
+
+            const chestLootWithNames = await enrichLootWithNames(parsedChestLoot);
+            nextRewards = {
+              ...nextRewards,
+              siteCompletion: {
+                ...siteCompletionRecord,
+                loot: chestLootWithNames,
+              },
+            };
+          }
+        }
+
+        combat = {
+          ...combatRecord,
+          rewards: nextRewards,
+        } as unknown as Prisma.JsonValue;
       }
     }
 

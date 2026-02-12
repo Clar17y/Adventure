@@ -8,7 +8,9 @@
       "mcp__grepai__grepai_search",
       "Bash(pushd:*)",
       "Bash(popd:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(grep:*)",
+      "Bash(grepai search:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -85,7 +85,12 @@ export function TurnPlayback({
           <CombatPlayback
             key={combatEvent.turn}
             mobDisplayName={(combatEvent.details?.mobDisplayName as string) ?? 'Unknown'}
-            outcome={(combatEvent.details?.outcome as string) ?? 'defeat'}
+            outcome={
+              // Distinguish fled vs knockout: fleeResult.outcome is 'knockout' or 'fled'
+              (combatEvent.details?.fleeResult as { outcome?: string } | undefined)?.outcome === 'fled'
+                ? 'fled'
+                : (combatEvent.details?.outcome as string) ?? 'defeat'
+            }
             playerMaxHp={playerMaxHp}
             playerStartHp={playerHpForNextCombat ?? playerHpBefore}
             mobMaxHp={(combatEvent.details?.mobMaxHp as number) ?? 100}

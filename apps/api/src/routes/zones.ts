@@ -437,6 +437,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
                   playerMaxHp: combatResult.playerMaxHp,
                   mobMaxHp: combatResult.mobMaxHp,
                   log: combatResult.log,
+                  fleeResult: { outcome: fleeResult.outcome, remainingHp: fleeResult.remainingHp },
                   durabilityLost,
                 },
               });
@@ -511,6 +512,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
                   mobMaxHp: combatResult.mobMaxHp,
                   log: combatResult.log,
                   remainingHp: currentHp,
+                  fleeResult: { outcome: fleeResult.outcome, remainingHp: fleeResult.remainingHp },
                   durabilityLost,
                 },
               });

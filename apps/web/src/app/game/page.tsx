@@ -278,6 +278,7 @@ export default function GamePage() {
               })
               .filter(Boolean) as Array<{ name: string; level: number; icon: typeof Sword; imageSrc: string }>}
             onNavigate={handleNavigate}
+            activityLog={activityLog}
             onAllocateAttribute={handleAllocateAttribute}
           />
         );

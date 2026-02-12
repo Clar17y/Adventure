@@ -1199,7 +1199,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           type: 'danger',
           message: `You were knocked out and woke up in ${travelPlaybackData.respawnedToName}.`,
         });
-      } else if (!travelPlaybackData.aborted) {
+      } else if (travelPlaybackData.aborted) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `Travel to ${travelPlaybackData.destinationName} failed. You fled back to safety.`,
+        });
+      } else {
         pushLog({
           timestamp: nowStamp(),
           type: 'success',
@@ -1229,7 +1235,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           type: 'danger',
           message: `You were knocked out and woke up in ${travelPlaybackData.respawnedToName}.`,
         });
-      } else if (!travelPlaybackData.aborted) {
+      } else if (travelPlaybackData.aborted) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `Travel to ${travelPlaybackData.destinationName} failed. You fled back to safety.`,
+        });
+      } else {
         pushLog({
           timestamp: nowStamp(),
           type: 'success',

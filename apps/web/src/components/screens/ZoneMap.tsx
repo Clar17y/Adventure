@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PixelButton } from '@/components/PixelButton';
 import { ActivityLog } from '@/components/ActivityLog';
 import { TurnPlayback } from '@/components/playback/TurnPlayback';
@@ -97,6 +97,13 @@ export function ZoneMap({
   onExploreCurrentZone,
 }: ZoneMapProps) {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+
+  // After travel playback finishes, auto-select the zone the player ended up in
+  useEffect(() => {
+    if (!travelPlaybackData && currentZoneId) {
+      setSelectedZoneId(currentZoneId);
+    }
+  }, [travelPlaybackData, currentZoneId]);
 
   const tiers = useMemo(() => computeTiers(zones, connections), [zones, connections]);
 

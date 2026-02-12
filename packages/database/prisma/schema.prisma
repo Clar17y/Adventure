@@ -175,6 +175,7 @@ model Zone {
   isStarter   Boolean @default(false) @map("is_starter")
   zoneType       String  @default("wild") @map("zone_type") @db.VarChar(16) // wild | town
   zoneExitChance Float?  @map("zone_exit_chance")
+  maxCraftingLevel Int?    @default(0) @map("max_crafting_level")
 
   mobs               MobTemplate[]
   resourceNodes      ResourceNode[]

@@ -701,23 +701,19 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       });
       setPlaybackActive(true);
 
-      // Still do side-effect refreshes
+      // Refresh encounter sites and gathering nodes discovered during exploration.
+      // Don't call loadAll() here — defer until playback completes so the zone
+      // doesn't update to the respawn town mid-playback.
       if (data.encounterSites.length > 0) {
         await refreshPendingEncounters();
       }
       if (data.resourceDiscoveries.length > 0) {
         await loadGatheringNodes();
       }
-      const hadAmbush = data.events.some(
-        (e) => e.type === 'ambush_victory' || e.type === 'ambush_defeat'
-      );
-      if (hadAmbush || data.zoneExitDiscovered) {
-        await Promise.all([loadAll(), loadTurnsAndHp()]);
-      }
     });
   };
 
-  const handleExplorationPlaybackComplete = () => {
+  const handleExplorationPlaybackComplete = async () => {
     if (explorationPlaybackData) {
       pushLog({
         timestamp: nowStamp(),
@@ -734,9 +730,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
     setExplorationPlaybackData(null);
     setPlaybackActive(false);
+    await loadAll();
   };
 
-  const handlePlaybackSkip = () => {
+  const handlePlaybackSkip = async () => {
     // Dump all remaining events to activity log at once
     if (explorationPlaybackData) {
       const entries = explorationPlaybackData.events
@@ -769,6 +766,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
     setExplorationPlaybackData(null);
     setPlaybackActive(false);
+    await loadAll();
   };
 
   const handleStartCombat = async (encounterSiteId: string) => {

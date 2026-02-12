@@ -293,7 +293,7 @@ export default function GamePage() {
           />
         );
       case 'explore':
-        if (currentZone?.zoneType === 'town') {
+        if (currentZone?.zoneType === 'town' && !explorationPlaybackData) {
           return (
             <PixelCard>
               <div className="text-center py-8">

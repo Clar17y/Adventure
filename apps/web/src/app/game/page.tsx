@@ -186,9 +186,7 @@ export default function GamePage() {
     craftingRecipes,
     activeCraftingSkill,
     setActiveCraftingSkill,
-    explorationLog,
-    gatheringLog,
-    craftingLog,
+    activityLog,
     pendingEncounters,
     pendingEncountersLoading,
     pendingEncountersError,
@@ -314,7 +312,7 @@ export default function GamePage() {
             }}
             availableTurns={turns}
             onStartExploration={handleStartExploration}
-            activityLog={explorationLog}
+            activityLog={activityLog}
             isRecovering={hpState.isRecovering}
             recoveryCost={hpState.recoveryCost}
           />
@@ -563,7 +561,7 @@ export default function GamePage() {
                 rarity: rarityFromTier(r.resultTemplate.tier),
               }))}
               onCraft={handleCraft}
-              activityLog={craftingLog}
+              activityLog={activityLog}
               isRecovering={hpState.isRecovering}
               recoveryCost={hpState.recoveryCost}
             />
@@ -592,7 +590,7 @@ export default function GamePage() {
               const bonusLuck = typeof bonus?.luck === 'number' ? bonus.luck : 0;
               return sum + baseLuck + bonusLuck;
             }, 0)}
-            activityLog={craftingLog}
+            activityLog={activityLog}
             onUpgrade={handleForgeUpgrade}
             onReroll={handleForgeReroll}
             isRecovering={hpState.isRecovering}
@@ -640,7 +638,7 @@ export default function GamePage() {
               }))}
               currentZoneId={activeZoneId}
               availableTurns={turns}
-              gatheringLog={gatheringLog}
+              activityLog={activityLog}
               nodesLoading={gatheringLoading}
               nodesError={gatheringError}
               page={gatheringPage}

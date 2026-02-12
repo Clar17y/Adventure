@@ -5,9 +5,11 @@ import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
-import { Mountain, Play, Clock } from 'lucide-react';
+import { Mountain, Play } from 'lucide-react';
 import { EXPLORATION_CONSTANTS } from '@adventure/shared';
 import Image from 'next/image';
+import { ActivityLog } from '@/components/ActivityLog';
+import type { ActivityLogEntry } from '@/app/game/useGameController';
 
 interface ExplorationProps {
   currentZone: {
@@ -18,7 +20,7 @@ interface ExplorationProps {
   };
   availableTurns: number;
   onStartExploration: (turns: number) => void;
-  activityLog: Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>;
+  activityLog: ActivityLogEntry[];
   isRecovering?: boolean;
   recoveryCost?: number | null;
 }
@@ -178,33 +180,7 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
       </PixelButton>
 
       {/* Activity Log */}
-      <PixelCard>
-        <h3 className="font-semibold text-[var(--rpg-text-primary)] mb-3">Activity Log</h3>
-        <div className="space-y-2 max-h-64 overflow-y-auto">
-          {activityLog.length === 0 ? (
-            <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">
-              No recent activity
-            </div>
-          ) : (
-            activityLog.map((entry, index) => {
-              const typeColors = {
-                info: 'text-[var(--rpg-text-secondary)]',
-                success: 'text-[var(--rpg-green-light)]',
-                danger: 'text-[var(--rpg-red)]',
-              };
-              return (
-                <div key={index} className="flex gap-2 text-sm">
-                  <Clock size={14} className="text-[var(--rpg-text-secondary)] flex-shrink-0 mt-0.5" />
-                  <span className="text-[var(--rpg-text-secondary)] flex-shrink-0 font-mono">
-                    {entry.timestamp}
-                  </span>
-                  <span className={typeColors[entry.type]}>{entry.message}</span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </PixelCard>
+      <ActivityLog entries={activityLog} />
     </div>
   );
 }

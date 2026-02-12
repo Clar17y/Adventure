@@ -7,8 +7,10 @@ import { Pagination } from '@/components/common/Pagination';
 import { Slider } from '@/components/ui/Slider';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { titleCaseFromSnake } from '@/lib/format';
-import { Pickaxe, Clock, MapPin } from 'lucide-react';
+import { Pickaxe, MapPin } from 'lucide-react';
 import { GATHERING_CONSTANTS } from '@adventure/shared';
+import { ActivityLog } from '@/components/ActivityLog';
+import type { ActivityLogEntry } from '@/app/game/useGameController';
 
 interface ResourceNode {
   id: string;
@@ -26,12 +28,6 @@ interface ResourceNode {
   weathered?: boolean;
 }
 
-interface GatheringLog {
-  timestamp: string;
-  message: string;
-  type: 'info' | 'success';
-}
-
 interface GatheringProps {
   skillName: string;
   skillLevel: number;
@@ -39,7 +35,7 @@ interface GatheringProps {
   nodes: ResourceNode[];
   currentZoneId: string | null;
   availableTurns: number;
-  gatheringLog: GatheringLog[];
+  activityLog: ActivityLogEntry[];
   nodesLoading: boolean;
   nodesError: string | null;
   page: number;
@@ -72,7 +68,7 @@ export function Gathering({
   nodes,
   currentZoneId,
   availableTurns,
-  gatheringLog,
+  activityLog,
   nodesLoading,
   nodesError,
   page,
@@ -374,28 +370,7 @@ export function Gathering({
       )}
 
       {/* Gathering Log */}
-      <PixelCard>
-        <h3 className="font-semibold text-[var(--rpg-text-primary)] mb-3">Recent Activity</h3>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
-          {gatheringLog.length === 0 ? (
-            <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">No recent activity</div>
-          ) : (
-            gatheringLog.map((entry, index) => {
-              const typeColors = {
-                info: 'text-[var(--rpg-text-secondary)]',
-                success: 'text-[var(--rpg-green-light)]',
-              };
-              return (
-                <div key={index} className="flex gap-2 text-sm">
-                  <Clock size={14} className="text-[var(--rpg-text-secondary)] flex-shrink-0 mt-0.5" />
-                  <span className="text-[var(--rpg-text-secondary)] flex-shrink-0 font-mono">{entry.timestamp}</span>
-                  <span className={typeColors[entry.type]}>{entry.message}</span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </PixelCard>
+      <ActivityLog entries={activityLog} maxHeight="max-h-48" />
     </div>
   );
 }

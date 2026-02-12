@@ -58,6 +58,15 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Fade-in animation for exploration event popups */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
 /* Pixel art rendering */
 .image-rendering-pixelated {
   image-rendering: pixelated;

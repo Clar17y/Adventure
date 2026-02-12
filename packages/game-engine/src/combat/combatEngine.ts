@@ -280,33 +280,43 @@ function executeMobSpell(
   mobName: string,
   playerStats: CombatantStats
 ): void {
-  if (spell.damage) {
-    const reduction = calculateDefenceReduction(playerStats.magicDefence);
-    const mitigated = Math.floor(spell.damage * reduction);
-    const finalDamage = Math.max(1, spell.damage - mitigated);
-
-    state.playerHp -= finalDamage;
+  if (!spell.damage) {
+    // Non-damaging spell (buff/effect) — still log the action
     state.log.push({
       round: state.round,
       actor: 'mob',
       action: 'spell',
-      damage: finalDamage,
-      rawDamage: spell.damage,
-      targetMagicDefence: playerStats.magicDefence,
-      magicDefenceReduction: mitigated,
-      message: `The ${mobName} casts ${spell.action} for ${finalDamage} damage!`,
+      message: `The ${mobName} casts ${spell.action}!`,
       ...hpSnapshot(state),
     });
+    return;
+  }
 
-    if (state.playerHp <= 0) {
-      state.outcome = 'defeat';
-      state.log.push({
-        round: state.round,
-        actor: 'mob',
-        action: 'spell',
-        message: `You have been knocked out by the ${mobName}!`,
-        ...hpSnapshot(state),
-      });
-    }
+  const reduction = calculateDefenceReduction(playerStats.magicDefence);
+  const mitigated = Math.floor(spell.damage * reduction);
+  const finalDamage = Math.max(1, spell.damage - mitigated);
+
+  state.playerHp -= finalDamage;
+  state.log.push({
+    round: state.round,
+    actor: 'mob',
+    action: 'spell',
+    damage: finalDamage,
+    rawDamage: spell.damage,
+    targetMagicDefence: playerStats.magicDefence,
+    magicDefenceReduction: mitigated,
+    message: `The ${mobName} casts ${spell.action} for ${finalDamage} damage!`,
+    ...hpSnapshot(state),
+  });
+
+  if (state.playerHp <= 0) {
+    state.outcome = 'defeat';
+    state.log.push({
+      round: state.round,
+      actor: 'mob',
+      action: 'spell',
+      message: `You have been knocked out by the ${mobName}!`,
+      ...hpSnapshot(state),
+    });
   }
 }

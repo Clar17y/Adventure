@@ -423,6 +423,7 @@ export async function travelToZone(zoneId: string) {
   return fetchApi<{
     zone: { id: string; name: string; zoneType: string };
     turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    travelCost: number;
     breadcrumbReturn: boolean;
     events: Array<{
       turn: number;

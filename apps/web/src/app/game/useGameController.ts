@@ -368,6 +368,16 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     playerHpBeforeExploration: number;
     playerMaxHp: number;
   } | null>(null);
+  const [travelPlaybackData, setTravelPlaybackData] = useState<{
+    totalTurns: number;
+    destinationName: string;
+    events: Array<{ turn: number; type: string; description: string; details?: Record<string, unknown> }>;
+    aborted: boolean;
+    refundedTurns: number;
+    playerHpBefore: number;
+    playerMaxHp: number;
+    respawnedToName?: string;
+  } | null>(null);
 
   const loadTurnsAndHp = useCallback(async () => {
     const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
@@ -873,6 +883,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       if (combatPlaybackData) {
         handleCombatPlaybackComplete();
       }
+      if (travelPlaybackData) {
+        handleTravelPlaybackSkip();
+      }
     }
     setActiveScreen(screen as Screen);
   };
@@ -1140,77 +1153,108 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
-      setActiveZoneId(data.zone.id);
 
-      // Process travel events
-      if (data.events.length > 0) {
-        const ambushEvent = data.events.find(
-          (e) => (e.type === 'ambush_victory' || e.type === 'ambush_defeat') && e.details?.log
-        );
-
-        if (ambushEvent && ambushEvent.details) {
-          // Has combat log data — trigger animated playback
-          pushLog({
-            timestamp: nowStamp(),
-            type: 'info',
-            message: `Travelling to ${data.zone.name}...`,
-          });
-
-          const details = ambushEvent.details as Record<string, unknown>;
-          setCombatPlaybackData({
-            mobDisplayName: (details.mobDisplayName as string) ?? (details.mobName as string) ?? 'Unknown',
-            outcome: (details.outcome as string) ?? (ambushEvent.type === 'ambush_victory' ? 'victory' : 'defeat'),
-            playerMaxHp: (details.playerMaxHp as number) ?? hpState.maxHp,
-            playerStartHp: hpBefore,
-            mobMaxHp: (details.mobMaxHp as number) ?? 100,
-            log: (details.log as LastCombatLogEntry[]) ?? [],
-            rewards: {
-              xp: (details.xp as number) ?? 0,
-              loot: (details.loot as LastCombat['rewards']['loot']) ?? [],
-              siteCompletion: null,
-              skillXp: null,
-            },
-          });
-          setPlaybackActive(true);
-
-          // Push non-combat events to the log immediately
-          const nonCombatEvents = data.events.filter(
-            (e) => e.type !== 'ambush_victory' && e.type !== 'ambush_defeat'
-          );
-          if (nonCombatEvents.length > 0) {
-            const stampedEvents = nonCombatEvents.map((event) => ({
-              timestamp: nowStamp(),
-              type: 'info' as const,
-              message: `Turn ${event.turn}: ${event.description}`,
-            }));
-            pushLog(...stampedEvents.reverse());
-          }
-        } else {
-          // No combat log data — push events as before (fallback)
-          const stampedEvents = data.events.map((event) => ({
-            timestamp: nowStamp(),
-            type: (event.type === 'ambush_defeat'
-              ? 'danger'
-              : event.type === 'ambush_victory'
-                ? 'success'
-                : 'info') as 'info' | 'success' | 'danger',
-            message: `Turn ${event.turn}: ${event.description}`,
-          }));
-          pushLog(...stampedEvents.reverse());
-        }
+      // Breadcrumb return — instant, no playback
+      if (data.breadcrumbReturn) {
+        setActiveZoneId(data.zone.id);
+        pushLog({ timestamp: nowStamp(), type: 'success', message: `Returned to ${data.zone.name}.` });
+        await loadAll();
+        return;
       }
 
-      if (data.respawnedTo) {
+      // Trigger travel playback (progress bar + combat if ambushed)
+      // Don't update activeZoneId or loadAll yet — defer until playback completes
+      // so the map doesn't show "HERE" on the destination prematurely.
+      const travelCost = data.travelCost ?? 0;
+      if (travelCost > 0) {
         pushLog({
           timestamp: nowStamp(),
-          type: 'danger' as const,
-          message: `You were knocked out and woke up in ${data.respawnedTo.townName}.`,
+          type: 'info',
+          message: `Travelling to ${data.zone.name}...`,
+        });
+
+        setTravelPlaybackData({
+          totalTurns: travelCost,
+          destinationName: data.zone.name,
+          events: data.events,
+          aborted: data.aborted,
+          refundedTurns: data.refundedTurns,
+          playerHpBefore: hpBefore,
+          playerMaxHp: hpState.maxHp,
+          respawnedToName: data.respawnedTo?.townName,
+        });
+        setPlaybackActive(true);
+      } else {
+        // Zero-cost travel (shouldn't happen normally, but handle gracefully)
+        setActiveZoneId(data.zone.id);
+        pushLog({ timestamp: nowStamp(), type: 'success', message: `Arrived at ${data.zone.name}.` });
+        await loadAll();
+      }
+    });
+  };
+
+  const handleTravelPlaybackComplete = async () => {
+    if (travelPlaybackData) {
+      if (travelPlaybackData.aborted && travelPlaybackData.respawnedToName) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `You were knocked out and woke up in ${travelPlaybackData.respawnedToName}.`,
+        });
+      } else if (travelPlaybackData.aborted) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `Travel to ${travelPlaybackData.destinationName} failed. You fled back to safety.`,
+        });
+      } else {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Arrived at ${travelPlaybackData.destinationName}.`,
         });
       }
+    }
+    setTravelPlaybackData(null);
+    setPlaybackActive(false);
+    await loadAll();
+  };
 
-      // Refresh all state after travel
-      await loadAll();
-    });
+  const handleTravelPlaybackSkip = async () => {
+    if (travelPlaybackData) {
+      const entries = travelPlaybackData.events
+        .slice()
+        .reverse()
+        .map((event) => ({
+          timestamp: nowStamp(),
+          type: (event.type === 'ambush_defeat' ? 'danger' : event.type === 'ambush_victory' ? 'success' : 'info') as 'info' | 'success' | 'danger',
+          message: `Turn ${event.turn}: ${event.description}`,
+        }));
+      pushLog(...entries);
+
+      if (travelPlaybackData.aborted && travelPlaybackData.respawnedToName) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `You were knocked out and woke up in ${travelPlaybackData.respawnedToName}.`,
+        });
+      } else if (travelPlaybackData.aborted) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'danger',
+          message: `Travel to ${travelPlaybackData.destinationName} failed. You fled back to safety.`,
+        });
+      } else {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Arrived at ${travelPlaybackData.destinationName}.`,
+        });
+      }
+    }
+    setTravelPlaybackData(null);
+    setPlaybackActive(false);
+    await loadAll();
   };
 
   const handleAllocateAttribute = async (attribute: AttributeType, points = 1) => {
@@ -1283,6 +1327,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     playbackActive,
     combatPlaybackData,
     explorationPlaybackData,
+    travelPlaybackData,
 
     // Derived
     currentZone,
@@ -1294,6 +1339,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handlePlaybackSkip,
     handleStartCombat,
     handleCombatPlaybackComplete,
+    handleTravelPlaybackComplete,
+    handleTravelPlaybackSkip,
     handleMine,
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,

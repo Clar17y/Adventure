@@ -234,6 +234,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
       return res.json({
         zone: { id: destinationZone.id, name: destinationZone.name, zoneType: destinationZone.zoneType },
         turns: await getTurnSnapshot(),
+        travelCost: 0,
         breadcrumbReturn: true,
         events: [],
         aborted: false,
@@ -455,6 +456,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
               return res.json({
                 zone: { id: respawn.townId, name: respawn.townName, zoneType: 'town' },
                 turns: await getTurnSnapshot(),
+                travelCost,
                 breadcrumbReturn: false,
                 events,
                 aborted: true,
@@ -522,6 +524,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
               return res.json({
                 zone: { id: currentZoneId, name: currentZone.name, zoneType: currentZone.zoneType },
                 turns: await getTurnSnapshot(),
+                travelCost,
                 breadcrumbReturn: false,
                 events,
                 aborted: true,
@@ -560,6 +563,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
     return res.json({
       zone: { id: destinationZone.id, name: destinationZone.name, zoneType: destinationZone.zoneType },
       turns: await getTurnSnapshot(),
+      travelCost,
       breadcrumbReturn: false,
       events,
       aborted: false,

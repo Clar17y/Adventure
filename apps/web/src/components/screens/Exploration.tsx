@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
@@ -9,8 +9,7 @@ import { Mountain, Play } from 'lucide-react';
 import { EXPLORATION_CONSTANTS } from '@adventure/shared';
 import Image from 'next/image';
 import { ActivityLog } from '@/components/ActivityLog';
-import { ExplorationPlayback, type ExplorationPlaybackEvent } from '@/components/exploration/ExplorationPlayback';
-import { CombatPlayback } from '@/components/combat/CombatPlayback';
+import { TurnPlayback } from '@/components/playback/TurnPlayback';
 import type { ActivityLogEntry } from '@/app/game/useGameController';
 
 interface ExplorationProps {
@@ -41,16 +40,6 @@ interface ExplorationProps {
 
 export function Exploration({ currentZone, availableTurns, onStartExploration, activityLog, isRecovering = false, recoveryCost, playbackData, onPlaybackComplete, onPlaybackSkip, onPushLog }: ExplorationProps) {
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
-  const [combatEvent, setCombatEvent] = useState<ExplorationPlaybackEvent | null>(null);
-  const [resumeFromCombat, setResumeFromCombat] = useState(false);
-  const [playerHpForNextCombat, setPlayerHpForNextCombat] = useState<number | null>(null);
-
-  // Reset tracked HP when a new exploration starts
-  useEffect(() => {
-    if (playbackData) {
-      setPlayerHpForNextCombat(null);
-    }
-  }, [playbackData]);
 
   const calculateProbabilities = (turns: number) => {
     const expectedAmbushes = turns * EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN;
@@ -107,115 +96,20 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
         </div>
       </PixelCard>
 
-      {/* Exploration Playback — stays mounted during combat to preserve state */}
+      {/* Exploration Playback (with embedded combat) */}
       {playbackData && (
-        <PixelCard className={combatEvent ? 'hidden' : ''}>
-          <ExplorationPlayback
-            totalTurns={playbackData.totalTurns}
-            zoneName={playbackData.zoneName}
-            events={playbackData.events}
-            aborted={playbackData.aborted}
-            refundedTurns={playbackData.refundedTurns}
-            resumeFromCombat={resumeFromCombat}
-            onEventRevealed={(event) => {
-              // Skip logging ambush events here — they'll be logged after combat playback
-              const isAmbushWithCombat = (event.type === 'ambush_defeat' || event.type === 'ambush_victory') && event.details?.log;
-              if (isAmbushWithCombat) return;
-
-              const typeMap: Record<string, 'info' | 'success' | 'danger'> = {
-                ambush_defeat: 'danger',
-                ambush_victory: 'success',
-                encounter_site: 'success',
-                resource_node: 'success',
-              };
-              onPushLog?.({
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                type: typeMap[event.type] ?? 'info',
-                message: `Turn ${event.turn}: ${event.description}`,
-              });
-            }}
-            onCombatStart={(event) => {
-              setCombatEvent(event);
-            }}
-            onComplete={() => {
-              onPlaybackComplete?.();
-            }}
-            onSkip={() => {
-              onPlaybackSkip?.();
-            }}
-          />
-        </PixelCard>
-      )}
-
-      {/* Combat Playback — embedded combat animation during exploration */}
-      {playbackData && combatEvent && (
-        <PixelCard>
-          <CombatPlayback
-            key={combatEvent.turn}
-            mobDisplayName={(combatEvent.details?.mobDisplayName as string) ?? 'Unknown'}
-            outcome={(combatEvent.details?.outcome as string) ?? 'defeat'}
-            playerMaxHp={playbackData.playerMaxHp}
-            playerStartHp={playerHpForNextCombat ?? playbackData.playerHpBeforeExploration}
-            mobMaxHp={(combatEvent.details?.mobMaxHp as number) ?? 100}
-            log={(combatEvent.details?.log as Array<{
-              round: number;
-              actor: 'player' | 'mob';
-              action: string;
-              message: string;
-              roll?: number;
-              damage?: number;
-              evaded?: boolean;
-              attackModifier?: number;
-              accuracyModifier?: number;
-              targetDodge?: number;
-              targetEvasion?: number;
-              targetDefence?: number;
-              targetMagicDefence?: number;
-              rawDamage?: number;
-              armorReduction?: number;
-              magicDefenceReduction?: number;
-              isCritical?: boolean;
-              critMultiplier?: number;
-              playerHpAfter?: number;
-              mobHpAfter?: number;
-            }>) ?? []}
-            onComplete={() => {
-              // Track player HP after this fight for the next combat
-              const combatLog = (combatEvent.details?.log as Array<{ playerHpAfter?: number }>) ?? [];
-              if (combatLog.length > 0) {
-                const lastEntry = combatLog[combatLog.length - 1];
-                if (lastEntry.playerHpAfter !== undefined) {
-                  setPlayerHpForNextCombat(lastEntry.playerHpAfter);
-                }
-              }
-
-              // Now that combat playback is done, log the ambush result
-              const typeMap: Record<string, 'info' | 'success' | 'danger'> = {
-                ambush_defeat: 'danger',
-                ambush_victory: 'success',
-              };
-              onPushLog?.({
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                type: typeMap[combatEvent.type] ?? 'info',
-                message: `Turn ${combatEvent.turn}: ${combatEvent.description}`,
-              });
-
-              setCombatEvent(null);
-              if (combatEvent.type === 'ambush_defeat') {
-                // Knockout — playback is done
-                onPlaybackComplete?.();
-              } else {
-                // Victory — resume exploration playback
-                setResumeFromCombat(true);
-                setTimeout(() => setResumeFromCombat(false), 100);
-              }
-            }}
-            onSkip={() => {
-              setCombatEvent(null);
-              onPlaybackSkip?.();
-            }}
-          />
-        </PixelCard>
+        <TurnPlayback
+          totalTurns={playbackData.totalTurns}
+          label={`Exploring ${playbackData.zoneName}`}
+          events={playbackData.events}
+          aborted={playbackData.aborted}
+          refundedTurns={playbackData.refundedTurns}
+          playerHpBefore={playbackData.playerHpBeforeExploration}
+          playerMaxHp={playbackData.playerMaxHp}
+          onComplete={onPlaybackComplete!}
+          onSkip={onPlaybackSkip!}
+          onPushLog={onPushLog}
+        />
       )}
 
       {/* Normal exploration UI — hide during playback */}

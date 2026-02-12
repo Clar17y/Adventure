@@ -11,7 +11,7 @@ export interface ExplorationPlaybackEvent {
 
 interface ExplorationPlaybackProps {
   totalTurns: number;
-  zoneName: string;
+  label: string;
   events: ExplorationPlaybackEvent[];
   aborted: boolean;
   refundedTurns: number;
@@ -42,7 +42,7 @@ function getEventDisplay(type: string): { icon: string; color: string } {
 
 export function ExplorationPlayback({
   totalTurns,
-  zoneName,
+  label,
   events,
   aborted,
   refundedTurns,
@@ -137,7 +137,7 @@ export function ExplorationPlayback({
     <div className="space-y-4">
       {/* Header */}
       <div className="text-center">
-        <div className="text-sm text-[var(--rpg-text-secondary)]">Exploring {zoneName}</div>
+        <div className="text-sm text-[var(--rpg-text-secondary)]">{label}</div>
         <div className="text-xs text-[var(--rpg-text-secondary)] font-mono mt-1">
           Turn {currentTurn.toLocaleString()} / {totalTurns.toLocaleString()}
         </div>

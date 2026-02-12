@@ -209,6 +209,7 @@ export default function GamePage() {
     playbackActive,
     combatPlaybackData,
     explorationPlaybackData,
+    travelPlaybackData,
     currentZone,
     ownedByTemplateId,
     handleStartExploration,
@@ -216,6 +217,8 @@ export default function GamePage() {
     handlePlaybackSkip,
     handleStartCombat,
     handleCombatPlaybackComplete,
+    handleTravelPlaybackComplete,
+    handleTravelPlaybackSkip,
     handleMine,
     handleGatheringPageChange,
     handleGatheringZoneFilterChange,
@@ -489,6 +492,11 @@ export default function GamePage() {
             availableTurns={turns}
             isRecovering={hpState.isRecovering}
             playbackActive={playbackActive}
+            travelPlaybackData={travelPlaybackData}
+            onTravelPlaybackComplete={handleTravelPlaybackComplete}
+            onTravelPlaybackSkip={handleTravelPlaybackSkip}
+            onPushLog={pushLog}
+            activityLog={activityLog}
             onTravel={handleTravelToZone}
             onExploreCurrentZone={() => setActiveScreen('explore')}
           />

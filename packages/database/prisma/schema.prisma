@@ -228,12 +228,14 @@ model MobTemplate {
   hp              Int
   accuracy        Int
   defence         Int
+  magicDefence    Int    @default(0) @map("magic_defence")
   evasion         Int
   damageMin       Int    @map("damage_min")
   damageMax       Int    @map("damage_max")
   xpReward        Int    @map("xp_reward")
   encounterWeight Int    @default(100) @map("encounter_weight")
   spellPattern    Json   @default("[]") @map("spell_pattern")
+  damageType      String @default("physical") @map("damage_type")
 
   zone             Zone              @relation(fields: [zoneId], references: [id])
   dropTables       DropTable[]

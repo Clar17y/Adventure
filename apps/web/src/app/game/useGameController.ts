@@ -612,10 +612,6 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setPendingEncounterPage(1);
   }, []);
 
-  const handleNavigate = useCallback((screen: string) => {
-    setActiveScreen(screen as Screen);
-  }, []);
-
   const getActiveTab = () => {
     if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
@@ -880,6 +876,19 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
     setCombatPlaybackData(null);
     setPlaybackActive(false);
+  };
+
+  const handleNavigate = (screen: string) => {
+    // Auto-skip any active playback when navigating away
+    if (playbackActive) {
+      if (explorationPlaybackData) {
+        handlePlaybackSkip();
+      }
+      if (combatPlaybackData) {
+        handleCombatPlaybackComplete();
+      }
+    }
+    setActiveScreen(screen as Screen);
   };
 
   const handleMine = async (playerNodeId: string, turnSpend: number) => {

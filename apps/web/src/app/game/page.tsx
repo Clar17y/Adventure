@@ -488,6 +488,7 @@ export default function GamePage() {
             currentZoneId={activeZoneId ?? ''}
             availableTurns={turns}
             isRecovering={hpState.isRecovering}
+            playbackActive={playbackActive}
             onTravel={handleTravelToZone}
             onExploreCurrentZone={() => setActiveScreen('explore')}
           />

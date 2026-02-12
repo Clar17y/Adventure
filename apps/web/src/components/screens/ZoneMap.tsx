@@ -19,6 +19,7 @@ interface ZoneMapProps {
   currentZoneId: string;
   availableTurns: number;
   isRecovering: boolean;
+  playbackActive?: boolean;
   onTravel: (zoneId: string) => void;
   onExploreCurrentZone: () => void;
 }
@@ -70,6 +71,7 @@ export function ZoneMap({
   currentZoneId,
   availableTurns,
   isRecovering,
+  playbackActive,
   onTravel,
   onExploreCurrentZone,
 }: ZoneMapProps) {
@@ -134,6 +136,7 @@ export function ZoneMap({
     selectedZone.discovered &&
     selectedZone.id !== currentZoneId &&
     !isRecovering &&
+    !playbackActive &&
     availableTurns >= selectedZone.travelCost;
 
   return (

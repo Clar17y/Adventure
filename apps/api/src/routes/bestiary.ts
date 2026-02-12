@@ -65,6 +65,10 @@ bestiaryRouter.get('/', async (req, res, next) => {
         const kills = killsByMobId.get(mob.id) ?? 0;
         const prefixEncounters = (prefixesByMobId.get(mob.id) ?? [])
           .sort((a, b) => b.kills - a.kills || a.displayName.localeCompare(b.displayName));
+        const mobStats = mob as unknown as { accuracy?: number; attack?: number };
+        const mobAccuracy = typeof mobStats.accuracy === 'number'
+          ? mobStats.accuracy
+          : Math.floor(mobStats.attack ?? 0);
         return {
           id: mob.id,
           name: mob.name,
@@ -73,7 +77,7 @@ bestiaryRouter.get('/', async (req, res, next) => {
           killCount: kills,
           stats: {
             hp: mob.hp,
-            attack: mob.attack,
+            accuracy: mobAccuracy,
             defence: mob.defence,
           },
           zones: [mob.zone.name],

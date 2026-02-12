@@ -45,7 +45,7 @@ describe('applyMobPrefix', () => {
     zoneId: 'zone-1',
     level: 1,
     hp: 15,
-    attack: 8,
+    accuracy: 8,
     defence: 3,
     evasion: 2,
     damageMin: 1,
@@ -69,7 +69,7 @@ describe('applyMobPrefix', () => {
     expect(result.mobPrefix).toBe('shaman');
     expect(result.mobDisplayName).toBe('Shaman Forest Rat');
     expect(result.name).toBe('Shaman Forest Rat');
-    expect(result.attack).toBe(6);
+    expect(result.accuracy).toBe(6);
     expect(result.defence).toBe(2);
     expect(result.damageMin).toBe(1);
     expect(result.damageMax).toBe(3);

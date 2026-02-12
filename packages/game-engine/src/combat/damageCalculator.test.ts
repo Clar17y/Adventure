@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPlayerCombatStats,
   calculateFinalDamage,
+  doesAttackHit,
   isCriticalHit,
 } from './damageCalculator';
 
@@ -79,5 +80,19 @@ describe('buildPlayerCombatStats', () => {
 
     expect(stats.critChance).toBe(0.2);
     expect(stats.critDamage).toBe(0.35);
+  });
+});
+
+describe('doesAttackHit', () => {
+  it('uses only roll + accuracy against dodge/evasion threshold', () => {
+    // roll + accuracy = 10 + 4
+    // threshold = 10 + 4 + floor(6 / 2) = 17
+    expect(doesAttackHit(10, 4, 4, 6)).toBe(false);
+    expect(doesAttackHit(13, 4, 4, 6)).toBe(true);
+  });
+
+  it('still applies nat 1 auto-miss and nat 20 auto-hit', () => {
+    expect(doesAttackHit(1, 999, 999, 999)).toBe(false);
+    expect(doesAttackHit(20, 0, 999, 999)).toBe(true);
   });
 });

@@ -1,129 +1,206 @@
 # Adventure RPG
 
-Turn-based async RPG with real-time turn regeneration. Explore, fight mobs, craft gear, and progress skills.
+Turn-based async RPG monorepo with a Next.js web client, Express API, Prisma/PostgreSQL data layer, and shared TypeScript game logic packages.
+
+## Current Scope
+
+- Turn economy with real-time regen and bank cap
+- Character progression with combat/gathering/crafting skills
+- Attribute allocation and HP recovery systems (rest + knockout recovery)
+- Zone discovery/travel graph, travel ambushes, and town vs wild zone flow
+- Exploration outcomes: ambushes, encounter sites, resource node discoveries, hidden caches
+- Combat logs/history, bestiary tracking, and mob prefix encounters
+- Inventory and equipment management with durability + consumables
+- Gathering (mining/foraging/woodcutting)
+- Crafting, recipe discovery/unlocks, salvage, and forge upgrade/reroll systems
 
 ## Tech Stack
 
-| Component | Technology | Hosting |
-|-----------|------------|---------|
-| Frontend | Next.js 16 (TypeScript) PWA | Vercel |
-| Backend | Node.js Express (TypeScript) | Render |
-| Database | PostgreSQL | Neon |
-| Cache | Redis | Upstash |
-| Auth | Custom JWT | - |
+| Layer | Technology |
+|---|---|
+| Web | Next.js 16 + React + TypeScript |
+| API | Express 4 + TypeScript |
+| Data | PostgreSQL + Prisma |
+| Shared Logic | Workspace packages (`@adventure/shared`, `@adventure/game-engine`) |
+| Auth | JWT access + refresh token flow |
 
-## Quick Start
+## Monorepo Layout
+
+```text
+Adventure/
+|-- apps/
+|   |-- api/                # Express API
+|   `-- web/                # Next.js frontend
+|-- packages/
+|   |-- database/           # Prisma schema/client + migrations + seed
+|   |-- game-engine/        # Pure gameplay calculations
+|   `-- shared/             # Shared types and constants
+|-- docs/                   # Design docs, plans, and test notes
+|-- docker-compose.yml      # Local postgres + redis
+`-- scripts/link-local.ps1  # Local symlink/junction helper
+```
+
+## Local Development
 
 ### Prerequisites
-- Node.js 20+
-- Docker (for local Postgres + Redis)
 
-### Setup
+- Node.js 20+
+- Docker Desktop (or equivalent) for local Postgres/Redis
+
+### 1) Install dependencies
 
 ```bash
-# Clone and install
-git clone <repo>
-cd Adventure
 npm install
+```
 
-# Start local databases
+### 2) Start local infrastructure
+
+```bash
 docker-compose up -d
+```
 
-# Run database migrations
+This brings up:
+- PostgreSQL on `localhost:5433`
+- Redis on `localhost:6379`
+
+### 3) Configure environment
+
+Create local env files from examples:
+
+- `apps/api/.env` from `apps/api/.env.example`
+- `apps/web/.env.local` from `apps/web/.env.example`
+
+Minimum useful values:
+
+```env
+# apps/api/.env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/adventure
+JWT_SECRET=change-this-to-a-long-random-secret
+PORT=4000
+CORS_ORIGINS=http://localhost:3002,http://127.0.0.1:3002
+```
+
+```env
+# apps/web/.env.local
+NEXT_PUBLIC_API_URL=http://localhost:4000
+```
+
+### 4) Run migrations and seed data
+
+```bash
 npm run db:migrate
+npm run db:seed
+```
 
-# Build packages and start dev servers
+Note: `db:seed` reseeds world/template data (zones, mobs, recipes, etc).
+
+### 5) Start the app
+
+```bash
 npm run dev
 ```
 
-### URLs
-- Frontend: http://localhost:3002
-- API: http://localhost:4000
-- API Health: http://localhost:4000/health
+### Local URLs
 
-## Project Structure
+- Web: `http://localhost:3002`
+- API: `http://localhost:4000`
+- API health: `http://localhost:4000/health`
 
-```
-Adventure/
-├── apps/
-│   ├── web/              # Next.js frontend
-│   └── api/              # Express backend
-├── packages/
-│   ├── shared/           # Types, constants
-│   ├── game-engine/      # Pure game logic
-│   └── database/         # Prisma schema
-└── docs/
-    ├── plans/            # Design docs
-    └── assets/           # Game art + workflow
-```
-
-## Scripts
+## Root Scripts
 
 ```bash
-npm run dev           # Start all services
-npm run dev:web       # Frontend only
-npm run dev:api       # Backend only
-npm run clean         # Remove build outputs + stray TS emits
-npm run build         # Build everything
-npm run db:migrate    # Run migrations
-npm run db:studio     # Open Prisma Studio
-npm run typecheck     # TypeScript check (packages + api)
+npm run dev            # Build shared packages, then run API + Web in parallel
+npm run dev:api        # API only
+npm run dev:web        # Web only
+npm run build          # Build all packages and apps
+npm run build:api      # Build shared + API
+npm run build:web      # Build shared + Web
+npm run clean          # Remove build outputs and stray TS emits
+npm run typecheck      # TS project refs (packages + api)
+npm run lint           # ESLint
+npm run test           # Run workspace tests
+npm run test:api       # API tests
+npm run test:engine    # Game-engine tests
+npm run db:migrate     # Prisma migrate dev
+npm run db:seed        # Seed world/template content
+npm run db:studio      # Prisma Studio
 ```
 
-Notes:
-- `npx tsc` from the repo root intentionally does not typecheck the Next.js app. Use `npm run build -w apps/web` (or `npx tsc -p apps/web/tsconfig.json`) for web typechecking.
+Typechecking note: root `tsconfig.json` intentionally excludes `apps/web`; use `npm run build -w apps/web` for web type validation.
 
-## Game Features (MVP)
+## API Surface (`/api/v1`)
 
-- **Turn Economy**: 1 turn/sec regeneration, 18hr bank cap
-- **Skills**: Melee, Ranged, Magic, Defence, Vitality, Evasion, Mining, Weaponsmithing
-- **Combat**: D&D-style resolution with logs
-- **Exploration**: Probability-based encounters
-- **Equipment**: 11 slots with durability
-- **Crafting**: Weaponsmithing from gathered resources
+### Auth
 
-## API Endpoints
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
 
-```
-POST   /api/v1/auth/register
-POST   /api/v1/auth/login
-POST   /api/v1/auth/refresh
-GET    /api/v1/turns
-POST   /api/v1/turns/spend
-GET    /api/v1/zones
-GET    /api/v1/player
-GET    /api/v1/player/skills
-GET    /api/v1/player/equipment
-GET    /api/v1/exploration/estimate
-POST   /api/v1/exploration/start
-POST   /api/v1/combat/start
-GET    /api/v1/combat/logs/:id
-GET    /api/v1/inventory
-DELETE /api/v1/inventory/:id
-POST   /api/v1/inventory/repair
-POST   /api/v1/equipment/equip
-POST   /api/v1/equipment/unequip
-POST   /api/v1/gathering/mine
-GET    /api/v1/crafting/recipes
-POST   /api/v1/crafting/craft
-```
+### Player and Progression
 
-## Testing (Phase 4)
+- `GET /player`
+- `GET /player/skills`
+- `GET /player/attributes`
+- `POST /player/attributes`
+- `GET /player/equipment`
 
-- Seed + manual smoke test steps: `docs/testing/phase-4.md`
+### Turns and HP
 
-## Testing (Phase 5)
+- `GET /turns`
+- `POST /turns/spend`
+- `GET /hp`
+- `POST /hp/rest`
+- `GET /hp/rest/estimate`
+- `POST /hp/recover`
 
-- Inventory/equipment/durability smoke tests: `docs/testing/phase-5.md`
+### Zones and Exploration
 
-## Testing (Phase 6)
+- `GET /zones`
+- `POST /zones/travel`
+- `GET /exploration/estimate`
+- `POST /exploration/start`
 
-- Mining/crafting smoke tests: `docs/testing/phase-6.md`
+### Combat
 
-## UI (`/game`)
+- `GET /combat/sites`
+- `POST /combat/sites/abandon`
+- `POST /combat/start`
+- `GET /combat/logs`
+- `GET /combat/logs/:id`
 
-- Current wiring status + what is real vs mocked: `docs/ui/game.md`
+### Inventory and Equipment
+
+- `GET /inventory`
+- `DELETE /inventory/:id`
+- `POST /inventory/repair`
+- `POST /inventory/use`
+- `POST /equipment/equip`
+- `POST /equipment/unequip`
+- `POST /equipment/init` (dev helper)
+
+### Gathering and Crafting
+
+- `GET /gathering/nodes`
+- `POST /gathering/mine`
+- `GET /crafting/recipes`
+- `POST /crafting/craft`
+- `POST /crafting/forge/upgrade`
+- `POST /crafting/forge/reroll`
+- `POST /crafting/salvage`
+
+### Bestiary
+
+- `GET /bestiary`
+
+## Useful Docs
+
+- UI state notes: `docs/ui/game.md`
+- Manual testing notes: `docs/testing/phase-4.md`
+- Manual testing notes: `docs/testing/phase-5.md`
+- Manual testing notes: `docs/testing/phase-6.md`
+- Feature/design plans: `docs/plans/`
 
 ## License
 
-Private - All rights reserved
+Private - All rights reserved.

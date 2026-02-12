@@ -265,40 +265,40 @@ const armorTiers: ArmorTierDef[] = [
     reqLevel: 1,
     slots: ['head', 'chest'],
     heavy: { prefix: 'Copper', chestName: 'Copper Chainmail', stats: { armor: 5 } },
-    medium: { prefix: 'Boar Leather', chestName: 'Boar Leather Vest', stats: { armor: 3, evasion: 1 } },
-    light: { prefix: 'Silk', chestName: 'Silk Robe', stats: { armor: 1, magicDefence: 2, evasion: 2 } },
+    medium: { prefix: 'Boar Leather', chestName: 'Boar Leather Vest', stats: { armor: 3, dodge: 1 } },
+    light: { prefix: 'Silk', chestName: 'Silk Robe', stats: { armor: 1, magicDefence: 2, dodge: 2 } },
   },
   {
     tier: 2,
     reqLevel: 5,
     slots: ['head', 'chest', 'legs'],
     heavy: { prefix: 'Tin Plate', chestName: 'Tin Plate Cuirass', stats: { armor: 8 } },
-    medium: { prefix: 'Wolf Leather', chestName: 'Wolf Leather Vest', stats: { armor: 5, evasion: 2 } },
-    light: { prefix: 'Woven', chestName: 'Woven Tunic', stats: { armor: 2, magicDefence: 4, evasion: 3 } },
+    medium: { prefix: 'Wolf Leather', chestName: 'Wolf Leather Vest', stats: { armor: 5, dodge: 2 } },
+    light: { prefix: 'Woven', chestName: 'Woven Tunic', stats: { armor: 2, magicDefence: 4, dodge: 3 } },
   },
   {
     tier: 3,
     reqLevel: 12,
     slots: ['head', 'chest', 'legs', 'boots', 'gloves'],
     heavy: { prefix: 'Iron', chestName: 'Iron Breastplate', stats: { armor: 12 } },
-    medium: { prefix: 'Warg Hide', chestName: 'Warg Hide Coat', stats: { armor: 8, evasion: 3 } },
-    light: { prefix: 'Fae Silk', chestName: 'Fae Silk Robe', stats: { armor: 3, magicDefence: 6, evasion: 5 } },
+    medium: { prefix: 'Warg Hide', chestName: 'Warg Hide Coat', stats: { armor: 8, dodge: 3 } },
+    light: { prefix: 'Fae Silk', chestName: 'Fae Silk Robe', stats: { armor: 3, magicDefence: 6, dodge: 5 } },
   },
   {
     tier: 4,
     reqLevel: 20,
     slots: ['head', 'chest', 'legs', 'boots', 'gloves', 'belt'],
     heavy: { prefix: 'Dark Iron', chestName: 'Dark Iron Platemail', stats: { armor: 18 } },
-    medium: { prefix: 'Croc Scale', chestName: 'Croc Scale Vest', stats: { armor: 12, evasion: 4 } },
-    light: { prefix: 'Cursed', chestName: 'Cursed Garb', stats: { armor: 5, magicDefence: 10, evasion: 7 } },
+    medium: { prefix: 'Croc Scale', chestName: 'Croc Scale Vest', stats: { armor: 12, dodge: 4 } },
+    light: { prefix: 'Cursed', chestName: 'Cursed Garb', stats: { armor: 5, magicDefence: 10, dodge: 7 } },
   },
   {
     tier: 5,
     reqLevel: 30,
     slots: ['head', 'chest', 'legs', 'boots', 'gloves', 'belt'],
     heavy: { prefix: 'Mithril', chestName: 'Mithril Warplate', stats: { armor: 24 } },
-    medium: { prefix: 'Naga Scale', chestName: 'Naga Scale Armour', stats: { armor: 16, evasion: 6 } },
-    light: { prefix: 'Spectral', chestName: 'Spectral Robe', stats: { armor: 7, magicDefence: 14, evasion: 9 } },
+    medium: { prefix: 'Naga Scale', chestName: 'Naga Scale Armour', stats: { armor: 16, dodge: 6 } },
+    light: { prefix: 'Spectral', chestName: 'Spectral Robe', stats: { armor: 7, magicDefence: 14, dodge: 9 } },
   },
 ];
 
@@ -325,9 +325,6 @@ function generateArmor() {
           baseStats[stat] = Math.max(1, Math.round(val * scale));
         }
 
-        // Determine required skill based on weight
-        const reqSkill = weight === 'heavy' ? 'defence' : weight === 'medium' ? 'defence' : 'magic';
-
         items.push(
           it({
             id,
@@ -336,7 +333,6 @@ function generateArmor() {
             slot,
             tier: td.tier,
             weightClass: weight,
-            requiredSkill: reqSkill,
             requiredLevel: td.reqLevel,
             baseStats,
             maxDurability: 60 + td.tier * 20,
@@ -352,14 +348,14 @@ function generateArmor() {
 
 const advancedGear = [
   // Tier 1
-  it({ id: IDS.adv.ratHideGloves, name: 'Rat Hide Gloves', itemType: 'armor', slot: 'gloves', tier: 1, weightClass: 'medium', requiredLevel: 1, baseStats: { attack: 2, evasion: 1 }, maxDurability: 60 }),
+  it({ id: IDS.adv.ratHideGloves, name: 'Rat Hide Gloves', itemType: 'armor', slot: 'gloves', tier: 1, weightClass: 'medium', requiredLevel: 1, baseStats: { attack: 2, dodge: 1 }, maxDurability: 60 }),
   it({ id: IDS.adv.spiderSilkBelt, name: 'Spider Silk Belt', itemType: 'armor', slot: 'belt', tier: 1, weightClass: 'light', requiredLevel: 1, baseStats: { health: 3, dodge: 2 }, maxDurability: 60 }),
   it({ id: IDS.adv.boarHideBoots, name: 'Boar Hide Boots', itemType: 'armor', slot: 'boots', tier: 1, weightClass: 'medium', requiredLevel: 1, baseStats: { armor: 2, health: 2 }, maxDurability: 60 }),
   // Tier 2
   it({ id: IDS.adv.wolfFangNecklace, name: 'Wolf Fang Necklace', itemType: 'armor', slot: 'neck', tier: 2, requiredLevel: 5, baseStats: { attack: 3, critChance: 0.01 }, maxDurability: 80 }),
-  it({ id: IDS.adv.banditsLuckyRing, name: "Bandit's Lucky Ring", itemType: 'armor', slot: 'ring', tier: 2, requiredLevel: 5, baseStats: { luck: 3, evasion: 2 }, maxDurability: 80 }),
+  it({ id: IDS.adv.banditsLuckyRing, name: "Bandit's Lucky Ring", itemType: 'armor', slot: 'ring', tier: 2, requiredLevel: 5, baseStats: { luck: 3, dodge: 2 }, maxDurability: 80 }),
   it({ id: IDS.adv.ironbarkGloves, name: 'Ironbark Gloves', itemType: 'armor', slot: 'gloves', tier: 2, weightClass: 'heavy', requiredLevel: 5, baseStats: { armor: 4, magicDefence: 3 }, maxDurability: 80 }),
-  it({ id: IDS.adv.batWingBoots, name: 'Bat Wing Boots', itemType: 'armor', slot: 'boots', tier: 2, weightClass: 'light', requiredLevel: 5, baseStats: { dodge: 4, evasion: 2 }, maxDurability: 80 }),
+  it({ id: IDS.adv.batWingBoots, name: 'Bat Wing Boots', itemType: 'armor', slot: 'boots', tier: 2, weightClass: 'light', requiredLevel: 5, baseStats: { dodge: 6 }, maxDurability: 80 }),
   it({ id: IDS.adv.goblinTrinketCharm, name: 'Goblin Trinket Charm', itemType: 'armor', slot: 'charm', tier: 2, requiredLevel: 5, baseStats: { luck: 2, health: 3 }, maxDurability: 80 }),
   // Tier 3
   it({ id: IDS.adv.spriteDustRing, name: 'Sprite Dust Ring', itemType: 'armor', slot: 'ring', tier: 3, requiredLevel: 12, baseStats: { magicPower: 4, luck: 2 }, maxDurability: 100 }),
@@ -367,9 +363,9 @@ const advancedGear = [
   it({ id: IDS.adv.heartwoodShield, name: 'Heartwood Shield', itemType: 'armor', slot: 'off_hand', tier: 3, weightClass: 'heavy', requiredLevel: 12, baseStats: { armor: 6, health: 4 }, maxDurability: 100 }),
   it({ id: IDS.adv.crystalCoreBelt, name: 'Crystal Core Belt', itemType: 'armor', slot: 'belt', tier: 3, weightClass: 'heavy', requiredLevel: 12, baseStats: { armor: 5, health: 5 }, maxDurability: 100 }),
   it({ id: IDS.adv.chitinGauntlets, name: 'Chitin Gauntlets', itemType: 'armor', slot: 'gloves', tier: 3, weightClass: 'medium', requiredLevel: 12, baseStats: { attack: 4, armor: 3 }, maxDurability: 100 }),
-  it({ id: IDS.adv.wargRiderBelt, name: 'Warg Rider Belt', itemType: 'armor', slot: 'belt', tier: 3, weightClass: 'medium', requiredLevel: 12, baseStats: { attack: 3, evasion: 3, health: 2 }, maxDurability: 100 }),
+  it({ id: IDS.adv.wargRiderBelt, name: 'Warg Rider Belt', itemType: 'armor', slot: 'belt', tier: 3, weightClass: 'medium', requiredLevel: 12, baseStats: { attack: 3, dodge: 3, health: 2 }, maxDurability: 100 }),
   it({ id: IDS.adv.warlordsSignet, name: "Warlord's Signet", itemType: 'armor', slot: 'ring', tier: 3, requiredLevel: 12, baseStats: { attack: 3, critDamage: 0.1 }, maxDurability: 100 }),
-  it({ id: IDS.adv.windcallersCharm, name: "Windcaller's Charm", itemType: 'armor', slot: 'charm', tier: 3, requiredLevel: 12, baseStats: { dodge: 5, evasion: 3 }, maxDurability: 100 }),
+  it({ id: IDS.adv.windcallersCharm, name: "Windcaller's Charm", itemType: 'armor', slot: 'charm', tier: 3, requiredLevel: 12, baseStats: { dodge: 8 }, maxDurability: 100 }),
   // Tier 4
   it({ id: IDS.adv.deathKnightsRing, name: "Death Knight's Ring", itemType: 'armor', slot: 'ring', tier: 4, requiredLevel: 20, baseStats: { attack: 5, critChance: 0.02 }, maxDurability: 120 }),
   it({ id: IDS.adv.hydraScaleShield, name: 'Hydra Scale Shield', itemType: 'armor', slot: 'off_hand', tier: 4, weightClass: 'heavy', requiredLevel: 20, baseStats: { armor: 8, health: 6 }, maxDurability: 120 }),

@@ -7,7 +7,6 @@ import { BookOpen, X, MapPin, Sword, Shield, Heart } from 'lucide-react';
 import Image from 'next/image';
 import { uiIconSrc } from '@/lib/assets';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
-import { getMobPrefixDefinition } from '@adventure/shared';
 
 interface MonsterDrop {
   name: string;
@@ -31,19 +30,60 @@ interface Monster {
   drops: MonsterDrop[];
   zones: string[];
   description: string;
-  prefixEncounters: Array<{
-    prefix: string;
-    displayName: string;
-    kills: number;
-  }>;
+  prefixesEncountered: string[];
+}
+
+interface PrefixSummaryEntry {
+  prefix: string;
+  displayName: string;
+  totalKills: number;
+  discovered: boolean;
 }
 
 interface BestiaryProps {
   monsters: Monster[];
+  prefixSummary: PrefixSummaryEntry[];
 }
 
-export function Bestiary({ monsters }: BestiaryProps) {
+const PREFIX_ORDER = ['weak', 'frail', 'tough', 'gigantic', 'swift', 'ferocious', 'shaman', 'venomous', 'ancient', 'spectral'];
+const TOTAL_PREFIXES = PREFIX_ORDER.length;
+
+function PrefixPipRow({ encountered }: { encountered: string[] }) {
+  const encounteredSet = new Set(encountered);
+  const count = encounteredSet.size;
+  const mastered = count === TOTAL_PREFIXES;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex gap-0.5">
+        {PREFIX_ORDER.map((prefix) => {
+          const found = encounteredSet.has(prefix);
+          return (
+            <div
+              key={prefix}
+              title={found ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : '???'}
+              className={`w-2 h-2 rounded-full ${
+                mastered
+                  ? 'bg-[var(--rpg-gold)]'
+                  : found
+                    ? 'bg-[var(--rpg-blue-light)]'
+                    : 'bg-[var(--rpg-border)]'
+              }`}
+            />
+          );
+        })}
+      </div>
+      <span className={`text-[10px] font-mono ${mastered ? 'text-[var(--rpg-gold)]' : 'text-[var(--rpg-text-secondary)]'}`}>
+        {count}/{TOTAL_PREFIXES}
+      </span>
+      {mastered && <span className="text-[10px] text-[var(--rpg-gold)] font-bold">Mastered</span>}
+    </div>
+  );
+}
+
+export function Bestiary({ monsters, prefixSummary }: BestiaryProps) {
   const [selectedMonster, setSelectedMonster] = useState<Monster | null>(null);
+  const [activeView, setActiveView] = useState<'monsters' | 'prefixes'>('monsters');
   const sortedMonsters = [...monsters].sort((a, b) => Number(b.isDiscovered) - Number(a.isDiscovered));
 
   const discoveredCount = monsters.filter((m) => m.isDiscovered).length;
@@ -55,26 +95,6 @@ export function Bestiary({ monsters }: BestiaryProps) {
     showDefence: killCount >= 10,
     showDrops: killCount >= 3,
   });
-
-  const formatMultiplier = (value: number) => `${Number(value.toFixed(2))}x`;
-
-  const getPrefixEffectsText = (prefixKey: string) => {
-    const definition = getMobPrefixDefinition(prefixKey);
-    if (!definition) return 'Unknown effects';
-
-    const effects: string[] = [];
-    if (definition.statMultipliers.hp !== undefined) effects.push(`HP ${formatMultiplier(definition.statMultipliers.hp)}`);
-    if (definition.statMultipliers.accuracy !== undefined) effects.push(`ACC ${formatMultiplier(definition.statMultipliers.accuracy)}`);
-    if (definition.statMultipliers.defence !== undefined) effects.push(`DEF ${formatMultiplier(definition.statMultipliers.defence)}`);
-    if (definition.statMultipliers.evasion !== undefined) effects.push(`DOD ${formatMultiplier(definition.statMultipliers.evasion)}`);
-    if (definition.statMultipliers.damageMin !== undefined || definition.statMultipliers.damageMax !== undefined) {
-      const min = formatMultiplier(definition.statMultipliers.damageMin ?? 1);
-      const max = formatMultiplier(definition.statMultipliers.damageMax ?? 1);
-      effects.push(`DMG ${min}-${max}`);
-    }
-
-    return effects.length > 0 ? effects.join(' | ') : 'No stat changes';
-  };
 
   return (
     <div className="space-y-4">
@@ -300,35 +320,13 @@ export function Bestiary({ monsters }: BestiaryProps) {
                 </div>
               )}
 
-              <div className="mb-4">
-                <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm mb-2">Variants</h4>
-                {selectedMonster.prefixEncounters.length === 0 ? (
-                  <div className="text-xs text-[var(--rpg-text-secondary)]">No prefix variants encountered yet.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedMonster.prefixEncounters.map((variant) => {
-                      const showName = variant.kills >= 1;
-                      const showEffects = variant.kills >= 3;
-                      return (
-                        <div
-                          key={`${selectedMonster.id}-${variant.prefix}`}
-                          className="rounded border border-[var(--rpg-border)] bg-[var(--rpg-background)] p-2"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className={`text-sm ${showName ? 'text-[var(--rpg-text-primary)]' : 'text-[var(--rpg-text-secondary)]'}`}>
-                              {showName ? variant.displayName : '??? Variant'}
-                            </div>
-                            <div className="text-xs text-[var(--rpg-gold)] font-mono">x{variant.kills}</div>
-                          </div>
-                          <div className="text-xs text-[var(--rpg-text-secondary)] mt-1">
-                            {showEffects ? getPrefixEffectsText(variant.prefix) : 'Defeat this variant 3+ times to reveal effects.'}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              {/* Prefix Completion */}
+              {selectedMonster.killCount > 0 && (
+                <div className="mb-4">
+                  <h4 className="font-semibold text-[var(--rpg-text-primary)] text-sm mb-2">Prefix Variants</h4>
+                  <PrefixPipRow encountered={selectedMonster.prefixesEncountered} />
+                </div>
+              )}
 
               <PixelButton variant="secondary" className="w-full" onClick={() => setSelectedMonster(null)}>
                 Close

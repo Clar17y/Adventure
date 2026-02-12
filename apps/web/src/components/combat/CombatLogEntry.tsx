@@ -68,15 +68,26 @@ export function CombatLogEntry({
     >
       {/* Collapsed view */}
       <div className="flex items-center gap-2 text-sm py-0.5">
-        <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">R{entry.round}</span>
-        <span className={`shrink-0 ${actorColor}`}>{isPlayerAction ? 'You' : 'Mob'}</span>
-        {icon && <span className="shrink-0 text-xs">{icon}</span>}
-        {entry.damage !== undefined && entry.damage > 0 && (
-          <span className="text-[var(--rpg-text-primary)] font-mono font-semibold">{entry.damage} dmg</span>
-        )}
-        {entry.evaded && <span className="text-[var(--rpg-blue-light)] text-xs">Dodged</span>}
-        {entry.roll !== undefined && !entry.damage && !entry.evaded && entry.round > 0 && (
-          <span className="text-[var(--rpg-text-secondary)] text-xs">Miss</span>
+        {entry.round === 0 ? (
+          <>
+            <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">Init</span>
+            <span className="text-[var(--rpg-text-primary)] text-xs">
+              {isPlayerAction ? 'You go first' : 'Mob goes first'}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">R{entry.round}</span>
+            <span className={`shrink-0 ${actorColor}`}>{isPlayerAction ? 'You' : 'Mob'}</span>
+            {icon && <span className="shrink-0 text-xs">{icon}</span>}
+            {entry.damage !== undefined && entry.damage > 0 && (
+              <span className="text-[var(--rpg-text-primary)] font-mono font-semibold">{entry.damage} dmg</span>
+            )}
+            {entry.evaded && <span className="text-[var(--rpg-blue-light)] text-xs">Dodged</span>}
+            {entry.roll !== undefined && !entry.damage && !entry.evaded && (
+              <span className="text-[var(--rpg-text-secondary)] text-xs">Miss</span>
+            )}
+          </>
         )}
         <span className="ml-auto flex gap-2 text-xs font-mono text-[var(--rpg-text-secondary)]">
           {entry.playerHpAfter !== undefined && (

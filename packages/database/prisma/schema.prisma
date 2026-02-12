@@ -133,7 +133,8 @@ model ItemTemplate {
   requiredSkill  String? @map("required_skill") @db.VarChar(32)
   requiredLevel  Int     @default(1) @map("required_level")
   maxDurability  Int     @default(100) @map("max_durability")
-  stackable      Boolean @default(false)
+  stackable        Boolean @default(false)
+  consumableEffect Json?   @map("consumable_effect")
 
   items           Item[]
   dropTables      DropTable[]

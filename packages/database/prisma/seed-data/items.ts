@@ -1,4 +1,7 @@
 import { IDS } from './ids';
+import { POTION_CONSTANTS } from '@adventure/shared';
+
+type ConsumableEffectJson = { type: 'heal_flat' | 'heal_percent'; value: number };
 
 type ItemRow = {
   id: string;
@@ -12,6 +15,7 @@ type ItemRow = {
   requiredLevel?: number;
   maxDurability?: number;
   stackable?: boolean;
+  consumableEffect?: ConsumableEffectJson;
 };
 
 // Helper: build item template row with defaults
@@ -28,6 +32,7 @@ function it(row: ItemRow) {
     requiredLevel: row.requiredLevel ?? 1,
     maxDurability: row.maxDurability ?? 100,
     stackable: row.stackable ?? false,
+    consumableEffect: row.consumableEffect ?? null,
   };
 }
 
@@ -35,8 +40,8 @@ function resource(id: string, name: string, tier: number) {
   return it({ id, name, itemType: 'resource', tier, stackable: true, maxDurability: 0 });
 }
 
-function consumable(id: string, name: string, tier: number) {
-  return it({ id, name, itemType: 'consumable', tier, stackable: true, maxDurability: 0 });
+function consumable(id: string, name: string, tier: number, effect?: ConsumableEffectJson) {
+  return it({ id, name, itemType: 'consumable', tier, stackable: true, maxDurability: 0, consumableEffect: effect });
 }
 
 // ── Raw Resources ────────────────────────────────────────────────────────────
@@ -167,10 +172,10 @@ const processedLeather = [
 // ── Consumables ──────────────────────────────────────────────────────────────
 
 const consumables = [
-  consumable(IDS.pots.minorHealthPotion, 'Minor Health Potion', 1),
-  consumable(IDS.pots.healthPotion, 'Health Potion', 2),
+  consumable(IDS.pots.minorHealthPotion, 'Minor Health Potion', 1, { type: 'heal_flat', value: POTION_CONSTANTS.MINOR_HEALTH_HEAL }),
+  consumable(IDS.pots.healthPotion, 'Health Potion', 2, { type: 'heal_flat', value: POTION_CONSTANTS.HEALTH_HEAL }),
   consumable(IDS.pots.antivenomPotion, 'Antivenom Potion', 2),
-  consumable(IDS.pots.greaterHealthPotion, 'Greater Health Potion', 3),
+  consumable(IDS.pots.greaterHealthPotion, 'Greater Health Potion', 3, { type: 'heal_flat', value: POTION_CONSTANTS.GREATER_HEALTH_HEAL }),
   consumable(IDS.pots.resistPotion, 'Resist Potion', 4),
   consumable(IDS.pots.manaPotion, 'Mana Potion', 4),
   consumable(IDS.pots.elixirOfPower, 'Elixir of Power', 5),

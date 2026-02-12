@@ -798,6 +798,20 @@ export async function destroyInventoryItem(id: string, quantity?: number) {
   });
 }
 
+export async function useItem(itemId: string) {
+  return fetchApi<{
+    itemName: string;
+    previousHp: number;
+    currentHp: number;
+    maxHp: number;
+    healedAmount: number;
+    remainingQuantity: number | null;
+  }>('/api/v1/inventory/use', {
+    method: 'POST',
+    body: JSON.stringify({ itemId }),
+  });
+}
+
 export async function repairItem(itemId: string) {
   return fetchApi<{
     repaired: boolean;

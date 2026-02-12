@@ -20,6 +20,7 @@ import {
   mine,
   repairItem,
   salvage,
+  useItem,
   startCombatFromEncounterSite,
   startExploration,
   travelToZone,
@@ -1009,6 +1010,17 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     });
   };
 
+  const handleUseItem = async (itemId: string) => {
+    await runAction('use_item', async () => {
+      const res = await useItem(itemId);
+      if (!res.data) {
+        setActionError(res.error?.message ?? 'Use item failed');
+        return;
+      }
+      await loadAll();
+    });
+  };
+
   const handleEquipItem = async (itemId: string, slot: string) => {
     await runAction('equip', async () => {
       const res = await equip(itemId, slot);
@@ -1158,6 +1170,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleForgeReroll,
     handleDestroyItem,
     handleRepairItem,
+    handleUseItem,
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,

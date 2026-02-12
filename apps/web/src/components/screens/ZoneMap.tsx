@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import { PixelButton } from '@/components/PixelButton';
+import { ActivityLog } from '@/components/ActivityLog';
+import { TurnPlayback } from '@/components/playback/TurnPlayback';
+import type { ActivityLogEntry } from '@/app/game/useGameController';
 import { MapPin, Star, Hourglass } from 'lucide-react';
 
 interface ZoneMapProps {
@@ -20,6 +23,19 @@ interface ZoneMapProps {
   availableTurns: number;
   isRecovering: boolean;
   playbackActive?: boolean;
+  travelPlaybackData?: {
+    totalTurns: number;
+    destinationName: string;
+    events: Array<{ turn: number; type: string; description: string; details?: Record<string, unknown> }>;
+    aborted: boolean;
+    refundedTurns: number;
+    playerHpBefore: number;
+    playerMaxHp: number;
+  } | null;
+  onTravelPlaybackComplete?: () => void;
+  onTravelPlaybackSkip?: () => void;
+  onPushLog?: (...entries: Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>) => void;
+  activityLog?: ActivityLogEntry[];
   onTravel: (zoneId: string) => void;
   onExploreCurrentZone: () => void;
 }
@@ -72,6 +88,11 @@ export function ZoneMap({
   availableTurns,
   isRecovering,
   playbackActive,
+  travelPlaybackData,
+  onTravelPlaybackComplete,
+  onTravelPlaybackSkip,
+  onPushLog,
+  activityLog,
   onTravel,
   onExploreCurrentZone,
 }: ZoneMapProps) {
@@ -199,7 +220,7 @@ export function ZoneMap({
                 <button
                   key={zone.id}
                   onClick={() => {
-                    if (!isUndiscovered) setSelectedZoneId(zone.id);
+                    if (!isUndiscovered && !playbackActive) setSelectedZoneId(zone.id);
                   }}
                   disabled={isUndiscovered}
                   className="absolute flex flex-col items-center justify-center text-center transition-all"
@@ -343,8 +364,8 @@ export function ZoneMap({
         </div>
       </div>
 
-      {/* Selected zone details panel */}
-      {selectedZone && selectedZone.discovered && (
+      {/* Selected zone details panel — hidden during travel playback */}
+      {!travelPlaybackData && selectedZone && selectedZone.discovered && (
         <div
           style={{
             background: 'var(--rpg-surface)',
@@ -413,6 +434,34 @@ export function ZoneMap({
           )}
         </div>
       )}
+
+      {/* Travel playback panel */}
+      {travelPlaybackData && (
+        <div
+          style={{
+            background: 'var(--rpg-surface)',
+            border: '1px solid var(--rpg-border)',
+            borderRadius: 8,
+            padding: 12,
+          }}
+        >
+          <TurnPlayback
+            totalTurns={travelPlaybackData.totalTurns}
+            label={`Travelling to ${travelPlaybackData.destinationName}`}
+            events={travelPlaybackData.events}
+            aborted={travelPlaybackData.aborted}
+            refundedTurns={travelPlaybackData.refundedTurns}
+            playerHpBefore={travelPlaybackData.playerHpBefore}
+            playerMaxHp={travelPlaybackData.playerMaxHp}
+            onComplete={onTravelPlaybackComplete!}
+            onSkip={onTravelPlaybackSkip!}
+            onPushLog={onPushLog}
+          />
+        </div>
+      )}
+
+      {/* Activity log */}
+      {activityLog && <ActivityLog entries={activityLog} />}
     </div>
   );
 }

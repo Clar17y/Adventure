@@ -318,11 +318,13 @@ export async function getBestiary() {
         minQuantity: number;
         maxQuantity: number;
       }>;
-      prefixEncounters: Array<{
-        prefix: string;
-        displayName: string;
-        kills: number;
-      }>;
+      prefixesEncountered: string[];
+    }>;
+    prefixSummary: Array<{
+      prefix: string;
+      displayName: string;
+      totalKills: number;
+      discovered: boolean;
     }>;
   }>('/api/v1/bestiary');
 }

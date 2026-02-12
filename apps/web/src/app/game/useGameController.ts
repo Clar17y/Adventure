@@ -340,14 +340,16 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       minQuantity: number;
       maxQuantity: number;
     }>;
-    prefixEncounters: Array<{
-      prefix: string;
-      displayName: string;
-      kills: number;
-    }>;
+    prefixesEncountered: string[];
   }>>([]);
   const [bestiaryLoading, setBestiaryLoading] = useState(false);
   const [bestiaryError, setBestiaryError] = useState<string | null>(null);
+  const [bestiaryPrefixSummary, setBestiaryPrefixSummary] = useState<Array<{
+    prefix: string;
+    displayName: string;
+    totalKills: number;
+    discovered: boolean;
+  }>>([]);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
@@ -538,7 +540,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setBestiaryLoading(true);
     try {
       const { data, error } = await getBestiary();
-      if (data) setBestiaryMobs(data.mobs);
+      if (data) {
+        setBestiaryMobs(data.mobs);
+        setBestiaryPrefixSummary(data.prefixSummary);
+      }
       else setBestiaryError(error?.message ?? 'Failed to load bestiary');
     } finally {
       setBestiaryLoading(false);
@@ -1320,6 +1325,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     bestiaryMobs,
     bestiaryLoading,
     bestiaryError,
+    bestiaryPrefixSummary,
     hpState,
     setHpState,
     playbackActive,

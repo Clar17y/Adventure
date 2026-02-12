@@ -133,6 +133,12 @@ export interface LastCombat {
   };
 }
 
+export type ActivityLogEntry = {
+  timestamp: string;
+  message: string;
+  type: 'info' | 'success' | 'danger';
+};
+
 export interface CharacterProgression {
   characterXp: number;
   characterLevel: number;
@@ -290,9 +296,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     xpReward: number;
   }>>([]);
   const [activeCraftingSkill, setActiveCraftingSkill] = useState<'refining' | 'tanning' | 'weaving' | 'weaponsmithing' | 'armorsmithing' | 'leatherworking' | 'tailoring' | 'alchemy'>('weaponsmithing');
-  const [explorationLog, setExplorationLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>>([]);
-  const [gatheringLog, setGatheringLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
-  const [craftingLog, setCraftingLog] = useState<Array<{ timestamp: string; message: string; type: 'info' | 'success' }>>([]);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [pendingEncounters, setPendingEncounters] = useState<PendingEncounter[]>([]);
   const [pendingEncountersLoading, setPendingEncountersLoading] = useState(false);
   const [pendingEncountersError, setPendingEncountersError] = useState<string | null>(null);
@@ -602,6 +606,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const pushLog = (...entries: ActivityLogEntry[]) => {
+    setActivityLog((prev) => [...entries, ...prev]);
+  };
+
   const PERCENT_STATS = new Set(['critChance', 'critDamage']);
   const formatStatName = (stat: string) => {
     if (stat === 'magicDefence') return 'Magic Defence';
@@ -661,19 +670,15 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           message: `Turn ${event.turn}: ${event.description}`,
         }));
 
-      setExplorationLog((prev) => [
+      pushLog(
         ...(data.aborted
           ? []
           : [{ timestamp: nowStamp(), type: 'info' as const, message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}.` }]),
         ...stampedEvents,
-        ...prev,
-      ]);
+      );
 
       if (data.aborted && data.refundedTurns > 0) {
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'info', message: `Exploration aborted. ${data.refundedTurns.toLocaleString()} turns refunded.` },
-          ...prev,
-        ]);
+        pushLog({ timestamp: nowStamp(), type: 'info', message: `Exploration aborted. ${data.refundedTurns.toLocaleString()} turns refunded.` });
       }
 
       if (data.encounterSites.length > 0 && activeScreen === 'combat') {
@@ -745,35 +750,26 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         const chest = data.rewards.siteCompletion;
         const chestLabel = `${chest.chestRarity.charAt(0).toUpperCase()}${chest.chestRarity.slice(1)} Chest`;
         const lootCount = chest.loot.reduce((sum, entry) => sum + entry.quantity, 0);
-        setExplorationLog((prev) => [
-          {
-            timestamp: nowStamp(),
-            type: 'success',
-            message: `Encounter site cleared. ${chestLabel} opened with ${lootCount} item${lootCount === 1 ? '' : 's'}.`,
-          },
-          ...prev,
-        ]);
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Encounter site cleared. ${chestLabel} opened with ${lootCount} item${lootCount === 1 ? '' : 's'}.`,
+        });
 
         if (chest.recipeUnlocked) {
           const unlockedRecipe = chest.recipeUnlocked;
-          setExplorationLog((prev) => [
-            {
-              timestamp: nowStamp(),
-              type: 'success',
-              message: `Learned advanced recipe: ${unlockedRecipe.recipeName}.`,
-            },
-            ...prev,
-          ]);
+          pushLog({
+            timestamp: nowStamp(),
+            type: 'success',
+            message: `Learned advanced recipe: ${unlockedRecipe.recipeName}.`,
+          });
         }
       }
 
       const skillXp = data.rewards?.skillXp;
       if (skillXp?.leveledUp) {
         const skillName = skillXp.skillType.charAt(0).toUpperCase() + skillXp.skillType.slice(1);
-        setExplorationLog((prev) => [
-          { timestamp: nowStamp(), type: 'success', message: `🎉 ${skillName} leveled up to ${skillXp.newLevel}!` },
-          ...prev,
-        ]);
+        pushLog({ timestamp: nowStamp(), type: 'success', message: `🎉 ${skillName} leveled up to ${skillXp.newLevel}!` });
       }
 
       await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters(), loadBestiary()]);
@@ -793,7 +789,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
 
-      const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
+      const newLogs: ActivityLogEntry[] = [];
       const gatheredSkillName = data.xp?.skillType
         ? data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1)
         : 'Gathering';
@@ -820,7 +816,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         });
       }
 
-      setGatheringLog((prev) => [...newLogs, ...prev]);
+      pushLog(...newLogs);
       await Promise.all([loadAll(), loadGatheringNodes()]);
     });
   };
@@ -837,7 +833,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
 
-      const newLogs: Array<{ timestamp: string; message: string; type: 'info' | 'success' }> = [];
+      const newLogs: ActivityLogEntry[] = [];
       const timestamp = nowStamp();
       const skillName = data.xp.skillType.charAt(0).toUpperCase() + data.xp.skillType.slice(1);
 
@@ -894,7 +890,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         });
       }
 
-      setCraftingLog((prev) => [...newLogs, ...prev]);
+      pushLog(...newLogs);
       await loadAll();
     });
   };
@@ -912,14 +908,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       const materialSummary = data.salvage.returnedMaterials
         .map((entry) => `${entry.name} x${entry.quantity}`)
         .join(', ');
-      setCraftingLog((prev) => [
-        {
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `Salvaged item for: ${materialSummary}.`,
-        },
-        ...prev,
-      ]);
+      pushLog({
+        timestamp: nowStamp(),
+        type: 'success',
+        message: `Salvaged item for: ${materialSummary}.`,
+      });
       await loadAll();
     });
   };
@@ -939,23 +932,17 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       const chancePct = (data.forge.successChance * 100).toFixed(1);
 
       if (data.forge.success) {
-        setCraftingLog((prev) => [
-          {
-            timestamp: nowStamp(),
-            type: 'success',
-            message: `Forge success: ${fromLabel} -> ${toLabel} (${chancePct}% chance). Sacrificial item consumed.`,
-          },
-          ...prev,
-        ]);
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Forge success: ${fromLabel} -> ${toLabel} (${chancePct}% chance). Sacrificial item consumed.`,
+        });
       } else {
-        setCraftingLog((prev) => [
-          {
-            timestamp: nowStamp(),
-            type: 'info',
-            message: `Forge failed at ${fromLabel} (${chancePct}% chance). Target and sacrifice consumed.`,
-          },
-          ...prev,
-        ]);
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Forge failed at ${fromLabel} (${chancePct}% chance). Target and sacrifice consumed.`,
+        });
       }
 
       await loadAll();
@@ -973,14 +960,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
       const rarityLabel = data.forge.rarity.charAt(0).toUpperCase() + data.forge.rarity.slice(1);
-      setCraftingLog((prev) => [
-        {
-          timestamp: nowStamp(),
-          type: 'success',
-          message: `Re-rolled ${rarityLabel} item bonus stats. Sacrificial duplicate consumed.`,
-        },
-        ...prev,
-      ]);
+      pushLog({
+        timestamp: nowStamp(),
+        type: 'success',
+        message: `Re-rolled ${rarityLabel} item bonus stats. Sacrificial duplicate consumed.`,
+      });
 
       await loadAll();
     });
@@ -1064,15 +1048,15 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
               : 'info' as const,
           message: `Turn ${event.turn}: ${event.description}`,
         }));
-        setExplorationLog((prev) => [...stampedEvents.reverse(), ...prev]);
+        pushLog(...stampedEvents.reverse());
       }
 
       if (data.respawnedTo) {
-        setExplorationLog((prev) => [{
+        pushLog({
           timestamp: nowStamp(),
           type: 'danger' as const,
           message: `You were knocked out and woke up in ${data.respawnedTo!.townName}.`,
-        }, ...prev]);
+        });
       }
 
       // Refresh all state after travel
@@ -1127,9 +1111,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     craftingRecipes,
     activeCraftingSkill,
     setActiveCraftingSkill,
-    explorationLog,
-    gatheringLog,
-    craftingLog,
+    activityLog,
+    pushLog,
     pendingEncounters,
     pendingEncountersLoading,
     pendingEncountersError,

@@ -8,6 +8,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
   refreshTokenExpiresAt,
+  sessionInactivityCutoff,
   verifyRefreshToken,
 } from '../middleware/auth';
 import { ensureStarterDiscoveries } from '../services/zoneDiscoveryService';
@@ -32,9 +33,15 @@ const ALL_SKILLS: SkillType[] = [
   'weaponsmithing', 'armorsmithing', 'leatherworking', 'tailoring', 'alchemy',
 ];
 
+function isRecentlyActive(lastActiveAt: Date | null, nowMs = Date.now()): boolean {
+  if (!lastActiveAt) return false;
+  return lastActiveAt >= sessionInactivityCutoff(nowMs);
+}
+
 authRouter.post('/register', async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body);
+    const now = new Date();
 
     // Check if user exists
     const existing = await prisma.player.findFirst({
@@ -63,6 +70,7 @@ authRouter.post('/register', async (req, res, next) => {
         username: body.username,
         email: body.email,
         passwordHash,
+        lastActiveAt: now,
         currentZoneId: starterZone.id,
         homeTownId: starterZone.id,
         turnBank: {
@@ -97,7 +105,7 @@ authRouter.post('/register', async (req, res, next) => {
       data: {
         playerId: player.id,
         token: refreshToken,
-        expiresAt: refreshTokenExpiresAt(),
+        expiresAt: refreshTokenExpiresAt(now.getTime()),
       },
     });
 
@@ -118,6 +126,7 @@ authRouter.post('/register', async (req, res, next) => {
 authRouter.post('/login', async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
+    const now = new Date();
 
     const player = await prisma.player.findUnique({
       where: { email: body.email },
@@ -135,7 +144,7 @@ authRouter.post('/login', async (req, res, next) => {
     // Update last active
     await prisma.player.update({
       where: { id: player.id },
-      data: { lastActiveAt: new Date() },
+      data: { lastActiveAt: now },
     });
 
     // Generate tokens
@@ -148,7 +157,7 @@ authRouter.post('/login', async (req, res, next) => {
       data: {
         playerId: player.id,
         token: refreshToken,
-        expiresAt: refreshTokenExpiresAt(),
+        expiresAt: refreshTokenExpiresAt(now.getTime()),
       },
     });
 
@@ -169,6 +178,7 @@ authRouter.post('/login', async (req, res, next) => {
 authRouter.post('/refresh', async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
+    const now = new Date();
 
     if (!refreshToken) {
       throw new AppError(400, 'Refresh token required', 'MISSING_TOKEN');
@@ -177,32 +187,51 @@ authRouter.post('/refresh', async (req, res, next) => {
     // Verify token
     const payload = verifyRefreshToken(refreshToken);
 
-    // Check if token exists in DB
-    const storedToken = await prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
-    });
+    // Check if token exists in DB and player has remained recently active.
+    const [storedToken, player] = await Promise.all([
+      prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+      }),
+      prisma.player.findUnique({
+        where: { id: payload.playerId },
+        select: { id: true, lastActiveAt: true },
+      }),
+    ]);
 
-    if (!storedToken || storedToken.expiresAt < new Date()) {
+    if (!player) {
       throw new AppError(401, 'Invalid or expired refresh token', 'INVALID_TOKEN');
     }
 
-    // Delete old token
-    await prisma.refreshToken.delete({
-      where: { id: storedToken.id },
+    const storedTokenValid = Boolean(storedToken && storedToken.expiresAt >= now);
+    const activeWithinWindow = isRecentlyActive(player.lastActiveAt, now.getTime());
+
+    if (!storedTokenValid && !activeWithinWindow) {
+      throw new AppError(401, 'Invalid or expired refresh token', 'INVALID_TOKEN');
+    }
+
+    // Best-effort delete to avoid race failures under concurrent refresh requests.
+    await prisma.refreshToken.deleteMany({
+      where: { token: refreshToken },
     });
 
     // Generate new tokens
     const newAccessToken = generateAccessToken(payload);
     const newRefreshToken = generateRefreshToken(payload);
 
-    // Store new refresh token
-    await prisma.refreshToken.create({
-      data: {
-        playerId: payload.playerId,
-        token: newRefreshToken,
-        expiresAt: refreshTokenExpiresAt(),
-      },
-    });
+    // Store new refresh token and keep activity timestamp fresh.
+    await prisma.$transaction([
+      prisma.refreshToken.create({
+        data: {
+          playerId: payload.playerId,
+          token: newRefreshToken,
+          expiresAt: refreshTokenExpiresAt(now.getTime()),
+        },
+      }),
+      prisma.player.update({
+        where: { id: payload.playerId },
+        data: { lastActiveAt: now },
+      }),
+    ]);
 
     res.json({
       accessToken: newAccessToken,

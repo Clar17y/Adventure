@@ -1,10 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
+import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
+import { prisma } from '@adventure/database';
 import { AppError } from './errorHandler';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const ACCESS_TOKEN_TTL_MINUTES = Number.parseInt(process.env.ACCESS_TOKEN_TTL_MINUTES || '15', 10);
 const REFRESH_TOKEN_TTL_DAYS = Number.parseInt(process.env.REFRESH_TOKEN_TTL_DAYS || '30', 10);
+const SESSION_INACTIVITY_WINDOW_HOURS = Number.parseInt(process.env.SESSION_INACTIVITY_WINDOW_HOURS || '24', 10);
+const LAST_ACTIVE_TOUCH_INTERVAL_SECONDS = Number.parseInt(process.env.LAST_ACTIVE_TOUCH_INTERVAL_SECONDS || '60', 10);
 
 export const authConfig = {
   accessTokenTtlMinutes: Number.isFinite(ACCESS_TOKEN_TTL_MINUTES) && ACCESS_TOKEN_TTL_MINUTES > 0
@@ -13,7 +17,38 @@ export const authConfig = {
   refreshTokenTtlDays: Number.isFinite(REFRESH_TOKEN_TTL_DAYS) && REFRESH_TOKEN_TTL_DAYS > 0
     ? REFRESH_TOKEN_TTL_DAYS
     : 30,
+  sessionInactivityWindowHours:
+    Number.isFinite(SESSION_INACTIVITY_WINDOW_HOURS) && SESSION_INACTIVITY_WINDOW_HOURS > 0
+      ? SESSION_INACTIVITY_WINDOW_HOURS
+      : 24,
+  lastActiveTouchIntervalSeconds:
+    Number.isFinite(LAST_ACTIVE_TOUCH_INTERVAL_SECONDS) && LAST_ACTIVE_TOUCH_INTERVAL_SECONDS > 0
+      ? LAST_ACTIVE_TOUCH_INTERVAL_SECONDS
+      : 60,
 } as const;
+
+const lastActiveTouchByPlayerId = new Map<string, number>();
+
+function touchPlayerLastActive(playerId: string): void {
+  const nowMs = Date.now();
+  const lastTouchedAt = lastActiveTouchByPlayerId.get(playerId);
+  const minIntervalMs = authConfig.lastActiveTouchIntervalSeconds * 1000;
+
+  if (typeof lastTouchedAt === 'number' && nowMs - lastTouchedAt < minIntervalMs) {
+    return;
+  }
+
+  lastActiveTouchByPlayerId.set(playerId, nowMs);
+
+  // Best-effort activity touch to keep auth flow non-blocking.
+  void prisma.player.update({
+    where: { id: playerId },
+    data: { lastActiveAt: new Date(nowMs) },
+  }).catch(() => {
+    // Retry on a future request if this write fails.
+    lastActiveTouchByPlayerId.delete(playerId);
+  });
+}
 
 export interface AuthPayload {
   playerId: string;
@@ -44,6 +79,7 @@ export function authenticate(
   try {
     const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
     req.player = payload;
+    touchPlayerLastActive(payload.playerId);
     next();
   } catch (err) {
     throw new AppError(401, 'Invalid or expired token', 'INVALID_TOKEN');
@@ -55,13 +91,33 @@ export function generateAccessToken(payload: AuthPayload): string {
 }
 
 export function generateRefreshToken(payload: AuthPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: authConfig.refreshTokenTtlDays * 24 * 60 * 60 });
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: authConfig.refreshTokenTtlDays * 24 * 60 * 60,
+    jwtid: randomUUID(),
+  });
 }
 
 export function verifyRefreshToken(token: string): AuthPayload {
-  return jwt.verify(token, JWT_SECRET) as AuthPayload;
+  const decoded = jwt.verify(token, JWT_SECRET);
+
+  if (!decoded || typeof decoded !== 'object') {
+    throw new AppError(401, 'Invalid or expired token', 'INVALID_TOKEN');
+  }
+
+  const playerId = (decoded as { playerId?: unknown }).playerId;
+  const username = (decoded as { username?: unknown }).username;
+
+  if (typeof playerId !== 'string' || typeof username !== 'string') {
+    throw new AppError(401, 'Invalid or expired token', 'INVALID_TOKEN');
+  }
+
+  return { playerId, username };
 }
 
 export function refreshTokenExpiresAt(nowMs = Date.now()): Date {
   return new Date(nowMs + authConfig.refreshTokenTtlDays * 24 * 60 * 60 * 1000);
+}
+
+export function sessionInactivityCutoff(nowMs = Date.now()): Date {
+  return new Date(nowMs - authConfig.sessionInactivityWindowHours * 60 * 60 * 1000);
 }

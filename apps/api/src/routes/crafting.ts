@@ -65,6 +65,20 @@ function parseMaterials(value: unknown): CraftingMaterial[] {
   return arraySchema.parse(value);
 }
 
+function toSingularFamilyName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.endsWith('ies')) return `${trimmed.slice(0, -3)}y`;
+  if (trimmed.endsWith('s') && !trimmed.endsWith('ss')) return trimmed.slice(0, -1);
+  return trimmed;
+}
+
+function buildRecipeDiscoveryHint(mobFamily: { name: string; siteNounLarge: string } | null | undefined): string {
+  if (!mobFamily) return 'A unique drop from a large encounter site.';
+  const familyName = toSingularFamilyName(mobFamily.name).toLowerCase();
+  const siteNoun = mobFamily.siteNounLarge.toLowerCase();
+  return `A unique drop from a large ${familyName} ${siteNoun}!`;
+}
+
 function isItemRarity(value: string): value is ItemRarity {
   return value === 'common' || value === 'uncommon' || value === 'rare' || value === 'epic' || value === 'legendary';
 }
@@ -175,7 +189,7 @@ function calculateSalvageMaterials(materials: CraftingMaterial[]): CraftingMater
 
 /**
  * GET /api/v1/crafting/recipes
- * List recipes available to the player (based on skill level).
+ * List recipes visible to the player (based on skill level).
  */
 craftingRouter.get('/recipes', async (req, res, next) => {
   try {
@@ -196,13 +210,25 @@ craftingRouter.get('/recipes', async (req, res, next) => {
     const learnedRecipeIds = new Set(learnedAdvancedRecipes.map((entry) => entry.recipeId));
 
     const recipes = await prismaAny.craftingRecipe.findMany({
-      include: { resultTemplate: true },
+      include: {
+        resultTemplate: true,
+        mobFamily: {
+          select: {
+            name: true,
+            siteNounLarge: true,
+          },
+        },
+      },
       orderBy: [{ requiredLevel: 'asc' }],
     }) as Array<{
       id: string;
       skillType: string;
       requiredLevel: number;
       resultTemplate: any;
+      mobFamily?: {
+        name: string;
+        siteNounLarge: string;
+      } | null;
       isAdvanced?: boolean;
       soulbound?: boolean;
       mobFamilyId?: string | null;
@@ -213,24 +239,28 @@ craftingRouter.get('/recipes', async (req, res, next) => {
 
     const visible = recipes
       .filter((r: typeof recipes[number]) => {
-        const skillGatePassed = (skillLevels.get(r.skillType) ?? 1) >= r.requiredLevel;
-        if (!skillGatePassed) return false;
-        if (!r.isAdvanced) return true;
-        return learnedRecipeIds.has(r.id);
+        return (skillLevels.get(r.skillType) ?? 1) >= r.requiredLevel;
       })
-      .map((r: typeof recipes[number]) => ({
-        id: r.id,
-        skillType: r.skillType,
-        requiredLevel: r.requiredLevel,
-        resultTemplate: r.resultTemplate,
-        isAdvanced: Boolean(r.isAdvanced),
-        soulbound: Boolean(r.soulbound),
-        mobFamilyId: r.mobFamilyId ?? null,
-        turnCost: r.turnCost,
-        materials: parseMaterials(r.materials),
-        materialTemplates: [] as Array<{ id: string; name: string; itemType: string; stackable: boolean }>,
-        xpReward: r.xpReward,
-      }));
+      .map((r: typeof recipes[number]) => {
+        const isAdvanced = Boolean(r.isAdvanced);
+        const isDiscovered = !isAdvanced || learnedRecipeIds.has(r.id);
+
+        return {
+          id: r.id,
+          skillType: r.skillType,
+          requiredLevel: r.requiredLevel,
+          resultTemplate: r.resultTemplate,
+          isAdvanced,
+          isDiscovered,
+          discoveryHint: isDiscovered ? null : buildRecipeDiscoveryHint(r.mobFamily),
+          soulbound: Boolean(r.soulbound),
+          mobFamilyId: r.mobFamilyId ?? null,
+          turnCost: r.turnCost,
+          materials: parseMaterials(r.materials),
+          materialTemplates: [] as Array<{ id: string; name: string; itemType: string; stackable: boolean }>,
+          xpReward: r.xpReward,
+        };
+      });
 
     // Attach material template metadata for UI convenience
     const allMaterialIds = new Set<string>();

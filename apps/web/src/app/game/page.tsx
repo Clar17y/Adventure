@@ -539,6 +539,8 @@ export default function GamePage() {
                 name: r.resultTemplate.name,
                 imageSrc: itemImageSrc(r.resultTemplate.name, r.resultTemplate.itemType),
                 isAdvanced: r.isAdvanced,
+                isDiscovered: r.isDiscovered,
+                discoveryHint: r.discoveryHint,
                 soulbound: r.soulbound,
                 resultQuantity: 1,
                 requiredLevel: r.requiredLevel,

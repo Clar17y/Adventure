@@ -81,6 +81,33 @@ describe('buildPlayerCombatStats', () => {
     expect(stats.critChance).toBe(0.2);
     expect(stats.critDamage).toBe(0.35);
   });
+
+  it('sets damageType to physical for melee attackStyle', () => {
+    const stats = buildPlayerCombatStats(
+      80, 100,
+      { attackStyle: 'melee', skillLevel: 10, attributes: { vitality: 5, strength: 5, dexterity: 0, intelligence: 0, luck: 0, evasion: 4 } },
+      { attack: 5, rangedPower: 0, magicPower: 0, accuracy: 3, armor: 2, magicDefence: 1, health: 10, dodge: 1 }
+    );
+    expect(stats.damageType).toBe('physical');
+  });
+
+  it('sets damageType to physical for ranged attackStyle', () => {
+    const stats = buildPlayerCombatStats(
+      80, 100,
+      { attackStyle: 'ranged', skillLevel: 10, attributes: { vitality: 5, strength: 0, dexterity: 5, intelligence: 0, luck: 0, evasion: 4 } },
+      { attack: 0, rangedPower: 5, magicPower: 0, accuracy: 3, armor: 2, magicDefence: 1, health: 10, dodge: 1 }
+    );
+    expect(stats.damageType).toBe('physical');
+  });
+
+  it('sets damageType to magic for magic attackStyle', () => {
+    const stats = buildPlayerCombatStats(
+      80, 100,
+      { attackStyle: 'magic', skillLevel: 10, attributes: { vitality: 5, strength: 0, dexterity: 0, intelligence: 5, luck: 0, evasion: 4 } },
+      { attack: 0, rangedPower: 0, magicPower: 5, accuracy: 3, armor: 2, magicDefence: 1, health: 10, dodge: 1 }
+    );
+    expect(stats.damageType).toBe('magic');
+  });
 });
 
 describe('doesAttackHit', () => {

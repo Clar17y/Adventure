@@ -1,3 +1,5 @@
+import type { DamageType } from './combat.types';
+
 export interface SpellTemplate {
   startRound: number;
   interval: number;
@@ -15,6 +17,7 @@ export interface MobPrefixDefinition {
     hp?: number;
     accuracy?: number;
     defence?: number;
+    magicDefence?: number;
     evasion?: number;
     damageMin?: number;
     damageMax?: number;
@@ -22,4 +25,5 @@ export interface MobPrefixDefinition {
   xpMultiplier: number;
   dropChanceMultiplier: number;
   spellTemplate: SpellTemplate | null;
+  damageTypeOverride?: DamageType;
 }

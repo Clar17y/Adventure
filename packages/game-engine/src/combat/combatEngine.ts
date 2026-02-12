@@ -41,12 +41,13 @@ export function runCombat(
     attack: mob.accuracy,
     accuracy: mob.accuracy,
     defence: mob.defence,
-    magicDefence: 0,
+    magicDefence: mob.magicDefence,
     dodge: mob.evasion,
     evasion: 0,
     damageMin: mob.damageMin,
     damageMax: mob.damageMax,
     speed: 0,
+    damageType: mob.damageType,
   };
 
   const state: CombatState = {
@@ -152,8 +153,9 @@ function executePlayerAttack(
 
   const rawDamage = rollDamage(playerStats.damageMin, playerStats.damageMax);
   const crit = isCriticalHit(playerStats.critChance ?? 0);
-  const { damage: finalDamage, actualMultiplier } = calculateFinalDamage(rawDamage, mobStats.defence, crit, playerStats.critDamage ?? 0);
-  const armorReduction = Math.floor(rawDamage * actualMultiplier * calculateDefenceReduction(mobStats.defence));
+  const effectiveDefence = playerStats.damageType === 'magic' ? mobStats.magicDefence : mobStats.defence;
+  const { damage: finalDamage, actualMultiplier } = calculateFinalDamage(rawDamage, effectiveDefence, crit, playerStats.critDamage ?? 0);
+  const armorReduction = Math.floor(rawDamage * actualMultiplier * calculateDefenceReduction(effectiveDefence));
 
   state.mobHp -= finalDamage;
 
@@ -168,9 +170,11 @@ function executePlayerAttack(
     accuracyModifier: playerStats.accuracy,
     targetDodge: mobStats.dodge,
     targetEvasion: mobStats.evasion,
-    targetDefence: mobStats.defence,
+    targetDefence: playerStats.damageType === 'magic' ? undefined : mobStats.defence,
+    targetMagicDefence: playerStats.damageType === 'magic' ? mobStats.magicDefence : undefined,
     rawDamage,
-    armorReduction,
+    armorReduction: playerStats.damageType === 'magic' ? undefined : armorReduction,
+    magicDefenceReduction: playerStats.damageType === 'magic' ? armorReduction : undefined,
     isCritical: crit,
     ...(crit ? { critMultiplier: actualMultiplier } : {}),
     message: `You strike the ${mobName} for ${finalDamage} damage!${critText}`,
@@ -237,8 +241,9 @@ function executeMobAttack(
 
   const rawDamage = rollDamage(mobStats.damageMin, mobStats.damageMax);
   const crit = isCriticalHit(0);
-  const { damage: finalDamage, actualMultiplier: mobCritMultiplier } = calculateFinalDamage(rawDamage, playerStats.defence, crit, 0);
-  const armorReduction = Math.floor(rawDamage * mobCritMultiplier * calculateDefenceReduction(playerStats.defence));
+  const effectiveDefence = mobStats.damageType === 'magic' ? playerStats.magicDefence : playerStats.defence;
+  const { damage: finalDamage, actualMultiplier: mobCritMultiplier } = calculateFinalDamage(rawDamage, effectiveDefence, crit, 0);
+  const armorReduction = Math.floor(rawDamage * mobCritMultiplier * calculateDefenceReduction(effectiveDefence));
 
   state.playerHp -= finalDamage;
 
@@ -253,9 +258,11 @@ function executeMobAttack(
     accuracyModifier: mobStats.accuracy,
     targetDodge: playerStats.dodge,
     targetEvasion: playerStats.evasion,
-    targetDefence: playerStats.defence,
+    targetDefence: mobStats.damageType === 'magic' ? undefined : playerStats.defence,
+    targetMagicDefence: mobStats.damageType === 'magic' ? playerStats.magicDefence : undefined,
     rawDamage,
-    armorReduction,
+    armorReduction: mobStats.damageType === 'magic' ? undefined : armorReduction,
+    magicDefenceReduction: mobStats.damageType === 'magic' ? armorReduction : undefined,
     isCritical: crit,
     ...(crit ? { critMultiplier: mobCritMultiplier } : {}),
     message: `The ${mob.name} hits you for ${finalDamage} damage!${critText}`,

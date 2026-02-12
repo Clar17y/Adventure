@@ -47,12 +47,14 @@ describe('applyMobPrefix', () => {
     hp: 15,
     accuracy: 8,
     defence: 3,
+    magicDefence: 2,
     evasion: 2,
     damageMin: 1,
     damageMax: 4,
     xpReward: 10,
     encounterWeight: 120,
     spellPattern: [{ round: 3, action: 'Base Spell', damage: 3 }],
+    damageType: 'physical',
   };
 
   it('returns base mob metadata when prefix is missing', () => {
@@ -76,5 +78,27 @@ describe('applyMobPrefix', () => {
     expect(result.xpReward).toBe(15);
     expect(result.dropChanceMultiplier).toBe(1.3);
     expect(result.spellPattern[0]).toEqual({ round: 3, action: 'Shamanic Bolt', damage: 2 });
+  });
+
+  it('scales magicDefence with prefix multiplier', () => {
+    const result = applyMobPrefix(baseMob, 'tough');
+    // tough has magicDefence: 1.3, baseMob.magicDefence = 2 → floor(2 * 1.3) = 2
+    expect(result.magicDefence).toBe(2);
+  });
+
+  it('preserves base mob damageType when prefix has no override', () => {
+    const result = applyMobPrefix(baseMob, 'tough');
+    expect(result.damageType).toBe('physical');
+  });
+
+  it('overrides damageType when prefix has damageTypeOverride', () => {
+    const result = applyMobPrefix(baseMob, 'shaman');
+    expect(result.damageType).toBe('magic');
+  });
+
+  it('preserves magic damageType when prefix has no override', () => {
+    const magicMob: MobTemplate = { ...baseMob, damageType: 'magic' };
+    const result = applyMobPrefix(magicMob, 'tough');
+    expect(result.damageType).toBe('magic');
   });
 });

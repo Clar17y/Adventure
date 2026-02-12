@@ -3,10 +3,14 @@
 import { useState } from 'react';
 import type { LastCombatLogEntry } from '@/app/game/useGameController';
 
+function isMagicDamage(entry: LastCombatLogEntry): boolean {
+  return entry.targetMagicDefence !== undefined || entry.magicDefenceReduction !== undefined || entry.action === 'spell';
+}
+
 function getActionIcon(entry: LastCombatLogEntry): string {
   if (entry.evaded) return '💨';
   if (entry.isCritical) return '💥';
-  if (entry.damage && entry.damage > 0) return '⚔️';
+  if (entry.damage && entry.damage > 0) return isMagicDamage(entry) ? '✨' : '⚔️';
   if (entry.roll && !entry.damage) return '❌';
   return '';
 }
@@ -125,13 +129,15 @@ export function CombatLogEntry({
                 const preMitigation = Math.floor(entry.rawDamage * critMultiplier);
                 const mitigated = Math.max(0, preMitigation - entry.damage);
 
+                const isMagic = isMagicDamage(entry);
+                const defLabel = isMagic ? 'magic def' : 'defence';
                 let mitigationLabel = '';
-                if (entry.targetDefence !== undefined) {
+                if (entry.targetDefence !== undefined || entry.targetMagicDefence !== undefined) {
                   mitigationLabel = showDetailedBreakdown
                     ? mitigated > 0
-                      ? ` (-${mitigated} defence)`
-                      : ' (defence)'
-                    : ' (defence)';
+                      ? ` (-${mitigated} ${defLabel})`
+                      : ` (${defLabel})`
+                    : ` (${defLabel})`;
                 }
 
                 return (

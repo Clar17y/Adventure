@@ -168,6 +168,85 @@ export function Dashboard({ playerData, skills, onNavigate, characterProgression
         )}
       </PixelCard>
 
+      {/* Action Buttons */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3 text-[var(--rpg-text-primary)]">Actions</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="relative group">
+            <PixelButton
+              variant="primary"
+              className="w-full"
+              onClick={() => onNavigate('explore')}
+              disabled={playerData.isRecovering}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center">
+                  <Sword size={18} />
+                </span>
+                Explore
+              </div>
+            </PixelButton>
+            {playerData.isRecovering && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded text-xs text-[var(--rpg-text-secondary)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                Recover first
+              </div>
+            )}
+          </div>
+          <div className="relative group">
+            <PixelButton
+              variant="primary"
+              className="w-full"
+              onClick={() => onNavigate('gathering')}
+              disabled={playerData.isRecovering}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center">
+                  <Pickaxe size={18} />
+                </span>
+                Mine
+              </div>
+            </PixelButton>
+            {playerData.isRecovering && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded text-xs text-[var(--rpg-text-secondary)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                Recover first
+              </div>
+            )}
+          </div>
+          <div className="relative group">
+            <PixelButton
+              variant="secondary"
+              className="w-full"
+              onClick={() => onNavigate('crafting')}
+              disabled={playerData.isRecovering}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center">
+                  <Hammer size={18} />
+                </span>
+                Craft
+              </div>
+            </PixelButton>
+            {playerData.isRecovering && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded text-xs text-[var(--rpg-text-secondary)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                Recover first
+              </div>
+            )}
+          </div>
+          <PixelButton
+            variant={playerData.isRecovering ? 'primary' : 'secondary'}
+            className="w-full"
+            onClick={() => onNavigate('rest')}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <span className="inline-flex h-5 w-5 items-center justify-center">
+                <Heart size={18} />
+              </span>
+              {playerData.isRecovering ? 'Recover' : 'Rest'}
+            </div>
+          </PixelButton>
+        </div>
+      </div>
+
       {/* Quick Stats */}
       <div className="grid grid-cols-3 gap-3">
         <PixelCard padding="sm">
@@ -295,72 +374,6 @@ export function Dashboard({ playerData, skills, onNavigate, characterProgression
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="pt-2">
-        <h2 className="text-lg font-semibold mb-3 text-[var(--rpg-text-primary)]">Actions</h2>
-        <div className="grid grid-cols-2 gap-3">
-        <div className="relative group">
-          <PixelButton
-            variant="primary"
-            onClick={() => onNavigate('explore')}
-            disabled={playerData.isRecovering}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Sword size={20} />
-              Explore
-            </div>
-          </PixelButton>
-          {playerData.isRecovering && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded text-xs text-[var(--rpg-text-secondary)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-              Recover first
-            </div>
-          )}
-        </div>
-        <div className="relative group">
-          <PixelButton
-            variant="primary"
-            onClick={() => onNavigate('gathering')}
-            disabled={playerData.isRecovering}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Pickaxe size={20} />
-              Mine
-            </div>
-          </PixelButton>
-          {playerData.isRecovering && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded text-xs text-[var(--rpg-text-secondary)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-              Recover first
-            </div>
-          )}
-        </div>
-        <div className="relative group">
-          <PixelButton
-            variant="secondary"
-            onClick={() => onNavigate('crafting')}
-            disabled={playerData.isRecovering}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Hammer size={20} />
-              Craft
-            </div>
-          </PixelButton>
-          {playerData.isRecovering && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded text-xs text-[var(--rpg-text-secondary)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-              Recover first
-            </div>
-          )}
-        </div>
-        <PixelButton
-          variant={playerData.isRecovering ? 'primary' : 'secondary'}
-          onClick={() => onNavigate('rest')}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <Heart size={20} />
-            {playerData.isRecovering ? 'Recover' : 'Rest'}
-          </div>
-        </PixelButton>
-        </div>
-      </div>
     </div>
   );
 }

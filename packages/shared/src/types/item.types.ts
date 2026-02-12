@@ -13,6 +13,14 @@ export interface ItemTemplate {
   requiredLevel: number;
   maxDurability: number;
   stackable: boolean;
+  consumableEffect: ConsumableEffect | null;
+}
+
+export type ConsumableEffectType = 'heal_flat' | 'heal_percent';
+
+export interface ConsumableEffect {
+  type: ConsumableEffectType;
+  value: number;
 }
 
 export interface Item {

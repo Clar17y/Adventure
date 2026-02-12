@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { DURABILITY_CONSTANTS } from '@adventure/shared';
+import { useConsumable } from '../services/consumableService';
 
 export const inventoryRouter = Router();
 
@@ -168,6 +169,25 @@ inventoryRouter.post('/repair', async (req, res, next) => {
       };
     });
 
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const useSchema = z.object({
+  itemId: z.string().uuid(),
+});
+
+/**
+ * POST /api/v1/inventory/use
+ * Use a consumable item (e.g. health potion).
+ */
+inventoryRouter.post('/use', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = useSchema.parse(req.body);
+    const result = await useConsumable(playerId, body.itemId);
     res.json(result);
   } catch (err) {
     next(err);

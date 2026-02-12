@@ -225,6 +225,7 @@ export default function GamePage() {
     handleForgeReroll,
     handleDestroyItem,
     handleRepairItem,
+    handleUseItem,
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,
@@ -349,6 +350,7 @@ export default function GamePage() {
             onRepair={handleRepairItem}
             onEquip={handleEquipItem}
             onUnequip={handleUnequipSlot}
+            onUse={handleUseItem}
           />
         );
       case 'equipment':

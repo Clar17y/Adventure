@@ -34,6 +34,7 @@ interface InventoryProps {
   onRepair?: (itemId: string) => void | Promise<void>;
   onEquip?: (itemId: string, slot: string) => void | Promise<void>;
   onUnequip?: (slot: string) => void | Promise<void>;
+  onUse?: (itemId: string) => void | Promise<void>;
 }
 
 function numStat(value: unknown): number | null {
@@ -89,7 +90,7 @@ function statDisplay(stat: string) {
   return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: prettyStatName(stat) };
 }
 
-export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequip }: InventoryProps) {
+export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequip, onUse }: InventoryProps) {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -105,15 +106,18 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
 
   const hasAnyStats = [attack, armor, magicDefence, health, dodge, accuracy].some((v) => typeof v === 'number' && v !== 0);
   const hasAnyBonusStats = bonusEntries.length > 0;
-  const isRepairable = Boolean(selectedItem && ['weapon', 'armor'].includes(selectedItem.type));
-  const isEquippable = Boolean(selectedItem?.slot && ['weapon', 'armor'].includes(selectedItem?.type ?? ''));
+  const itemType = selectedItem?.type ?? '';
+  const isEquipment = itemType === 'weapon' || itemType === 'armor';
+  const isConsumable = itemType === 'consumable';
+  const isEquippable = Boolean(selectedItem?.slot && isEquipment);
   const isEquipped = Boolean(selectedItem?.equippedSlot);
 
-  const canRepair = Boolean(onRepair && isRepairable);
+  const canRepair = Boolean(onRepair && isEquipment);
   const canEquip = Boolean(onEquip && isEquippable && !isEquipped);
   const canUnequip = Boolean(onUnequip && isEquippable && isEquipped);
-  const canSalvage = Boolean(onSalvage && isRepairable && !isEquipped);
+  const canSalvage = Boolean(onSalvage && isEquipment && !isEquipped);
   const canDrop = Boolean(onDrop && !isEquipped);
+  const canUse = Boolean(onUse && isConsumable);
 
   return (
     <div className="space-y-4">
@@ -312,88 +316,156 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
               </div>
             )}
 
-            <div className="grid grid-cols-4 gap-2">
-              <PixelButton
-                variant="primary"
-                size="sm"
-                className="flex-1"
-                disabled={busy || !canRepair}
-                onClick={async () => {
-                  if (!onRepair) return;
-                  setBusy(true);
-                  try {
-                    await onRepair(selectedItem.id);
-                    setSelectedItem(null);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Repair
-              </PixelButton>
-
-              <PixelButton
-                variant="gold"
-                size="sm"
-                className="flex-1"
-                disabled={busy || (!canEquip && !canUnequip)}
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    if (selectedItem.equippedSlot) {
-                      if (!onUnequip) return;
-                      await onUnequip(selectedItem.equippedSlot);
-                    } else {
-                      if (!onEquip || !selectedItem.slot) return;
-                      await onEquip(selectedItem.id, selectedItem.slot);
+            {/* Context-sensitive action buttons */}
+            {isEquipment && (
+              <div className="grid grid-cols-4 gap-2">
+                <PixelButton
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={busy || !canRepair}
+                  onClick={async () => {
+                    if (!onRepair) return;
+                    setBusy(true);
+                    try {
+                      await onRepair(selectedItem.id);
+                      setSelectedItem(null);
+                    } finally {
+                      setBusy(false);
                     }
-                    setSelectedItem(null);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {selectedItem.equippedSlot ? 'Unequip' : 'Equip'}
-              </PixelButton>
+                  }}
+                >
+                  Repair
+                </PixelButton>
 
-              <PixelButton
-                variant="secondary"
-                size="sm"
-                className="flex-1"
-                disabled={busy || !canSalvage}
-                onClick={async () => {
-                  if (!onSalvage) return;
-                  setBusy(true);
-                  try {
-                    await onSalvage(selectedItem.id);
-                    setSelectedItem(null);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Salvage
-              </PixelButton>
+                <PixelButton
+                  variant="gold"
+                  size="sm"
+                  className="flex-1"
+                  disabled={busy || (!canEquip && !canUnequip)}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      if (selectedItem.equippedSlot) {
+                        if (!onUnequip) return;
+                        await onUnequip(selectedItem.equippedSlot);
+                      } else {
+                        if (!onEquip || !selectedItem.slot) return;
+                        await onEquip(selectedItem.id, selectedItem.slot);
+                      }
+                      setSelectedItem(null);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {selectedItem.equippedSlot ? 'Unequip' : 'Equip'}
+                </PixelButton>
 
-              <PixelButton
-                variant="secondary"
-                size="sm"
-                className="flex-1"
-                disabled={busy || !canDrop}
-                onClick={async () => {
-                  if (!onDrop) return;
-                  setBusy(true);
-                  try {
-                    await onDrop(selectedItem.id);
-                    setSelectedItem(null);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Drop
-              </PixelButton>
-            </div>
+                <PixelButton
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={busy || !canSalvage}
+                  onClick={async () => {
+                    if (!onSalvage) return;
+                    setBusy(true);
+                    try {
+                      await onSalvage(selectedItem.id);
+                      setSelectedItem(null);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Salvage
+                </PixelButton>
+
+                <PixelButton
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={busy || !canDrop}
+                  onClick={async () => {
+                    if (!onDrop) return;
+                    setBusy(true);
+                    try {
+                      await onDrop(selectedItem.id);
+                      setSelectedItem(null);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Drop
+                </PixelButton>
+              </div>
+            )}
+
+            {isConsumable && (
+              <div className="grid grid-cols-2 gap-2">
+                <PixelButton
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={busy || !canUse}
+                  onClick={async () => {
+                    if (!onUse) return;
+                    setBusy(true);
+                    try {
+                      await onUse(selectedItem.id);
+                      setSelectedItem(null);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Use
+                </PixelButton>
+
+                <PixelButton
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={busy || !canDrop}
+                  onClick={async () => {
+                    if (!onDrop) return;
+                    setBusy(true);
+                    try {
+                      await onDrop(selectedItem.id);
+                      setSelectedItem(null);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Drop
+                </PixelButton>
+              </div>
+            )}
+
+            {!isEquipment && !isConsumable && (
+              <div className="grid grid-cols-1 gap-2">
+                <PixelButton
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={busy || !canDrop}
+                  onClick={async () => {
+                    if (!onDrop) return;
+                    setBusy(true);
+                    try {
+                      await onDrop(selectedItem.id);
+                      setSelectedItem(null);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Drop
+                </PixelButton>
+              </div>
+            )}
           </PixelCard>
         </div>
       )}

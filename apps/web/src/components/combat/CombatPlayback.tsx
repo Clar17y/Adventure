@@ -38,14 +38,15 @@ export function CombatPlayback({
   const playbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logScrollRef = useRef<HTMLDivElement>(null);
 
-  // Playback: reveal one entry every 800ms
+  // Playback: reveal one entry every 1500ms
   useEffect(() => {
     if (phase !== 'playing' || revealedCount >= log.length) return;
 
     playbackTimer.current = setTimeout(() => {
       setRevealedCount(prev => prev + 1);
-    }, 800);
+    }, 1500);
 
     return () => {
       if (playbackTimer.current) clearTimeout(playbackTimer.current);
@@ -81,6 +82,13 @@ export function CombatPlayback({
       if (shakeTimer.current) clearTimeout(shakeTimer.current);
     };
   }, [revealedCount, log]);
+
+  // Auto-scroll combat log to bottom as entries are revealed
+  useEffect(() => {
+    if (logScrollRef.current) {
+      logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight;
+    }
+  }, [revealedCount]);
 
   // Cleanup all timers on unmount
   useEffect(() => {
@@ -156,7 +164,7 @@ export function CombatPlayback({
       )}
 
       {/* Combat log (revealed entries) */}
-      <div className="max-h-40 overflow-y-auto space-y-0.5 border-t border-[var(--rpg-border)] pt-2">
+      <div ref={logScrollRef} className="max-h-40 overflow-y-auto space-y-0.5 border-t border-[var(--rpg-border)] pt-2">
         {log.slice(0, revealedCount).map((entry, idx) => (
           <CombatLogEntry
             key={idx}

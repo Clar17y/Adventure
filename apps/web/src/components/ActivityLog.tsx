@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Clock } from 'lucide-react';
 import { PixelCard } from './PixelCard';
 import type { ActivityLogEntry } from '@/app/game/useGameController';
@@ -16,10 +17,19 @@ interface ActivityLogProps {
 }
 
 export function ActivityLog({ entries, maxHeight = 'max-h-64' }: ActivityLogProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to top when new entries are prepended
+  useEffect(() => {
+    if (scrollRef.current && entries.length > 0) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [entries.length]);
+
   return (
     <PixelCard>
       <h3 className="font-semibold text-[var(--rpg-text-primary)] mb-3">Recent Activity</h3>
-      <div className={`space-y-2 ${maxHeight} overflow-y-auto`}>
+      <div ref={scrollRef} className={`space-y-2 ${maxHeight} overflow-y-auto`}>
         {entries.length === 0 ? (
           <div className="text-sm text-[var(--rpg-text-secondary)] text-center py-4">
             No recent activity

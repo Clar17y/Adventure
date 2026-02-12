@@ -103,7 +103,9 @@ export function ExplorationPlayback({
         onEventRevealed(nextEvent);
         setRevealedEventCount(prev => prev + 1);
 
-        if (nextEvent.type === 'ambush_defeat') {
+        // All ambush types with combat log data trigger full combat playback
+        const isAmbush = nextEvent.type === 'ambush_defeat' || nextEvent.type === 'ambush_victory';
+        if (isAmbush && nextEvent.details?.log) {
           setPhase('paused-combat');
           onCombatStart(nextEvent);
           return;
@@ -113,8 +115,8 @@ export function ExplorationPlayback({
         addTimer(() => {
           setActiveEventLabel(null);
           setPhase('running');
-        }, 1500);
-      }, 400);
+        }, 2500);
+      }, 800);
 
       return () => clearTimeout(barTimer);
     }
@@ -124,7 +126,7 @@ export function ExplorationPlayback({
     const completeTimer = addTimer(() => {
       setPhase('complete');
       onComplete();
-    }, 500);
+    }, 2000);
 
     return () => clearTimeout(completeTimer);
   }, [phase, revealedEventCount, sortedEvents, totalTurns, onEventRevealed, onCombatStart, onComplete, addTimer]);
@@ -155,7 +157,7 @@ export function ExplorationPlayback({
         {/* Progress bar */}
         <div className="h-3 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded overflow-hidden">
           <div
-            className="h-full bg-[var(--rpg-gold)] transition-[width] duration-300 ease-linear"
+            className="h-full bg-[var(--rpg-gold)] transition-[width] duration-700 ease-linear"
             style={{ width: `${progressPercent}%` }}
           />
         </div>

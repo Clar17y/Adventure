@@ -679,29 +679,17 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       setTurns(data.turns.currentTurns);
 
-      // Check if there are any meaningful events (not just "found nothing")
-      const hasRealEvents = data.events.some((e) => e.type !== 'hidden_cache');
-
-      if (hasRealEvents) {
-        // Store for animated playback
-        setExplorationPlaybackData({
-          totalTurns: turnSpend,
-          zoneName: data.zone.name,
-          events: data.events,
-          aborted: data.aborted,
-          refundedTurns: data.refundedTurns,
-          playerHpBeforeExploration: hpBefore,
-          playerMaxHp: maxHpBefore,
-        });
-        setPlaybackActive(true);
-      } else {
-        // No interesting events — just push log instantly (no playback)
-        pushLog({
-          timestamp: nowStamp(),
-          type: 'info',
-          message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}. Nothing of interest found.`,
-        });
-      }
+      // Always trigger animated playback — even empty results get a brief progress bar
+      setExplorationPlaybackData({
+        totalTurns: turnSpend,
+        zoneName: data.zone.name,
+        events: data.events,
+        aborted: data.aborted,
+        refundedTurns: data.refundedTurns,
+        playerHpBeforeExploration: hpBefore,
+        playerMaxHp: maxHpBefore,
+      });
+      setPlaybackActive(true);
 
       // Still do side-effect refreshes
       if (data.encounterSites.length > 0) {

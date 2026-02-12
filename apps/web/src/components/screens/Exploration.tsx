@@ -99,9 +99,9 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
         </div>
       </PixelCard>
 
-      {/* Exploration Playback — progress bar animation */}
-      {playbackData && !combatEvent && (
-        <PixelCard>
+      {/* Exploration Playback — stays mounted during combat to preserve state */}
+      {playbackData && (
+        <PixelCard className={combatEvent ? 'hidden' : ''}>
           <ExplorationPlayback
             totalTurns={playbackData.totalTurns}
             zoneName={playbackData.zoneName}

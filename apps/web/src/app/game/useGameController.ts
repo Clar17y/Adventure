@@ -278,6 +278,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     skillType: string;
     requiredLevel: number;
     isAdvanced: boolean;
+    isDiscovered: boolean;
+    discoveryHint: string | null;
     soulbound: boolean;
     mobFamilyId: string | null;
     resultTemplate: { id: string; name: string; itemType: string; weightClass?: 'heavy' | 'medium' | 'light' | null; setId?: string | null; slot: string | null; tier: number; baseStats: Record<string, unknown>; stackable: boolean; maxDurability: number; requiredSkill: string | null; requiredLevel: number };
@@ -682,7 +684,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       const hadAmbush = data.events.some((event) => event.type === 'ambush_victory' || event.type === 'ambush_defeat');
-      if (hadAmbush) {
+      if (hadAmbush || data.zoneExitDiscovered) {
         await loadAll();
       }
     });

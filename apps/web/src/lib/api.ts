@@ -871,6 +871,8 @@ export async function getCraftingRecipes() {
       skillType: string;
       requiredLevel: number;
       isAdvanced: boolean;
+      isDiscovered: boolean;
+      discoveryHint: string | null;
       soulbound: boolean;
       mobFamilyId: string | null;
       resultTemplate: {

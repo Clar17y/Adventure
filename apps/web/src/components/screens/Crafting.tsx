@@ -21,6 +21,8 @@ interface Recipe {
   icon?: string;
   imageSrc?: string;
   isAdvanced?: boolean;
+  isDiscovered?: boolean;
+  discoveryHint?: string | null;
   soulbound?: boolean;
   resultQuantity: number;
   requiredLevel: number;
@@ -94,9 +96,11 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
 
   const selectedRecipe = selectedRecipeId ? recipes.find((recipe) => recipe.id === selectedRecipeId) ?? null : null;
   const selectedBaseStats = statEntries(selectedRecipe?.baseStats);
+  const selectedRecipeLocked = selectedRecipe?.isAdvanced && selectedRecipe?.isDiscovered === false;
 
   const canCraft = (recipe: Recipe) => {
     if (recipe.requiredLevel > skillLevel) return false;
+    if (recipe.isAdvanced && recipe.isDiscovered === false) return false;
     return recipe.materials.every((m) => m.owned >= m.required);
   };
 
@@ -126,13 +130,15 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
             const isSelected = selectedRecipeId === recipe.id;
             const craftable = canCraft(recipe);
             const levelLocked = recipe.requiredLevel > skillLevel;
+            const discoveryLocked = recipe.isAdvanced && recipe.isDiscovered === false;
+            const listLocked = levelLocked || discoveryLocked;
 
             return (
               <button
                 key={recipe.id}
                 onClick={() => setSelectedRecipeId(recipe.id)}
                 disabled={levelLocked}
-                className={`w-full text-left transition-all ${levelLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full text-left transition-all ${listLocked ? 'opacity-50' : ''} ${levelLocked ? 'cursor-not-allowed' : ''}`}
               >
                 <PixelCard
                   padding="sm"
@@ -181,7 +187,13 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                           <XCircle size={12} color="var(--rpg-red)" />
                         )}
                         <span className="text-xs text-[var(--rpg-text-secondary)]">
-                          {levelLocked ? 'Level too low' : craftable ? 'Can craft' : 'Missing materials'}
+                          {levelLocked
+                            ? 'Level too low'
+                            : discoveryLocked
+                            ? 'Recipe not discovered'
+                            : craftable
+                            ? 'Can craft'
+                            : 'Missing materials'}
                         </span>
                       </div>
                     </div>
@@ -214,11 +226,16 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
             <div>
               <h3 className="font-bold text-[var(--rpg-text-primary)] text-lg">{selectedRecipe.name}</h3>
               <p className="text-xs text-[var(--rpg-text-secondary)] capitalize">
-                {selectedRecipe.rarity} • Lv. {selectedRecipe.requiredLevel} Required
+                {selectedRecipe.rarity} - Lv. {selectedRecipe.requiredLevel} Required
               </p>
               {selectedRecipe.isAdvanced && (
                 <p className="text-xs text-[var(--rpg-gold)]">
-                  Advanced recipe{selectedRecipe.soulbound ? ' • Soulbound result' : ''}
+                  Advanced recipe{selectedRecipe.soulbound ? ' - Soulbound result' : ''}
+                </p>
+              )}
+              {selectedRecipeLocked && (
+                <p className="text-xs text-[var(--rpg-text-secondary)] mt-1">
+                  {selectedRecipe.discoveryHint ?? 'A unique drop from a large encounter site.'}
                 </p>
               )}
             </div>
@@ -253,7 +270,7 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                       className="w-8 h-8 object-contain image-rendering-pixelated"
                     />
                   ) : (
-                    <span className="text-2xl">{material.icon || '❓'}</span>
+                    <span className="text-2xl">{material.icon || '?'}</span>
                   )}
                   <div className="flex-1">
                     <div className="flex justify-between items-baseline">
@@ -304,7 +321,7 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
             onClick={() => onCraft(selectedRecipe.id)}
             disabled={isRecovering || !canCraft(selectedRecipe)}
           >
-            {isRecovering ? 'Recover First' : `Craft ${selectedRecipe.name}`}
+            {isRecovering ? 'Recover First' : selectedRecipeLocked ? 'Discover Recipe First' : `Craft ${selectedRecipe.name}`}
           </PixelButton>
         </PixelCard>
       )}
@@ -334,3 +351,4 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
     </div>
   );
 }
+

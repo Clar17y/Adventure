@@ -149,5 +149,6 @@ export function buildPlayerCombatStats(
     speed: Math.floor(input.attributes.evasion / CHARACTER_CONSTANTS.EVASION_TO_SPEED_DIVISOR),
     critChance: equipmentStats.critChance ?? 0,
     critDamage: equipmentStats.critDamage ?? 0,
+    damageType: input.attackStyle === 'magic' ? 'magic' : 'physical',
   };
 }

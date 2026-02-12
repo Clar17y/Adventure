@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
@@ -43,6 +43,14 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
   const [combatEvent, setCombatEvent] = useState<ExplorationPlaybackEvent | null>(null);
   const [resumeFromCombat, setResumeFromCombat] = useState(false);
+  const [playerHpForNextCombat, setPlayerHpForNextCombat] = useState<number | null>(null);
+
+  // Reset tracked HP when a new exploration starts
+  useEffect(() => {
+    if (playbackData) {
+      setPlayerHpForNextCombat(null);
+    }
+  }, [playbackData]);
 
   const calculateProbabilities = (turns: number) => {
     const expectedAmbushes = turns * EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN;
@@ -143,10 +151,11 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
       {playbackData && combatEvent && (
         <PixelCard>
           <CombatPlayback
+            key={combatEvent.turn}
             mobDisplayName={(combatEvent.details?.mobDisplayName as string) ?? 'Unknown'}
             outcome={(combatEvent.details?.outcome as string) ?? 'defeat'}
             playerMaxHp={playbackData.playerMaxHp}
-            playerStartHp={playbackData.playerHpBeforeExploration}
+            playerStartHp={playerHpForNextCombat ?? playbackData.playerHpBeforeExploration}
             mobMaxHp={(combatEvent.details?.mobMaxHp as number) ?? 100}
             log={(combatEvent.details?.log as Array<{
               round: number;
@@ -171,6 +180,15 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
               mobHpAfter?: number;
             }>) ?? []}
             onComplete={() => {
+              // Track player HP after this fight for the next combat
+              const combatLog = (combatEvent.details?.log as Array<{ playerHpAfter?: number }>) ?? [];
+              if (combatLog.length > 0) {
+                const lastEntry = combatLog[combatLog.length - 1];
+                if (lastEntry.playerHpAfter !== undefined) {
+                  setPlayerHpForNextCombat(lastEntry.playerHpAfter);
+                }
+              }
+
               // Now that combat playback is done, log the ambush result
               const typeMap: Record<string, 'info' | 'success' | 'danger'> = {
                 ambush_defeat: 'danger',

@@ -187,6 +187,7 @@ export default function GamePage() {
     activeCraftingSkill,
     setActiveCraftingSkill,
     activityLog,
+    pushLog,
     pendingEncounters,
     pendingEncountersLoading,
     pendingEncountersError,
@@ -205,9 +206,13 @@ export default function GamePage() {
     bestiaryError,
     hpState,
     setHpState,
+    playbackActive,
+    explorationPlaybackData,
     currentZone,
     ownedByTemplateId,
     handleStartExploration,
+    handleExplorationPlaybackComplete,
+    handlePlaybackSkip,
     handleStartCombat,
     handleMine,
     handleGatheringPageChange,
@@ -316,6 +321,10 @@ export default function GamePage() {
             activityLog={activityLog}
             isRecovering={hpState.isRecovering}
             recoveryCost={hpState.recoveryCost}
+            playbackData={explorationPlaybackData}
+            onPlaybackComplete={handleExplorationPlaybackComplete}
+            onPlaybackSkip={handlePlaybackSkip}
+            onPushLog={pushLog}
           />
         );
       case 'inventory':

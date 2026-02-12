@@ -349,6 +349,16 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [bestiaryLoading, setBestiaryLoading] = useState(false);
   const [bestiaryError, setBestiaryError] = useState<string | null>(null);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
+  const [playbackActive, setPlaybackActive] = useState(false);
+  const [explorationPlaybackData, setExplorationPlaybackData] = useState<{
+    totalTurns: number;
+    zoneName: string;
+    events: Array<{ turn: number; type: string; description: string; details?: Record<string, unknown> }>;
+    aborted: boolean;
+    refundedTurns: number;
+    playerHpBeforeExploration: number;
+    playerMaxHp: number;
+  } | null>(null);
 
   const loadTurnsAndHp = useCallback(async () => {
     const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
@@ -653,6 +663,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (!currentZone) return;
 
     await runAction('exploration', async () => {
+      const hpBefore = hpState.currentHp;
+      const maxHpBefore = hpState.maxHp;
       const res = await startExploration(currentZone.id, turnSpend);
       const data = res.data;
       if (!data) {
@@ -661,39 +673,101 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
-      const stampedEvents = data.events
+
+      // Check if there are any meaningful events (not just "found nothing")
+      const hasRealEvents = data.events.some(
+        (e) => e.type !== 'hidden_cache' || data.events.length > 1
+      );
+
+      if (hasRealEvents) {
+        // Store for animated playback
+        setExplorationPlaybackData({
+          totalTurns: turnSpend,
+          zoneName: data.zone.name,
+          events: data.events,
+          aborted: data.aborted,
+          refundedTurns: data.refundedTurns,
+          playerHpBeforeExploration: hpBefore,
+          playerMaxHp: maxHpBefore,
+        });
+        setPlaybackActive(true);
+      } else {
+        // No interesting events — just push log instantly (no playback)
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}. Nothing of interest found.`,
+        });
+      }
+
+      // Still do side-effect refreshes
+      if (data.encounterSites.length > 0) {
+        await refreshPendingEncounters();
+      }
+      if (data.resourceDiscoveries.length > 0) {
+        await loadGatheringNodes();
+      }
+      const hadAmbush = data.events.some(
+        (e) => e.type === 'ambush_victory' || e.type === 'ambush_defeat'
+      );
+      if (hadAmbush || data.zoneExitDiscovered) {
+        await Promise.all([loadAll(), loadTurnsAndHp()]);
+      }
+    });
+  };
+
+  const handleExplorationPlaybackComplete = () => {
+    if (explorationPlaybackData) {
+      pushLog({
+        timestamp: nowStamp(),
+        type: 'info',
+        message: `Explored ${explorationPlaybackData.totalTurns.toLocaleString()} turns in ${explorationPlaybackData.zoneName}.`,
+      });
+      if (explorationPlaybackData.aborted && explorationPlaybackData.refundedTurns > 0) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Exploration aborted. ${explorationPlaybackData.refundedTurns.toLocaleString()} turns refunded.`,
+        });
+      }
+    }
+    setExplorationPlaybackData(null);
+    setPlaybackActive(false);
+  };
+
+  const handlePlaybackSkip = () => {
+    // Dump all remaining events to activity log at once
+    if (explorationPlaybackData) {
+      const entries = explorationPlaybackData.events
         .slice()
         .reverse()
         .map((event) => ({
           timestamp: nowStamp(),
-          type: event.type === 'ambush_defeat' ? 'danger' as const : event.type === 'ambush_victory' || event.type === 'encounter_site' || event.type === 'resource_node' ? 'success' as const : 'info' as const,
+          type: (event.type === 'ambush_defeat'
+            ? 'danger'
+            : event.type === 'ambush_victory' || event.type === 'encounter_site' || event.type === 'resource_node'
+              ? 'success'
+              : 'info') as 'info' | 'success' | 'danger',
           message: `Turn ${event.turn}: ${event.description}`,
         }));
-
       pushLog(
-        ...(data.aborted
-          ? []
-          : [{ timestamp: nowStamp(), type: 'info' as const, message: `Explored ${turnSpend.toLocaleString()} turns in ${data.zone.name}.` }]),
-        ...stampedEvents,
+        {
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Explored ${explorationPlaybackData.totalTurns.toLocaleString()} turns in ${explorationPlaybackData.zoneName}.`,
+        },
+        ...entries,
       );
-
-      if (data.aborted && data.refundedTurns > 0) {
-        pushLog({ timestamp: nowStamp(), type: 'info', message: `Exploration aborted. ${data.refundedTurns.toLocaleString()} turns refunded.` });
+      if (explorationPlaybackData.aborted && explorationPlaybackData.refundedTurns > 0) {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'info',
+          message: `Exploration aborted. ${explorationPlaybackData.refundedTurns.toLocaleString()} turns refunded.`,
+        });
       }
-
-      if (data.encounterSites.length > 0 && activeScreen === 'combat') {
-        await refreshPendingEncounters();
-      }
-
-      if (data.resourceDiscoveries.length > 0) {
-        await loadGatheringNodes();
-      }
-
-      const hadAmbush = data.events.some((event) => event.type === 'ambush_victory' || event.type === 'ambush_defeat');
-      if (hadAmbush || data.zoneExitDiscovered) {
-        await loadAll();
-      }
-    });
+    }
+    setExplorationPlaybackData(null);
+    setPlaybackActive(false);
   };
 
   const handleStartCombat = async (encounterSiteId: string) => {
@@ -1131,6 +1205,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     bestiaryError,
     hpState,
     setHpState,
+    playbackActive,
+    explorationPlaybackData,
 
     // Derived
     currentZone,
@@ -1138,6 +1214,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
     // Actions
     handleStartExploration,
+    handleExplorationPlaybackComplete,
+    handlePlaybackSkip,
     handleStartCombat,
     handleMine,
     handleGatheringPageChange,

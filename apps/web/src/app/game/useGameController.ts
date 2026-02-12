@@ -1134,6 +1134,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const handleTravelToZone = async (id: string) => {
+    const hpBefore = hpState.currentHp;
+
     await runAction('travel', async () => {
       const res = await travelToZone(id);
       const data = res.data;
@@ -1145,23 +1147,69 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setTurns(data.turns.currentTurns);
       setActiveZoneId(data.zone.id);
 
-      // Add travel events to exploration log
+      // Process travel events
       if (data.events.length > 0) {
-        const stampedEvents = data.events.map((event) => ({
-          timestamp: nowStamp(),
-          type: event.type === 'ambush_defeat' ? 'danger' as const
-              : event.type === 'ambush_victory' ? 'success' as const
-              : 'info' as const,
-          message: `Turn ${event.turn}: ${event.description}`,
-        }));
-        pushLog(...stampedEvents.reverse());
+        const ambushEvent = data.events.find(
+          (e) => (e.type === 'ambush_victory' || e.type === 'ambush_defeat') && e.details?.log
+        );
+
+        if (ambushEvent && ambushEvent.details) {
+          // Has combat log data — trigger animated playback
+          pushLog({
+            timestamp: nowStamp(),
+            type: 'info',
+            message: `Travelling to ${data.zone.name}...`,
+          });
+
+          const details = ambushEvent.details as Record<string, unknown>;
+          setCombatPlaybackData({
+            mobDisplayName: (details.mobDisplayName as string) ?? (details.mobName as string) ?? 'Unknown',
+            outcome: (details.outcome as string) ?? (ambushEvent.type === 'ambush_victory' ? 'victory' : 'defeat'),
+            playerMaxHp: (details.playerMaxHp as number) ?? hpState.maxHp,
+            playerStartHp: hpBefore,
+            mobMaxHp: (details.mobMaxHp as number) ?? 100,
+            log: (details.log as LastCombatLogEntry[]) ?? [],
+            rewards: {
+              xp: (details.xp as number) ?? 0,
+              loot: (details.loot as LastCombat['rewards']['loot']) ?? [],
+              siteCompletion: null,
+              skillXp: null,
+            },
+          });
+          setPlaybackActive(true);
+
+          // Push non-combat events to the log immediately
+          const nonCombatEvents = data.events.filter(
+            (e) => e.type !== 'ambush_victory' && e.type !== 'ambush_defeat'
+          );
+          if (nonCombatEvents.length > 0) {
+            const stampedEvents = nonCombatEvents.map((event) => ({
+              timestamp: nowStamp(),
+              type: 'info' as const,
+              message: `Turn ${event.turn}: ${event.description}`,
+            }));
+            pushLog(...stampedEvents.reverse());
+          }
+        } else {
+          // No combat log data — push events as before (fallback)
+          const stampedEvents = data.events.map((event) => ({
+            timestamp: nowStamp(),
+            type: (event.type === 'ambush_defeat'
+              ? 'danger'
+              : event.type === 'ambush_victory'
+                ? 'success'
+                : 'info') as 'info' | 'success' | 'danger',
+            message: `Turn ${event.turn}: ${event.description}`,
+          }));
+          pushLog(...stampedEvents.reverse());
+        }
       }
 
       if (data.respawnedTo) {
         pushLog({
           timestamp: nowStamp(),
           type: 'danger' as const,
-          message: `You were knocked out and woke up in ${data.respawnedTo!.townName}.`,
+          message: `You were knocked out and woke up in ${data.respawnedTo.townName}.`,
         });
       }
 

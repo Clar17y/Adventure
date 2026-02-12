@@ -18,6 +18,7 @@ export interface ExplorationEstimate {
   encounterSiteChance: number;
   resourceNodeChance: number;
   hiddenCacheChance: number;
+  zoneExitChance: number;
   expectedAmbushes: number;
   expectedEncounterSites: number;
 }
@@ -39,7 +40,7 @@ export function cumulativeProbability(perTurnChance: number, turns: number): num
 /**
  * Estimate outcomes for a given number of exploration turns.
  */
-export function estimateExploration(turns: number): ExplorationEstimate {
+export function estimateExploration(turns: number, zoneExitChance: number | null = null): ExplorationEstimate {
   return {
     turns,
     ambushChance: cumulativeProbability(
@@ -58,6 +59,9 @@ export function estimateExploration(turns: number): ExplorationEstimate {
       EXPLORATION_CONSTANTS.HIDDEN_CACHE_CHANCE,
       turns
     ),
+    zoneExitChance: zoneExitChance != null && zoneExitChance > 0
+      ? cumulativeProbability(zoneExitChance, turns)
+      : 0,
     expectedAmbushes: turns * EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN,
     expectedEncounterSites: turns * EXPLORATION_CONSTANTS.ENCOUNTER_SITE_CHANCE_PER_TURN,
   };
@@ -69,9 +73,10 @@ export function estimateExploration(turns: number): ExplorationEstimate {
  */
 export function simulateExploration(
   turns: number,
-  canDiscoverZoneExit: boolean = false
+  zoneExitChance: number | null = null
 ): ExplorationOutcome[] {
   const outcomes: ExplorationOutcome[] = [];
+  let canDiscoverZoneExit = zoneExitChance != null && zoneExitChance > 0;
 
   for (let t = 1; t <= turns; t++) {
     if (Math.random() < EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN) {
@@ -90,15 +95,27 @@ export function simulateExploration(
       outcomes.push({ type: 'hidden_cache', turnOccurred: t });
     }
 
-    // Zone exit can only be discovered once
-    if (canDiscoverZoneExit && Math.random() < EXPLORATION_CONSTANTS.ZONE_EXIT_CHANCE) {
+    if (canDiscoverZoneExit && Math.random() < zoneExitChance!) {
       outcomes.push({ type: 'zone_exit', turnOccurred: t });
-      canDiscoverZoneExit = false; // Can't discover again
+      canDiscoverZoneExit = false;
     }
   }
 
-  // Sort by turn occurred
   return outcomes.sort((a, b) => a.turnOccurred - b.turnOccurred);
+}
+
+export interface TravelAmbushOutcome {
+  turnOccurred: number;
+}
+
+export function simulateTravelAmbushes(turns: number): TravelAmbushOutcome[] {
+  const outcomes: TravelAmbushOutcome[] = [];
+  for (let t = 1; t <= turns; t++) {
+    if (Math.random() < EXPLORATION_CONSTANTS.TRAVEL_AMBUSH_CHANCE_PER_TURN) {
+      outcomes.push({ turnOccurred: t });
+    }
+  }
+  return outcomes;
 }
 
 /**

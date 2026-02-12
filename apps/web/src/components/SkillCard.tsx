@@ -31,13 +31,15 @@ export function SkillCard({
         style={{ backgroundColor: 'var(--rpg-background)' }}
       >
         {imageSrc ? (
-          <Image
-            src={imageSrc}
-            alt={name}
-            width={48}
-            height={48}
-            className="image-rendering-pixelated"
-          />
+          <div className="relative w-12 h-12 flex-shrink-0">
+            <Image
+              src={imageSrc}
+              alt={name}
+              fill
+              sizes="48px"
+              className="object-contain image-rendering-pixelated"
+            />
+          </div>
         ) : Icon ? (
           <Icon size={32} style={{ color: iconColor }} />
         ) : null}

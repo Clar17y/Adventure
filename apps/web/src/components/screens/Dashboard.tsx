@@ -275,13 +275,15 @@ export function Dashboard({ playerData, skills, onNavigate, characterProgression
                 className="aspect-square bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg flex flex-col items-center justify-center gap-1 hover:border-[var(--rpg-gold)] transition-all active:scale-95"
               >
                 {skill.imageSrc ? (
-                  <Image
-                    src={skill.imageSrc}
-                    alt={skill.name}
-                    width={56}
-                    height={56}
-                    className="image-rendering-pixelated"
-                  />
+                  <div className="relative w-14 h-14 flex-shrink-0">
+                    <Image
+                      src={skill.imageSrc}
+                      alt={skill.name}
+                      fill
+                      sizes="56px"
+                      className="object-contain image-rendering-pixelated"
+                    />
+                  </div>
                 ) : Icon ? (
                   <Icon size={56} color="var(--rpg-gold)" />
                 ) : null}

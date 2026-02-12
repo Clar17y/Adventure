@@ -113,35 +113,17 @@ export const CHARACTER_CONSTANTS = {
 // =============================================================================
 
 export const EXPLORATION_CONSTANTS = {
-  /** Per-turn chance for an unavoidable ambush combat */
   AMBUSH_CHANCE_PER_TURN: 0.005,
-
-  /** Per-turn chance to discover a persistent encounter site */
   ENCOUNTER_SITE_CHANCE_PER_TURN: 0.0008,
-
-  /** Per-turn chance to discover a resource node */
   RESOURCE_NODE_CHANCE: 0.0005,
-
-  /** Per-turn chance to find a hidden cache */
   HIDDEN_CACHE_CHANCE: 0.0001,
-
-  /** Per-turn chance to discover zone exit (first time only) */
-  ZONE_EXIT_CHANCE: 0.002,
-
-  /** Mobs that decay from encounter sites per hour (lazy-applied). */
+  TRAVEL_AMBUSH_CHANCE_PER_TURN: 0.04,
   ENCOUNTER_SITE_DECAY_RATE_PER_HOUR: 0.06,
-
-  /** Capacity lost from resource nodes per hour (lazy-applied). */
   RESOURCE_NODE_DECAY_RATE_PER_HOUR: 0.65,
-
   ENCOUNTER_SIZE_SMALL: { min: 2, max: 3 },
   ENCOUNTER_SIZE_MEDIUM: { min: 4, max: 6 },
   ENCOUNTER_SIZE_LARGE: { min: 7, max: 10 },
-
-  /** Minimum turns to spend on exploration */
   MIN_EXPLORATION_TURNS: 10,
-
-  /** Maximum turns in single exploration batch */
   MAX_EXPLORATION_TURNS: 10_000,
 } as const;
 

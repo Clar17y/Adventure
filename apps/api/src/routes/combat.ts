@@ -25,6 +25,7 @@ import { degradeEquippedDurability } from '../services/durabilityService';
 import { getHpState, setHp, enterRecoveringState } from '../services/hpService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
+import { respawnToHomeTown } from '../services/zoneDiscoveryService';
 import { grantEncounterSiteChestRewardsTx } from '../services/chestService';
 
 export const combatRouter = Router();
@@ -591,6 +592,7 @@ combatRouter.post('/start', async (req, res, next) => {
     let xpGrant = null as null | Awaited<ReturnType<typeof grantSkillXp>>;
     const durabilityLost = await degradeEquippedDurability(playerId);
     let fleeResult = null as null | ReturnType<typeof calculateFleeResult>;
+    let respawnedTo: { townId: string; townName: string } | null = null;
 
     const baseXp = combatResult.outcome === 'victory' ? combatResult.xpGained : 0;
     const xpAwarded = Math.max(0, baseXp);
@@ -611,6 +613,7 @@ combatRouter.post('/start', async (req, res, next) => {
 
       if (fleeResult.outcome === 'knockout') {
         await enterRecoveringState(playerId, hpState.maxHp);
+        respawnedTo = await respawnToHomeTown(playerId);
       } else {
         await setHp(playerId, fleeResult.remainingHp);
       }
@@ -667,6 +670,7 @@ combatRouter.post('/start', async (req, res, next) => {
           mobName: baseMob.name,
           mobPrefix,
           mobDisplayName: prefixedMob.mobDisplayName,
+          source: consumedEncounterSiteId ? 'encounter_site' : 'zone_combat',
           encounterSiteId: consumedEncounterSiteId,
           encounterSiteCleared,
           attackSkill,
@@ -724,6 +728,7 @@ combatRouter.post('/start', async (req, res, next) => {
               recoveryCost: fleeResult.recoveryCost,
             }
           : null,
+        ...(respawnedTo ? { respawnedTo } : {}),
       },
       rewards: {
         xp: xpAwarded,
@@ -813,6 +818,7 @@ interface CombatHistoryListRow {
   mobName: string | null;
   mobDisplayName: string | null;
   outcome: string | null;
+  source: string | null;
   xpGained: number;
   roundCount: number;
 }
@@ -877,6 +883,13 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'mobName') AS "mobName",
             COALESCE(("result"->>'mobDisplayName'), ("result"->>'mobName')) AS "mobDisplayName",
             ("result"->>'outcome') AS "outcome",
+            COALESCE(
+              NULLIF(("result"->>'source'), ''),
+              CASE
+                WHEN COALESCE(("result"->>'encounterSiteId'), '') <> '' THEN 'encounter_site'
+                ELSE 'zone_combat'
+              END
+            ) AS "source",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
             COALESCE((
               SELECT MAX(
@@ -904,6 +917,13 @@ combatRouter.get('/logs', async (req, res, next) => {
             ("result"->>'mobName') AS "mobName",
             COALESCE(("result"->>'mobDisplayName'), ("result"->>'mobName')) AS "mobDisplayName",
             ("result"->>'outcome') AS "outcome",
+            COALESCE(
+              NULLIF(("result"->>'source'), ''),
+              CASE
+                WHEN COALESCE(("result"->>'encounterSiteId'), '') <> '' THEN 'encounter_site'
+                ELSE 'zone_combat'
+              END
+            ) AS "source",
             COALESCE(NULLIF("result"->'rewards'->>'xp', '')::int, 0) AS "xpGained",
             COALESCE((
               SELECT MAX(
@@ -972,6 +992,7 @@ combatRouter.get('/logs', async (req, res, next) => {
         mobName: row.mobName,
         mobDisplayName: row.mobDisplayName ?? row.mobName,
         outcome: row.outcome,
+        source: row.source,
         roundCount: row.roundCount,
         xpGained: row.xpGained,
       })),

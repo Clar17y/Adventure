@@ -411,8 +411,33 @@ export async function getZones() {
       travelCost: number;
       isStarter: boolean;
       discovered: boolean;
+      zoneType: string;
+      zoneExitChance: number | null;
     }>;
+    connections: Array<{ fromId: string; toId: string }>;
+    currentZoneId: string;
   }>('/api/v1/zones');
+}
+
+export async function travelToZone(zoneId: string) {
+  return fetchApi<{
+    zone: { id: string; name: string; zoneType: string };
+    turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
+    breadcrumbReturn: boolean;
+    events: Array<{
+      turn: number;
+      type: string;
+      description: string;
+      details?: Record<string, unknown>;
+    }>;
+    aborted: boolean;
+    refundedTurns: number;
+    respawnedTo: { townId: string; townName: string } | null;
+    newDiscoveries: Array<{ id: string; name: string }>;
+  }>('/api/v1/zones/travel', {
+    method: 'POST',
+    body: JSON.stringify({ zoneId }),
+  });
 }
 
 // Exploration
@@ -512,6 +537,7 @@ export interface SkillXpGrantResponse {
 }
 
 export type CombatOutcomeResponse = 'victory' | 'defeat' | 'fled';
+export type CombatSourceResponse = 'zone_combat' | 'encounter_site' | 'exploration_ambush' | 'travel_ambush';
 
 export interface CombatResultResponse {
   zoneId: string;
@@ -520,6 +546,7 @@ export interface CombatResultResponse {
   mobName: string;
   mobPrefix: string | null;
   mobDisplayName: string;
+  source?: CombatSourceResponse | null;
   encounterSiteId: string | null;
   encounterSiteCleared?: boolean;
   attackSkill: 'melee' | 'ranged' | 'magic';
@@ -609,6 +636,7 @@ export interface CombatHistoryListItemResponse {
   mobName: string | null;
   mobDisplayName: string | null;
   outcome: string | null;
+  source: CombatSourceResponse | null;
   roundCount: number;
   xpGained: number;
 }

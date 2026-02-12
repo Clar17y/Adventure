@@ -12,6 +12,7 @@ import type { HpState, LastCombat, PendingEncounter } from '../useGameController
 
 interface CombatScreenProps {
   hpState: HpState;
+  currentZoneId: string | null;
   pendingEncounters: PendingEncounter[];
   pendingEncountersLoading: boolean;
   pendingEncountersError: string | null;
@@ -44,6 +45,7 @@ interface CombatScreenProps {
 
 export function CombatScreen({
   hpState,
+  currentZoneId,
   pendingEncounters,
   pendingEncountersLoading,
   pendingEncountersError,
@@ -210,6 +212,8 @@ export function CombatScreen({
                   const nextMobLabel = e.nextMobName
                     ? (prefix ? `${prefix.displayName} ${e.nextMobName}` : e.nextMobName)
                     : null;
+                  const isWrongZone = Boolean(currentZoneId) && e.zoneId !== currentZoneId;
+                  const isDisabled = hpState.isRecovering || busyAction === 'combat' || !e.nextMobTemplateId || isWrongZone;
                   return (
                     <div
                       key={e.encounterSiteId}
@@ -230,14 +234,20 @@ export function CombatScreen({
                       <button
                         type="button"
                         onClick={() => void onStartCombat(e.encounterSiteId)}
-                        disabled={hpState.isRecovering || busyAction === 'combat' || !e.nextMobTemplateId}
+                        disabled={isDisabled}
                         className={`px-3 py-2 rounded font-semibold ${
-                          hpState.isRecovering || !e.nextMobTemplateId
+                          isDisabled
                             ? 'bg-[var(--rpg-border)] text-[var(--rpg-text-secondary)] cursor-not-allowed'
                             : 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
                         }`}
                       >
-                        {hpState.isRecovering ? 'Recover First' : !e.nextMobTemplateId ? 'Decayed' : 'Fight'}
+                        {hpState.isRecovering
+                          ? 'Recover First'
+                          : isWrongZone
+                            ? 'Wrong Zone'
+                            : !e.nextMobTemplateId
+                              ? 'Decayed'
+                              : 'Fight'}
                       </button>
                     </div>
                   );

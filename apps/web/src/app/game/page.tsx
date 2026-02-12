@@ -17,6 +17,8 @@ import { Crafting } from '@/components/screens/Crafting';
 import { Forge } from '@/components/screens/Forge';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
+import { PixelCard } from '@/components/PixelCard';
+import { PixelButton } from '@/components/PixelButton';
 import { rarityFromTier } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
@@ -166,6 +168,7 @@ export default function GamePage() {
     setTurns,
     zones,
     activeZoneId,
+    zoneConnections,
     skills,
     characterProgression,
     inventory,
@@ -280,12 +283,33 @@ export default function GamePage() {
           />
         );
       case 'explore':
+        if (currentZone?.zoneType === 'town') {
+          return (
+            <PixelCard>
+              <div className="text-center py-8">
+                <h2 className="text-xl font-bold text-[var(--rpg-text-primary)] mb-2">
+                  {currentZone.name}
+                </h2>
+                <p className="text-sm text-[var(--rpg-text-secondary)] mb-4">
+                  This is a peaceful town. Use the World Map to travel to a wild zone for exploration.
+                </p>
+                <PixelButton variant="gold" onClick={() => setActiveScreen('zones')}>
+                  Open World Map
+                </PixelButton>
+              </div>
+            </PixelCard>
+          );
+        }
         return (
           <Exploration
             currentZone={{
               name: currentZone?.name ?? 'Unknown',
               description: currentZone?.description ?? 'Select a zone from Map.',
               minLevel: Math.max(1, (currentZone?.difficulty ?? 1) * 5),
+              imageSrc:
+                currentZone?.name && currentZone.name !== '???'
+                  ? zoneImageSrc(currentZone.name)
+                  : undefined,
             }}
             availableTurns={turns}
             onStartExploration={handleStartExploration}
@@ -441,14 +465,19 @@ export default function GamePage() {
             zones={zones.map((z) => ({
               id: z.id,
               name: z.name,
-              description: z.description ?? '',
+              description: z.description,
               difficulty: z.difficulty,
               travelCost: z.travelCost,
-              isLocked: !z.discovered || z.name === '???',
-              isCurrent: z.id === activeZoneId,
+              discovered: z.discovered ?? true,
+              zoneType: z.zoneType ?? 'wild',
               imageSrc: z.discovered && z.name !== '???' ? zoneImageSrc(z.name) : undefined,
             }))}
+            connections={zoneConnections}
+            currentZoneId={activeZoneId ?? ''}
+            availableTurns={turns}
+            isRecovering={hpState.isRecovering}
             onTravel={handleTravelToZone}
+            onExploreCurrentZone={() => setActiveScreen('explore')}
           />
         );
       case 'bestiary':
@@ -515,6 +544,7 @@ export default function GamePage() {
                 requiredLevel: r.requiredLevel,
                 turnCost: r.turnCost,
                 xpReward: r.xpReward,
+                baseStats: r.resultTemplate.baseStats,
                 materials: r.materials.map((m) => {
                   const meta = r.materialTemplates.find((t) => t.id === m.templateId);
                   const owned = ownedByTemplateId.get(m.templateId) ?? 0;
@@ -627,6 +657,7 @@ export default function GamePage() {
         return (
           <CombatScreen
             hpState={hpState}
+            currentZoneId={activeZoneId}
             pendingEncounters={pendingEncounters}
             pendingEncountersLoading={pendingEncountersLoading}
             pendingEncountersError={pendingEncountersError}

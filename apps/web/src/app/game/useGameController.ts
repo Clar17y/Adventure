@@ -22,6 +22,7 @@ import {
   salvage,
   startCombatFromEncounterSite,
   startExploration,
+  travelToZone,
   unequip,
 } from '@/lib/api';
 
@@ -183,8 +184,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     travelCost: number;
     isStarter: boolean;
     discovered: boolean;
+    zoneType: string;
   }>>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+  const [zoneConnections, setZoneConnections] = useState<Array<{ fromId: string; toId: string }>>([]);
   const [skills, setSkills] = useState<Array<{ skillType: string; level: number; xp: number; dailyXpGained: number }>>([]);
   const [characterProgression, setCharacterProgression] = useState<CharacterProgression>(DEFAULT_CHARACTER_PROGRESSION);
   const [inventory, setInventory] = useState<Array<{
@@ -373,11 +376,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (hpRes.data) setHpState(hpRes.data);
     if (zonesRes.data) {
       setZones(zonesRes.data.zones);
-      setActiveZoneId((prev) => {
-        if (prev) return prev;
-        const first = zonesRes.data!.zones.find((z) => z.discovered) ?? zonesRes.data!.zones.find((z) => z.isStarter) ?? zonesRes.data!.zones[0];
-        return first?.id ?? prev;
-      });
+      setZoneConnections(zonesRes.data.connections);
+      setActiveZoneId(zonesRes.data.currentZoneId);
     }
     if (invRes.data) setInventory(invRes.data.items);
     if (equipRes.data) {
@@ -689,6 +689,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const handleStartCombat = async (encounterSiteId: string) => {
+    const selectedSite = pendingEncounters.find((site) => site.encounterSiteId === encounterSiteId);
+    if (selectedSite && activeZoneId && selectedSite.zoneId !== activeZoneId) {
+      setActionError(`Travel to ${selectedSite.zoneName} before fighting this encounter.`);
+      return;
+    }
+
     await runAction('combat', async () => {
       const res = await startCombatFromEncounterSite(encounterSiteId, 'melee');
       const data = res.data;
@@ -1024,8 +1030,40 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   };
 
   const handleTravelToZone = async (id: string) => {
-    setActiveZoneId(id);
-    setActiveScreen('explore');
+    await runAction('travel', async () => {
+      const res = await travelToZone(id);
+      const data = res.data;
+      if (!data) {
+        setActionError(res.error?.message ?? 'Travel failed');
+        return;
+      }
+
+      setTurns(data.turns.currentTurns);
+      setActiveZoneId(data.zone.id);
+
+      // Add travel events to exploration log
+      if (data.events.length > 0) {
+        const stampedEvents = data.events.map((event) => ({
+          timestamp: nowStamp(),
+          type: event.type === 'ambush_defeat' ? 'danger' as const
+              : event.type === 'ambush_victory' ? 'success' as const
+              : 'info' as const,
+          message: `Turn ${event.turn}: ${event.description}`,
+        }));
+        setExplorationLog((prev) => [...stampedEvents.reverse(), ...prev]);
+      }
+
+      if (data.respawnedTo) {
+        setExplorationLog((prev) => [{
+          timestamp: nowStamp(),
+          type: 'danger' as const,
+          message: `You were knocked out and woke up in ${data.respawnedTo!.townName}.`,
+        }, ...prev]);
+      }
+
+      // Refresh all state after travel
+      await loadAll();
+    });
   };
 
   const handleAllocateAttribute = async (attribute: AttributeType, points = 1) => {
@@ -1057,6 +1095,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     zones,
     activeZoneId,
     setActiveZoneId,
+    zoneConnections,
     skills,
     characterProgression,
     inventory,

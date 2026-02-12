@@ -204,6 +204,7 @@ export default function GamePage() {
     bestiaryMobs,
     bestiaryLoading,
     bestiaryError,
+    bestiaryPrefixSummary,
     hpState,
     setHpState,
     playbackActive,
@@ -524,7 +525,7 @@ export default function GamePage() {
               stats: m.stats,
               zones: m.zones,
               description: m.description,
-              prefixEncounters: m.prefixEncounters,
+              prefixesEncountered: m.prefixesEncountered,
               drops: m.drops.map((d) => ({
                 name: d.item.name,
                 imageSrc: itemImageSrc(d.item.name, d.item.itemType),
@@ -532,6 +533,7 @@ export default function GamePage() {
                 rarity: d.rarity,
               })),
             }))}
+            prefixSummary={bestiaryPrefixSummary}
           />
         );
       case 'crafting':

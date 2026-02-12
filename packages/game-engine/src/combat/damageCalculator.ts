@@ -27,7 +27,6 @@ export function rollDamage(min: number, max: number): number {
  */
 export function doesAttackHit(
   attackRoll: number,
-  attackBonus: number,
   accuracyBonus: number,
   targetDodge: number,
   targetEvasion: number
@@ -37,7 +36,7 @@ export function doesAttackHit(
   // Natural 1 always misses
   if (attackRoll === 1) return false;
 
-  const totalAttack = attackRoll + attackBonus + accuracyBonus;
+  const totalAttack = attackRoll + accuracyBonus;
   const hitThreshold = 10 + targetDodge + Math.floor(Math.max(0, targetEvasion) / 2);
   return totalAttack >= hitThreshold;
 }

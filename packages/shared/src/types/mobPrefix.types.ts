@@ -13,7 +13,7 @@ export interface MobPrefixDefinition {
   weight: number;
   statMultipliers: {
     hp?: number;
-    attack?: number;
+    accuracy?: number;
     defence?: number;
     evasion?: number;
     damageMin?: number;

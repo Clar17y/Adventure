@@ -308,7 +308,7 @@ export async function getBestiary() {
       level: number;
       isDiscovered: boolean;
       killCount: number;
-      stats: { hp: number; attack: number; defence: number };
+      stats: { hp: number; accuracy: number; defence: number };
       zones: string[];
       description: string;
       drops: Array<{

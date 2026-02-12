@@ -29,13 +29,13 @@ function resolveHitOutcome(entry: LastCombatLogEntry): {
   threshold: number;
   evasionContribution: number;
 } | null {
-  if (entry.roll === undefined || entry.attackModifier === undefined || entry.targetDodge === undefined) {
+  if (entry.roll === undefined || entry.targetDodge === undefined) {
     return null;
   }
 
   const evasionContribution = Math.floor((entry.targetEvasion ?? 0) / 2);
   const threshold = 10 + entry.targetDodge + evasionContribution;
-  const total = entry.roll + entry.attackModifier + (entry.accuracyModifier ?? 0);
+  const total = entry.roll + (entry.accuracyModifier ?? 0);
 
   if (entry.roll === 1) {
     return { result: 'Miss', threshold, evasionContribution };
@@ -96,7 +96,7 @@ export function CombatLogEntry({
         <div className="pl-9 pb-1 text-xs text-[var(--rpg-text-secondary)] space-y-0.5">
           {hitOutcome && (
             <div>
-              Roll: {entry.roll} + {entry.attackModifier} ATK
+              Roll: {entry.roll}
               {entry.accuracyModifier !== undefined ? ` + ${entry.accuracyModifier} ACC` : ''}
               {' vs '}
               {showDetailedBreakdown

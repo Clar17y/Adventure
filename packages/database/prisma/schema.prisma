@@ -226,7 +226,7 @@ model MobTemplate {
   zoneId          String @map("zone_id")
   level           Int    @default(1)
   hp              Int
-  attack          Int
+  accuracy        Int
   defence         Int
   evasion         Int
   damageMin       Int    @map("damage_min")

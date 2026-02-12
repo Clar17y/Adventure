@@ -25,7 +25,7 @@ interface Monster {
   killCount: number;
   stats: {
     hp: number;
-    attack: number;
+    accuracy: number;
     defence: number;
   };
   drops: MonsterDrop[];
@@ -51,7 +51,7 @@ export function Bestiary({ monsters }: BestiaryProps) {
 
   const getStatsVisibility = (killCount: number) => ({
     showHP: killCount >= 1,
-    showAttack: killCount >= 5,
+    showAccuracy: killCount >= 5,
     showDefence: killCount >= 10,
     showDrops: killCount >= 3,
   });
@@ -64,7 +64,7 @@ export function Bestiary({ monsters }: BestiaryProps) {
 
     const effects: string[] = [];
     if (definition.statMultipliers.hp !== undefined) effects.push(`HP ${formatMultiplier(definition.statMultipliers.hp)}`);
-    if (definition.statMultipliers.attack !== undefined) effects.push(`ATK ${formatMultiplier(definition.statMultipliers.attack)}`);
+    if (definition.statMultipliers.accuracy !== undefined) effects.push(`ACC ${formatMultiplier(definition.statMultipliers.accuracy)}`);
     if (definition.statMultipliers.defence !== undefined) effects.push(`DEF ${formatMultiplier(definition.statMultipliers.defence)}`);
     if (definition.statMultipliers.evasion !== undefined) effects.push(`DOD ${formatMultiplier(definition.statMultipliers.evasion)}`);
     if (definition.statMultipliers.damageMin !== undefined || definition.statMultipliers.damageMax !== undefined) {
@@ -215,17 +215,17 @@ export function Bestiary({ monsters }: BestiaryProps) {
                     </div>
                   )}
 
-                  {getStatsVisibility(selectedMonster.killCount).showAttack ? (
+                  {getStatsVisibility(selectedMonster.killCount).showAccuracy ? (
                     <div className="flex items-center gap-3">
                       <Sword size={16} color="var(--rpg-red)" />
-                      <span className="text-sm text-[var(--rpg-text-primary)]">Attack:</span>
-                      <span className="text-sm font-mono text-[var(--rpg-red)]">{selectedMonster.stats.attack}</span>
+                      <span className="text-sm text-[var(--rpg-text-primary)]">Accuracy:</span>
+                      <span className="text-sm font-mono text-[var(--rpg-red)]">{selectedMonster.stats.accuracy}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3 opacity-50">
                       <Sword size={16} color="var(--rpg-text-secondary)" />
                       <span className="text-sm text-[var(--rpg-text-secondary)]">
-                        Attack: ??? <span className="text-xs">(Defeat 5+ times)</span>
+                        Accuracy: ??? <span className="text-xs">(Defeat 5+ times)</span>
                       </span>
                     </div>
                   )}

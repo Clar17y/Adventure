@@ -92,7 +92,7 @@ export function applyMobPrefix<TMob extends MobTemplate>(
   }
 
   const hp = scaleStat(mob.hp, prefix.statMultipliers.hp, 1);
-  const attack = scaleStat(mob.attack, prefix.statMultipliers.attack, 0);
+  const accuracy = scaleStat(mob.accuracy, prefix.statMultipliers.accuracy, 0);
   const defence = scaleStat(mob.defence, prefix.statMultipliers.defence, 0);
   const evasion = scaleStat(mob.evasion, prefix.statMultipliers.evasion, 0);
   const damageMin = scaleStat(mob.damageMin, prefix.statMultipliers.damageMin, 1);
@@ -116,7 +116,7 @@ export function applyMobPrefix<TMob extends MobTemplate>(
     name: `${prefix.displayName} ${mob.name}`,
     hp,
     level: mob.level,
-    attack,
+    accuracy,
     defence,
     evasion,
     damageMin,

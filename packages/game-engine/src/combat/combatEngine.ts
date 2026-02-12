@@ -38,8 +38,8 @@ export function runCombat(
   const mobStats: CombatantStats = {
     hp: mobCurrentHp,
     maxHp: mobMaxHp,
-    attack: mob.attack,
-    accuracy: Math.floor(mob.attack / 2),
+    attack: mob.accuracy,
+    accuracy: mob.accuracy,
     defence: mob.defence,
     magicDefence: 0,
     dodge: mob.evasion,
@@ -119,7 +119,6 @@ function executePlayerAttack(
   const attackRoll = rollD20();
   const hits = doesAttackHit(
     attackRoll,
-    playerStats.attack,
     playerStats.accuracy,
     mobStats.dodge,
     mobStats.evasion
@@ -128,7 +127,6 @@ function executePlayerAttack(
   if (!hits) {
     const wouldHitWithoutAvoidance = doesAttackHit(
       attackRoll,
-      playerStats.attack,
       playerStats.accuracy,
       0,
       0
@@ -206,7 +204,6 @@ function executeMobAttack(
   const attackRoll = rollD20();
   const hits = doesAttackHit(
     attackRoll,
-    mobStats.attack,
     mobStats.accuracy,
     playerStats.dodge,
     playerStats.evasion
@@ -215,7 +212,6 @@ function executeMobAttack(
   if (!hits) {
     const wouldHitWithoutAvoidance = doesAttackHit(
       attackRoll,
-      mobStats.attack,
       mobStats.accuracy,
       0,
       0

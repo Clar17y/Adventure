@@ -6,7 +6,7 @@ export interface MobTemplate {
   zoneId: string;
   level: number;
   hp: number;
-  attack: number;
+  accuracy: number;
   defence: number;
   evasion: number;
   damageMin: number;

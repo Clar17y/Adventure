@@ -240,6 +240,17 @@ craftingRouter.get('/recipes', async (req, res, next) => {
       }) as Promise<Array<{ recipeId: string }>>,
     ]);
 
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: { currentZoneId: true },
+    });
+    const currentZone = player?.currentZoneId
+      ? await prisma.zone.findUnique({
+          where: { id: player.currentZoneId },
+          select: { name: true, maxCraftingLevel: true },
+        })
+      : null;
+
     const skillLevels = new Map<string, number>(skills.map((s: typeof skills[number]) => [s.skillType, s.level]));
     const learnedRecipeIds = new Set(learnedAdvancedRecipes.map((entry) => entry.recipeId));
 
@@ -311,7 +322,11 @@ craftingRouter.get('/recipes', async (req, res, next) => {
         .filter(Boolean) as Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
     }
 
-    res.json({ recipes: visible });
+    res.json({
+      recipes: visible,
+      zoneCraftingLevel: currentZone?.maxCraftingLevel ?? 0,
+      zoneName: currentZone?.name ?? null,
+    });
   } catch (err) {
     next(err);
   }

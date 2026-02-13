@@ -77,7 +77,7 @@ zonesRouter.get('/', async (req, res, next) => {
     );
 
     res.json({
-      zones: zones.map((z: { id: string; name: string; description: string | null; difficulty: number; travelCost: number; isStarter: boolean; zoneType: string; zoneExitChance: number | null }) => {
+      zones: zones.map((z: { id: string; name: string; description: string | null; difficulty: number; travelCost: number; isStarter: boolean; zoneType: string; zoneExitChance: number | null; maxCraftingLevel: number | null }) => {
         const discovered = discoveredZoneIds.has(z.id);
         return {
           id: z.id,
@@ -89,6 +89,7 @@ zonesRouter.get('/', async (req, res, next) => {
           discovered,
           zoneType: z.zoneType,
           zoneExitChance: discovered ? z.zoneExitChance : null,
+          maxCraftingLevel: discovered ? z.maxCraftingLevel : null,
         };
       }),
       connections: filteredConnections.map((c: { fromId: string; toId: string }) => ({

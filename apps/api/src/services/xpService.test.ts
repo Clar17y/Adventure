@@ -1,0 +1,80 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@adventure/database', () => import('../__mocks__/database'));
+
+import { prisma } from '@adventure/database';
+import { grantSkillXp } from './xpService';
+
+const mockPrisma = prisma as unknown as Record<string, any>;
+const now = new Date('2025-06-01T12:00:00Z');
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('grantSkillXp', () => {
+  it('throws when skill not found', async () => {
+    mockPrisma.playerSkill.findUnique.mockResolvedValue(null);
+    mockPrisma.player.findUnique.mockResolvedValue({
+      characterXp: BigInt(0),
+      characterLevel: 1,
+      attributePoints: 0,
+    });
+
+    await expect(grantSkillXp('p1', 'melee', 100, now)).rejects.toThrow('Skill not found');
+  });
+
+  it('throws when player not found', async () => {
+    mockPrisma.playerSkill.findUnique.mockResolvedValue({
+      xp: BigInt(0),
+      level: 1,
+      dailyXpGained: 0,
+      lastXpResetAt: now,
+    });
+    mockPrisma.player.findUnique.mockResolvedValue(null);
+
+    await expect(grantSkillXp('p1', 'melee', 100, now)).rejects.toThrow('Player not found');
+  });
+
+  it('grants XP and returns result', async () => {
+    mockPrisma.playerSkill.findUnique.mockResolvedValue({
+      xp: BigInt(0),
+      level: 1,
+      dailyXpGained: 0,
+      lastXpResetAt: now,
+    });
+    mockPrisma.player.findUnique.mockResolvedValue({
+      characterXp: BigInt(0),
+      characterLevel: 1,
+      attributePoints: 0,
+    });
+    mockPrisma.playerSkill.update.mockResolvedValue({});
+    mockPrisma.player.update.mockResolvedValue({});
+
+    const result = await grantSkillXp('p1', 'melee', 50, now);
+    expect(result.skillType).toBe('melee');
+    expect(result.xpResult).toBeDefined();
+    expect(result.newTotalXp).toBeGreaterThanOrEqual(0);
+    expect(result.characterXpGain).toBeGreaterThanOrEqual(0);
+  });
+
+  it('handles BigInt characterXp correctly', async () => {
+    mockPrisma.playerSkill.findUnique.mockResolvedValue({
+      xp: BigInt(500),
+      level: 3,
+      dailyXpGained: 100,
+      lastXpResetAt: now,
+    });
+    mockPrisma.player.findUnique.mockResolvedValue({
+      characterXp: BigInt(1000),
+      characterLevel: 2,
+      attributePoints: 0,
+    });
+    mockPrisma.playerSkill.update.mockResolvedValue({});
+    mockPrisma.player.update.mockResolvedValue({});
+
+    const result = await grantSkillXp('p1', 'melee', 100, now);
+    expect(typeof result.characterXpAfter).toBe('number');
+    expect(result.characterLevelBefore).toBe(2);
+  });
+});

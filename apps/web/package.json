@@ -6,7 +6,8 @@
     "dev": "next dev -H 0.0.0.0 -p 3002",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@adventure/game-engine": "*",
@@ -27,6 +28,7 @@
     "postcss": "^8.4.31",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.18"
   }
 }

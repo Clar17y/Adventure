@@ -68,7 +68,12 @@ function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffec
     if (effect.target !== target) continue;
 
     switch (effect.stat) {
-      case 'attack': effective.attack += effect.modifier; break;
+      case 'attack':
+        // attack modifies the damage range (damageMin/damageMax)
+        // since those are derived from the attack stat at build time
+        effective.damageMin += effect.modifier;
+        effective.damageMax += effect.modifier;
+        break;
       case 'accuracy': effective.accuracy += effect.modifier; break;
       case 'defence': effective.defence += effect.modifier; break;
       case 'magicDefence': effective.magicDefence += effect.modifier; break;
@@ -144,7 +149,6 @@ export function runCombat(
   while (state.round < MAX_ROUNDS && state.outcome === null) {
     state.round++;
 
-    tickEffects(state);
     const effectivePlayerStats = getEffectiveStats(playerStats, state.activeEffects, 'player');
     const effectiveMobStats = getEffectiveStats(mobStats, state.activeEffects, 'mob');
 
@@ -157,6 +161,9 @@ export function runCombat(
       if (state.outcome) break;
       executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
     }
+
+    // Tick effects after round resolves so duration N means N full rounds of benefit
+    tickEffects(state);
   }
 
   if (state.outcome === null) {

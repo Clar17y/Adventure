@@ -201,17 +201,15 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate, availableTurns }: 
     ? Math.max(10, Math.min(turnsToFull, availableTurns))
     : Math.min(1000, availableTurns);
 
+  const missingHp = hpState.maxHp - hpState.currentHp;
   const presets = healPerTurn && !isFullHp ? [
     { label: 'Full', pct: 1.0 },
     { label: '75%', pct: 0.75 },
     { label: '50%', pct: 0.50 },
     { label: '25%', pct: 0.25 },
   ].map(({ label, pct }) => {
-    const targetHp = hpState.maxHp * pct;
-    const hpNeeded = targetHp - hpState.currentHp;
-    const disabled = hpNeeded <= 0;
-    const rawTurns = disabled ? 0 : roundUp10(Math.ceil(hpNeeded / healPerTurn));
-    return { label, turns: Math.min(Math.max(10, rawTurns), availableTurns), disabled };
+    const rawTurns = roundUp10(Math.ceil((missingHp * pct) / healPerTurn));
+    return { label, turns: Math.min(Math.max(10, rawTurns), availableTurns) };
   }) : null;
 
   return (

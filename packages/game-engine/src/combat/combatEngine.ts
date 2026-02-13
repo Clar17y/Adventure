@@ -1,10 +1,11 @@
 import {
   ActiveEffect,
+  CombatActor,
   CombatState,
   CombatLogEntry,
   CombatResult,
   CombatantStats,
-  MobTemplate,
+  Combatant,
   SpellAction,
 } from '@adventure/shared';
 import {
@@ -19,14 +20,46 @@ import {
 
 const MAX_ROUNDS = 100;
 
-function hpSnapshot(state: CombatState): Pick<CombatLogEntry, 'playerHpAfter' | 'mobHpAfter'> {
+function getHp(state: CombatState, actor: CombatActor): number {
+  return actor === 'combatantA' ? state.combatantAHp : state.combatantBHp;
+}
+
+function getMaxHp(state: CombatState, actor: CombatActor): number {
+  return actor === 'combatantA' ? state.combatantAMaxHp : state.combatantBMaxHp;
+}
+
+function applyDamage(state: CombatState, target: CombatActor, damage: number): void {
+  if (target === 'combatantA') {
+    state.combatantAHp -= damage;
+  } else {
+    state.combatantBHp -= damage;
+  }
+}
+
+function applyHeal(state: CombatState, target: CombatActor, heal: number): number {
+  if (target === 'combatantA') {
+    const before = state.combatantAHp;
+    state.combatantAHp = Math.min(state.combatantAMaxHp, state.combatantAHp + heal);
+    return state.combatantAHp - before;
+  } else {
+    const before = state.combatantBHp;
+    state.combatantBHp = Math.min(state.combatantBMaxHp, state.combatantBHp + heal);
+    return state.combatantBHp - before;
+  }
+}
+
+function opponent(actor: CombatActor): CombatActor {
+  return actor === 'combatantA' ? 'combatantB' : 'combatantA';
+}
+
+function hpSnapshot(state: CombatState): Pick<CombatLogEntry, 'combatantAHpAfter' | 'combatantBHpAfter'> {
   return {
-    playerHpAfter: Math.max(0, state.playerHp),
-    mobHpAfter: Math.max(0, state.mobHp),
+    combatantAHpAfter: Math.max(0, state.combatantAHp),
+    combatantBHpAfter: Math.max(0, state.combatantBHp),
   };
 }
 
-function tickEffects(state: CombatState): void {
+function tickEffects(state: CombatState, names: { combatantA: string; combatantB: string }): void {
   const expired: ActiveEffect[] = [];
   const remaining: ActiveEffect[] = [];
 
@@ -41,8 +74,7 @@ function tickEffects(state: CombatState): void {
 
   state.activeEffects = remaining;
 
-  // Group expired effects by spell name for cleaner log
-  const expiredNames = new Map<string, { target: 'player' | 'mob' }>();
+  const expiredNames = new Map<string, { target: CombatActor }>();
   for (const e of expired) {
     if (!expiredNames.has(e.name)) {
       expiredNames.set(e.name, { target: e.target });
@@ -52,7 +84,8 @@ function tickEffects(state: CombatState): void {
   if (expiredNames.size > 0) {
     state.log.push({
       round: state.round,
-      actor: 'mob',
+      actor: 'combatantB',
+      actorName: names.combatantB,
       action: 'spell',
       message: Array.from(expiredNames.keys()).map(n => `${n} wore off.`).join(' '),
       effectsExpired: Array.from(expiredNames.entries()).map(([name, { target }]) => ({ name, target })),
@@ -61,7 +94,7 @@ function tickEffects(state: CombatState): void {
   }
 }
 
-function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffect[], target: 'player' | 'mob'): CombatantStats {
+function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffect[], target: CombatActor): CombatantStats {
   const effective = { ...baseStats };
 
   for (const effect of activeEffects) {
@@ -69,8 +102,6 @@ function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffec
 
     switch (effect.stat) {
       case 'attack':
-        // attack modifies the damage range (damageMin/damageMax)
-        // since those are derived from the attack stat at build time
         effective.damageMin += effect.modifier;
         effective.damageMax += effect.modifier;
         break;
@@ -97,82 +128,65 @@ function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffec
 }
 
 /**
- * Run a complete combat encounter.
- * Pure function - no side effects, fully deterministic given same random seed.
+ * Run a complete combat encounter between two combatants.
+ * Pure function — no side effects, fully deterministic given same random seed.
  */
-export function runCombat(
-  playerStats: CombatantStats,
-  mob: MobTemplate & { currentHp?: number; maxHp?: number }
-): CombatResult {
-  const mobMaxHp = typeof mob.maxHp === 'number' ? mob.maxHp : mob.hp;
-  const mobCurrentHp = typeof mob.currentHp === 'number' ? mob.currentHp : mob.hp;
-
-  const mobStats: CombatantStats = {
-    hp: mobCurrentHp,
-    maxHp: mobMaxHp,
-    attack: mob.accuracy,
-    accuracy: mob.accuracy,
-    defence: mob.defence,
-    magicDefence: mob.magicDefence,
-    dodge: mob.evasion,
-    evasion: 0,
-    damageMin: mob.damageMin,
-    damageMax: mob.damageMax,
-    speed: 0,
-    damageType: mob.damageType,
-  };
-
+export function runCombat(combatantA: Combatant, combatantB: Combatant): CombatResult {
   const state: CombatState = {
-    playerHp: playerStats.hp,
-    playerMaxHp: playerStats.maxHp,
-    mobHp: mobStats.hp,
-    mobMaxHp: mobStats.maxHp,
+    combatantAHp: combatantA.stats.hp,
+    combatantAMaxHp: combatantA.stats.maxHp,
+    combatantBHp: combatantB.stats.hp,
+    combatantBMaxHp: combatantB.stats.maxHp,
     round: 0,
     log: [],
     outcome: null,
     activeEffects: [],
   };
 
-  const playerInit = rollInitiative(playerStats.speed);
-  const mobInit = rollInitiative(mobStats.speed);
-  const playerGoesFirst = playerInit >= mobInit;
+  const names = { combatantA: combatantA.name, combatantB: combatantB.name };
 
+  const initA = rollInitiative(combatantA.stats.speed);
+  const initB = rollInitiative(combatantB.stats.speed);
+  const aGoesFirst = initA >= initB;
+
+  const firstName = aGoesFirst ? combatantA.name : combatantB.name;
   state.log.push({
     round: 0,
-    actor: playerGoesFirst ? 'player' : 'mob',
+    actor: aGoesFirst ? 'combatantA' : 'combatantB',
+    actorName: firstName,
     action: 'attack',
-    roll: playerInit,
-    message: `Combat begins! Initiative: Player ${playerInit}, ${mob.name} ${mobInit}`,
+    roll: initA,
+    message: `Combat begins! Initiative: ${combatantA.name} ${initA}, ${combatantB.name} ${initB}`,
     ...hpSnapshot(state),
   });
 
   while (state.round < MAX_ROUNDS && state.outcome === null) {
     state.round++;
 
-    const effectivePlayerStats = getEffectiveStats(playerStats, state.activeEffects, 'player');
-    const effectiveMobStats = getEffectiveStats(mobStats, state.activeEffects, 'mob');
+    const effectiveA = getEffectiveStats(combatantA.stats, state.activeEffects, 'combatantA');
+    const effectiveB = getEffectiveStats(combatantB.stats, state.activeEffects, 'combatantB');
 
-    if (playerGoesFirst) {
-      executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
+    if (aGoesFirst) {
+      executeAttack(state, 'combatantA', effectiveA, effectiveB, combatantA, combatantB);
       if (state.outcome) break;
-      executeMobAttack(state, effectiveMobStats, effectivePlayerStats, mob);
+      executeAttack(state, 'combatantB', effectiveB, effectiveA, combatantB, combatantA);
     } else {
-      executeMobAttack(state, effectiveMobStats, effectivePlayerStats, mob);
+      executeAttack(state, 'combatantB', effectiveB, effectiveA, combatantB, combatantA);
       if (state.outcome) break;
-      executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
+      executeAttack(state, 'combatantA', effectiveA, effectiveB, combatantA, combatantB);
     }
 
-    // Tick effects after round resolves so duration N means N full rounds of benefit
-    tickEffects(state);
+    tickEffects(state, names);
   }
 
   if (state.outcome === null) {
     state.outcome = 'defeat';
     state.log.push({
       round: state.round,
-      actor: 'mob',
+      actor: 'combatantB',
+      actorName: combatantB.name,
       action: 'attack',
-      message: 'Combat timed out. You retreat in exhaustion.',
+      message: 'Combat timed out. The fight ends in exhaustion.',
       ...hpSnapshot(state),
     });
   }
@@ -180,181 +194,93 @@ export function runCombat(
   return {
     outcome: state.outcome,
     log: state.log,
-    playerMaxHp: state.playerMaxHp,
-    mobMaxHp: state.mobMaxHp,
-    xpGained: state.outcome === 'victory' ? mob.xpReward : 0,
-    loot: [],
-    durabilityLost: [],
-    turnsSpent: 0,
-    playerHpRemaining: Math.max(0, state.playerHp),
+    combatantAMaxHp: state.combatantAMaxHp,
+    combatantBMaxHp: state.combatantBMaxHp,
+    combatantAHpRemaining: Math.max(0, state.combatantAHp),
+    combatantBHpRemaining: Math.max(0, state.combatantBHp),
   };
 }
 
-function executePlayerAttack(
+function executeAttack(
   state: CombatState,
-  playerStats: CombatantStats,
-  mobStats: CombatantStats,
-  mobName: string
+  attackerKey: CombatActor,
+  attackerStats: CombatantStats,
+  defenderStats: CombatantStats,
+  attacker: Combatant,
+  defender: Combatant,
 ): void {
+  // Check for spells first
+  const spellAction = attacker.spells?.find((s) => s.round === state.round);
+  if (spellAction) {
+    executeSpell(state, spellAction, attackerKey, attackerStats, defenderStats, attacker.name, defender.name);
+    return;
+  }
+
   const attackRoll = rollD20();
-  const hits = doesAttackHit(
-    attackRoll,
-    playerStats.accuracy,
-    mobStats.dodge,
-    mobStats.evasion
-  );
+  const hits = doesAttackHit(attackRoll, attackerStats.accuracy, defenderStats.dodge, defenderStats.evasion);
 
   if (!hits) {
-    const wouldHitWithoutAvoidance = doesAttackHit(
-      attackRoll,
-      playerStats.accuracy,
-      0,
-      0
-    );
+    const wouldHitWithoutAvoidance = doesAttackHit(attackRoll, attackerStats.accuracy, 0, 0);
 
     state.log.push({
       round: state.round,
-      actor: 'player',
+      actor: attackerKey,
+      actorName: attacker.name,
       action: 'attack',
       roll: attackRoll,
       evaded: wouldHitWithoutAvoidance,
-      attackModifier: playerStats.attack,
-      accuracyModifier: playerStats.accuracy,
-      targetDodge: mobStats.dodge,
-      targetEvasion: mobStats.evasion,
+      attackModifier: attackerStats.attack,
+      accuracyModifier: attackerStats.accuracy,
+      targetDodge: defenderStats.dodge,
+      targetEvasion: defenderStats.evasion,
       message: wouldHitWithoutAvoidance
-        ? `The ${mobName} avoids your attack!`
-        : `You swing at the ${mobName} but miss!`,
+        ? `${defender.name} avoids ${attacker.name}'s attack!`
+        : `${attacker.name} swings at ${defender.name} but misses!`,
       ...hpSnapshot(state),
     });
     return;
   }
 
-  const rawDamage = rollDamage(playerStats.damageMin, playerStats.damageMax);
-  const crit = isCriticalHit(playerStats.critChance ?? 0);
-  const effectiveDefence = playerStats.damageType === 'magic' ? mobStats.magicDefence : mobStats.defence;
-  const { damage: finalDamage, actualMultiplier } = calculateFinalDamage(rawDamage, effectiveDefence, crit, playerStats.critDamage ?? 0);
+  const rawDamage = rollDamage(attackerStats.damageMin, attackerStats.damageMax);
+  const crit = isCriticalHit(attackerStats.critChance ?? 0);
+  const effectiveDefence = attackerStats.damageType === 'magic' ? defenderStats.magicDefence : defenderStats.defence;
+  const { damage: finalDamage, actualMultiplier } = calculateFinalDamage(rawDamage, effectiveDefence, crit, attackerStats.critDamage ?? 0);
   const armorReduction = Math.floor(rawDamage * actualMultiplier * calculateDefenceReduction(effectiveDefence));
 
-  state.mobHp -= finalDamage;
+  applyDamage(state, opponent(attackerKey), finalDamage);
 
   const critText = crit ? ' CRITICAL HIT!' : '';
   state.log.push({
     round: state.round,
-    actor: 'player',
+    actor: attackerKey,
+    actorName: attacker.name,
     action: 'attack',
     roll: attackRoll,
     damage: finalDamage,
-    attackModifier: playerStats.attack,
-    accuracyModifier: playerStats.accuracy,
-    targetDodge: mobStats.dodge,
-    targetEvasion: mobStats.evasion,
-    targetDefence: playerStats.damageType === 'magic' ? undefined : mobStats.defence,
-    targetMagicDefence: playerStats.damageType === 'magic' ? mobStats.magicDefence : undefined,
+    attackModifier: attackerStats.attack,
+    accuracyModifier: attackerStats.accuracy,
+    targetDodge: defenderStats.dodge,
+    targetEvasion: defenderStats.evasion,
+    targetDefence: attackerStats.damageType === 'magic' ? undefined : defenderStats.defence,
+    targetMagicDefence: attackerStats.damageType === 'magic' ? defenderStats.magicDefence : undefined,
     rawDamage,
-    armorReduction: playerStats.damageType === 'magic' ? undefined : armorReduction,
-    magicDefenceReduction: playerStats.damageType === 'magic' ? armorReduction : undefined,
+    armorReduction: attackerStats.damageType === 'magic' ? undefined : armorReduction,
+    magicDefenceReduction: attackerStats.damageType === 'magic' ? armorReduction : undefined,
     isCritical: crit,
     ...(crit ? { critMultiplier: actualMultiplier } : {}),
-    message: `You strike the ${mobName} for ${finalDamage} damage!${critText}`,
+    message: `${attacker.name} strikes ${defender.name} for ${finalDamage} damage!${critText}`,
     ...hpSnapshot(state),
   });
 
-  if (state.mobHp <= 0) {
-    state.outcome = 'victory';
+  const defenderHp = getHp(state, opponent(attackerKey));
+  if (defenderHp <= 0) {
+    state.outcome = attackerKey === 'combatantA' ? 'victory' : 'defeat';
     state.log.push({
       round: state.round,
-      actor: 'player',
+      actor: attackerKey,
+      actorName: attacker.name,
       action: 'attack',
-      message: `The ${mobName} falls defeated!`,
-      ...hpSnapshot(state),
-    });
-  }
-}
-
-function executeMobAttack(
-  state: CombatState,
-  mobStats: CombatantStats,
-  playerStats: CombatantStats,
-  mob: MobTemplate
-): void {
-  const spellAction = mob.spellPattern.find((s) => s.round === state.round);
-  if (spellAction) {
-    executeSpell(state, spellAction, 'mob', mobStats, playerStats, mob.name);
-    return;
-  }
-
-  const attackRoll = rollD20();
-  const hits = doesAttackHit(
-    attackRoll,
-    mobStats.accuracy,
-    playerStats.dodge,
-    playerStats.evasion
-  );
-
-  if (!hits) {
-    const wouldHitWithoutAvoidance = doesAttackHit(
-      attackRoll,
-      mobStats.accuracy,
-      0,
-      0
-    );
-
-    state.log.push({
-      round: state.round,
-      actor: 'mob',
-      action: 'attack',
-      roll: attackRoll,
-      attackModifier: mobStats.attack,
-      accuracyModifier: mobStats.accuracy,
-      targetDodge: playerStats.dodge,
-      targetEvasion: playerStats.evasion,
-      evaded: wouldHitWithoutAvoidance,
-      message: wouldHitWithoutAvoidance
-        ? `You avoid the ${mob.name}'s attack!`
-        : `The ${mob.name} attacks but misses!`,
-      ...hpSnapshot(state),
-    });
-    return;
-  }
-
-  const rawDamage = rollDamage(mobStats.damageMin, mobStats.damageMax);
-  const crit = isCriticalHit(0);
-  const effectiveDefence = mobStats.damageType === 'magic' ? playerStats.magicDefence : playerStats.defence;
-  const { damage: finalDamage, actualMultiplier: mobCritMultiplier } = calculateFinalDamage(rawDamage, effectiveDefence, crit, 0);
-  const armorReduction = Math.floor(rawDamage * mobCritMultiplier * calculateDefenceReduction(effectiveDefence));
-
-  state.playerHp -= finalDamage;
-
-  const critText = crit ? ' CRITICAL HIT!' : '';
-  state.log.push({
-    round: state.round,
-    actor: 'mob',
-    action: 'attack',
-    roll: attackRoll,
-    damage: finalDamage,
-    attackModifier: mobStats.attack,
-    accuracyModifier: mobStats.accuracy,
-    targetDodge: playerStats.dodge,
-    targetEvasion: playerStats.evasion,
-    targetDefence: mobStats.damageType === 'magic' ? undefined : playerStats.defence,
-    targetMagicDefence: mobStats.damageType === 'magic' ? playerStats.magicDefence : undefined,
-    rawDamage,
-    armorReduction: mobStats.damageType === 'magic' ? undefined : armorReduction,
-    magicDefenceReduction: mobStats.damageType === 'magic' ? armorReduction : undefined,
-    isCritical: crit,
-    ...(crit ? { critMultiplier: mobCritMultiplier } : {}),
-    message: `The ${mob.name} hits you for ${finalDamage} damage!${critText}`,
-    ...hpSnapshot(state),
-  });
-
-  if (state.playerHp <= 0) {
-    state.outcome = 'defeat';
-    state.log.push({
-      round: state.round,
-      actor: 'mob',
-      action: 'attack',
-      message: `You have been knocked out by the ${mob.name}!`,
+      message: `${defender.name} falls defeated!`,
       ...hpSnapshot(state),
     });
   }
@@ -363,45 +289,30 @@ function executeMobAttack(
 function executeSpell(
   state: CombatState,
   spell: SpellAction,
-  caster: 'player' | 'mob',
+  casterKey: CombatActor,
   casterStats: CombatantStats,
   targetStats: CombatantStats,
-  casterName: string
+  casterName: string,
+  targetName: string,
 ): void {
   let finalDamage = 0;
   let healAmount = 0;
   const appliedEffects: CombatLogEntry['effectsApplied'] = [];
 
-  // 1. Damage (mitigated by target's magicDefence)
   if (spell.damage) {
     const reduction = calculateDefenceReduction(targetStats.magicDefence);
     const mitigated = Math.floor(spell.damage * reduction);
     finalDamage = Math.max(1, spell.damage - mitigated);
-
-    if (caster === 'mob') {
-      state.playerHp -= finalDamage;
-    } else {
-      state.mobHp -= finalDamage;
-    }
+    applyDamage(state, opponent(casterKey), finalDamage);
   }
 
-  // 2. Heal (capped at caster's maxHp)
   if (spell.heal) {
-    if (caster === 'mob') {
-      const before = state.mobHp;
-      state.mobHp = Math.min(state.mobMaxHp, state.mobHp + spell.heal);
-      healAmount = state.mobHp - before;
-    } else {
-      const before = state.playerHp;
-      state.playerHp = Math.min(state.playerMaxHp, state.playerHp + spell.heal);
-      healAmount = state.playerHp - before;
-    }
+    healAmount = applyHeal(state, casterKey, spell.heal);
   }
 
-  // 3. Effects (positive modifier = buff on caster, negative = debuff on opponent)
   if (spell.effects) {
     for (const effect of spell.effects) {
-      const target = effect.modifier >= 0 ? caster : (caster === 'player' ? 'mob' : 'player');
+      const target = effect.modifier >= 0 ? casterKey : opponent(casterKey);
       state.activeEffects.push({
         name: spell.name,
         target,
@@ -418,13 +329,8 @@ function executeSpell(
     }
   }
 
-  // Build log message
   const parts: string[] = [];
-  if (caster === 'mob') {
-    parts.push(`The ${casterName} casts ${spell.name}`);
-  } else {
-    parts.push(`You cast ${spell.name}`);
-  }
+  parts.push(`${casterName} casts ${spell.name}`);
 
   if (finalDamage > 0) {
     parts[0] += ` for ${finalDamage} damage`;
@@ -447,7 +353,8 @@ function executeSpell(
 
   state.log.push({
     round: state.round,
-    actor: caster,
+    actor: casterKey,
+    actorName: casterName,
     action: 'spell',
     damage: finalDamage > 0 ? finalDamage : undefined,
     rawDamage: spell.damage,
@@ -460,23 +367,27 @@ function executeSpell(
     ...hpSnapshot(state),
   });
 
-  // Check for knockout
-  if (state.playerHp <= 0) {
-    state.outcome = 'defeat';
+  const defenderHp = getHp(state, opponent(casterKey));
+  const casterHp = getHp(state, casterKey);
+
+  if (defenderHp <= 0) {
+    state.outcome = casterKey === 'combatantA' ? 'victory' : 'defeat';
     state.log.push({
       round: state.round,
-      actor: 'mob',
+      actor: casterKey,
+      actorName: casterName,
       action: 'spell',
-      message: `You have been knocked out by the ${caster === 'mob' ? casterName : 'your own spell'}!`,
+      message: `${targetName} falls defeated!`,
       ...hpSnapshot(state),
     });
-  } else if (state.mobHp <= 0) {
-    state.outcome = 'victory';
+  } else if (casterHp <= 0) {
+    state.outcome = casterKey === 'combatantA' ? 'defeat' : 'victory';
     state.log.push({
       round: state.round,
-      actor: 'player',
+      actor: opponent(casterKey),
+      actorName: targetName,
       action: 'spell',
-      message: `The ${caster === 'mob' ? casterName : 'enemy'} falls defeated!`,
+      message: `${casterName} has been knocked out!`,
       ...hpSnapshot(state),
     });
   }

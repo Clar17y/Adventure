@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CombatantStats, MobTemplate } from '@adventure/shared';
+import type { Combatant, CombatantStats, MobTemplate } from '@adventure/shared';
 import { runCombat } from './combatEngine';
+import { mobToCombatantStats } from './damageCalculator';
+
+function wrapPlayer(stats: CombatantStats): Combatant {
+  return { id: 'player1', name: 'Player', stats };
+}
+
+function wrapMob(mob: MobTemplate & { currentHp?: number; maxHp?: number }): Combatant {
+  return { id: mob.id, name: mob.name, stats: mobToCombatantStats(mob), spells: mob.spellPattern };
+}
 
 describe('runCombat crit multiplier logging', () => {
   afterEach(() => {
@@ -50,8 +59,8 @@ describe('runCombat crit multiplier logging', () => {
       damageType: 'physical' as const,
     };
 
-    const result = runCombat(player, mob);
-    const playerHit = result.log.find((entry) => entry.actor === 'player' && entry.damage !== undefined);
+    const result = runCombat(wrapPlayer(player), wrapMob(mob));
+    const playerHit = result.log.find((entry) => entry.actor === 'combatantA' && entry.damage !== undefined);
 
     expect(playerHit?.isCritical).toBe(true);
     expect(playerHit?.critMultiplier).toBeCloseTo(1.8);
@@ -100,8 +109,8 @@ describe('runCombat crit multiplier logging', () => {
       damageType: 'physical' as const,
     };
 
-    const result = runCombat(player, mob);
-    const mobHit = result.log.find((entry) => entry.actor === 'mob' && entry.damage !== undefined);
+    const result = runCombat(wrapPlayer(player), wrapMob(mob));
+    const mobHit = result.log.find((entry) => entry.actor === 'combatantB' && entry.damage !== undefined);
 
     expect(mobHit?.isCritical).toBe(true);
     expect(mobHit?.critMultiplier).toBeCloseTo(1.5);
@@ -113,18 +122,18 @@ describe('magic damageType defence selection', () => {
     vi.restoreAllMocks();
   });
 
-  function makePlayer(overrides: Partial<CombatantStats> = {}): CombatantStats {
-    return {
+  function makePlayer(overrides: Partial<CombatantStats> = {}): Combatant {
+    return wrapPlayer({
       hp: 100, maxHp: 100, attack: 10, accuracy: 20,
       defence: 50, magicDefence: 0, dodge: 0, evasion: 0,
       damageMin: 10, damageMax: 10, speed: 10,
       critChance: 0, critDamage: 0, damageType: 'physical',
       ...overrides,
-    };
+    });
   }
 
-  function makeMob(overrides: Partial<MobTemplate> = {}): MobTemplate {
-    return {
+  function makeMob(overrides: Partial<MobTemplate> = {}): Combatant {
+    const mob: MobTemplate = {
       id: 'mob-1', name: 'Test Mob', zoneId: 'zone-1', level: 1,
       hp: 200, accuracy: 1, defence: 50, magicDefence: 0,
       evasion: 0, damageMin: 10, damageMax: 10,
@@ -132,6 +141,7 @@ describe('magic damageType defence selection', () => {
       damageType: 'physical',
       ...overrides,
     };
+    return wrapMob(mob);
   }
 
   it('player magic attack uses mob magicDefence (not defence)', () => {
@@ -146,7 +156,7 @@ describe('magic damageType defence selection', () => {
     const mob = makeMob({ defence: 50, magicDefence: 0, hp: 200 });
 
     const result = runCombat(player, mob);
-    const playerHit = result.log.find(e => e.actor === 'player' && e.damage !== undefined);
+    const playerHit = result.log.find(e => e.actor === 'combatantA' && e.damage !== undefined);
 
     expect(playerHit?.damage).toBe(10);
   });
@@ -163,7 +173,7 @@ describe('magic damageType defence selection', () => {
     const mob = makeMob({ defence: 0, magicDefence: 50, hp: 200 });
 
     const result = runCombat(player, mob);
-    const playerHit = result.log.find(e => e.actor === 'player' && e.damage !== undefined);
+    const playerHit = result.log.find(e => e.actor === 'combatantA' && e.damage !== undefined);
 
     expect(playerHit?.damage).toBe(10);
   });
@@ -180,7 +190,7 @@ describe('magic damageType defence selection', () => {
     const mob = makeMob({ damageType: 'magic', hp: 200 });
 
     const result = runCombat(player, mob);
-    const mobHit = result.log.find(e => e.actor === 'mob' && e.damage !== undefined);
+    const mobHit = result.log.find(e => e.actor === 'combatantB' && e.damage !== undefined);
 
     expect(mobHit?.damage).toBe(10);
   });
@@ -197,7 +207,7 @@ describe('magic damageType defence selection', () => {
     const mob = makeMob({ damageType: 'physical', hp: 200 });
 
     const result = runCombat(player, mob);
-    const mobHit = result.log.find(e => e.actor === 'mob' && e.damage !== undefined);
+    const mobHit = result.log.find(e => e.actor === 'combatantB' && e.damage !== undefined);
 
     expect(mobHit?.damage).toBe(10);
   });

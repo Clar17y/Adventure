@@ -65,17 +65,30 @@ export function CombatPlayback({
     }
   }, [phase, revealedCount, log.length, outcome, onComplete]);
 
-  // Shake effect when a new entry with damage is revealed
+  // Shake effect when a new entry with damage, heal, or effects is revealed
   useEffect(() => {
     if (revealedCount === 0) return;
 
     const entry = log[revealedCount - 1];
-    if (!entry || !entry.damage || entry.damage <= 0) return;
+    if (!entry) return;
 
-    // Player hit mob -> shake mob bar; mob hit player -> shake player bar
-    const target = entry.actor === 'player' ? 'mob' : 'player';
+    let target: 'player' | 'mob' | null = null;
+
+    if (entry.damage && entry.damage > 0) {
+      // Damage: shake the target (opposite of actor)
+      target = entry.actor === 'player' ? 'mob' : 'player';
+    } else if (entry.healAmount && entry.healAmount > 0) {
+      // Heal: shake the caster
+      target = entry.actor;
+    } else if (entry.effectsApplied && entry.effectsApplied.length > 0) {
+      // Buff/debuff: shake whoever is affected
+      const effectTarget = entry.effectsApplied[0].target;
+      target = effectTarget;
+    }
+
+    if (!target) return;
+
     setShakeTarget(target);
-
     shakeTimer.current = setTimeout(() => setShakeTarget(null), 300);
 
     return () => {
@@ -154,9 +167,24 @@ export function CombatPlayback({
         <div className="text-center text-sm mb-2">
           {(() => {
             const lastEntry = log[revealedCount - 1];
+            if (lastEntry.effectsExpired && lastEntry.effectsExpired.length > 0) {
+              return <span className="text-[var(--rpg-text-secondary)] italic">
+                {lastEntry.effectsExpired.map(e => `${e.name} wore off`).join(', ')}
+              </span>;
+            }
             if (lastEntry.evaded) return <span className="text-[var(--rpg-blue-light)]">Dodged!</span>;
             if (lastEntry.isCritical) return <span className="text-[var(--rpg-gold)] font-bold">Critical Hit! {lastEntry.damage} dmg</span>;
+            if (lastEntry.damage && lastEntry.damage > 0 && lastEntry.healAmount && lastEntry.healAmount > 0) {
+              return <span className="text-[var(--rpg-text-primary)]">{lastEntry.damage} dmg, +{lastEntry.healAmount} HP</span>;
+            }
             if (lastEntry.damage && lastEntry.damage > 0) return <span className="text-[var(--rpg-text-primary)]">{lastEntry.damage} dmg</span>;
+            if (lastEntry.healAmount && lastEntry.healAmount > 0) return <span className="text-[var(--rpg-green-light)]">+{lastEntry.healAmount} HP</span>;
+            if (lastEntry.effectsApplied && lastEntry.effectsApplied.length > 0) {
+              const e = lastEntry.effectsApplied[0];
+              return <span className="text-[var(--rpg-blue-light)]">
+                {lastEntry.spellName} ({e.stat} {e.modifier > 0 ? '+' : ''}{e.modifier})
+              </span>;
+            }
             if (lastEntry.roll && !lastEntry.damage) return <span className="text-[var(--rpg-text-secondary)]">Miss!</span>;
             return null;
           })()}

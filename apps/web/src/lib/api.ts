@@ -1056,3 +1056,18 @@ export async function getGatheringNodes(query: GatheringNodesQuery = {}) {
   const suffix = params.toString();
   return fetchApi<GatheringNodesResponse>(`/api/v1/gathering/nodes${suffix ? `?${suffix}` : ''}`);
 }
+
+// Chat
+export async function getChatHistory(channelType: string, channelId: string) {
+  return fetchApi<{
+    messages: Array<{
+      id: string;
+      channelType: string;
+      channelId: string;
+      playerId: string;
+      username: string;
+      message: string;
+      createdAt: string;
+    }>;
+  }>(`/api/v1/chat/history?channelType=${encodeURIComponent(channelType)}&channelId=${encodeURIComponent(channelId)}`);
+}

@@ -96,7 +96,7 @@ authRouter.post('/register', async (req, res, next) => {
     await ensureStarterDiscoveries(player.id);
 
     // Generate tokens
-    const payload = { playerId: player.id, username: player.username };
+    const payload = { playerId: player.id, username: player.username, role: player.role };
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
@@ -148,7 +148,7 @@ authRouter.post('/login', async (req, res, next) => {
     });
 
     // Generate tokens
-    const payload = { playerId: player.id, username: player.username };
+    const payload = { playerId: player.id, username: player.username, role: player.role };
     const accessToken = generateAccessToken(payload);
     const refreshToken = generateRefreshToken(payload);
 
@@ -194,7 +194,7 @@ authRouter.post('/refresh', async (req, res, next) => {
       }),
       prisma.player.findUnique({
         where: { id: payload.playerId },
-        select: { id: true, lastActiveAt: true },
+        select: { id: true, lastActiveAt: true, role: true },
       }),
     ]);
 
@@ -214,9 +214,10 @@ authRouter.post('/refresh', async (req, res, next) => {
       where: { token: refreshToken },
     });
 
-    // Generate new tokens
-    const newAccessToken = generateAccessToken(payload);
-    const newRefreshToken = generateRefreshToken(payload);
+    // Generate new tokens with fresh role from DB
+    const freshPayload = { ...payload, role: player.role ?? 'player' };
+    const newAccessToken = generateAccessToken(freshPayload);
+    const newRefreshToken = generateRefreshToken(freshPayload);
 
     // Store new refresh token and keep activity timestamp fresh.
     await prisma.$transaction([

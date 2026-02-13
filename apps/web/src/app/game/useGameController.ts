@@ -82,6 +82,18 @@ export interface LastCombatLogEntry {
   critMultiplier?: number;
   playerHpAfter?: number;
   mobHpAfter?: number;
+  spellName?: string;
+  healAmount?: number;
+  effectsApplied?: Array<{
+    stat: string;
+    modifier: number;
+    duration: number;
+    target: 'player' | 'mob';
+  }>;
+  effectsExpired?: Array<{
+    name: string;
+    target: 'player' | 'mob';
+  }>;
 }
 
 export interface LastCombat {

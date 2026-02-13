@@ -20,11 +20,26 @@ export interface MobTemplate {
   damageType: DamageType;
 }
 
+export interface SpellEffect {
+  stat: string;
+  modifier: number;
+  duration: number;
+}
+
 export interface SpellAction {
   round: number;
-  action: string;
+  name: string;
   damage?: number;
-  effect?: string;
+  heal?: number;
+  effects?: SpellEffect[];
+}
+
+export interface ActiveEffect {
+  name: string;
+  target: 'player' | 'mob';
+  stat: string;
+  modifier: number;
+  remainingRounds: number;
 }
 
 export interface CombatState {
@@ -35,6 +50,7 @@ export interface CombatState {
   round: number;
   log: CombatLogEntry[];
   outcome: CombatOutcome | null;
+  activeEffects: ActiveEffect[];
 }
 
 export interface CombatLogEntry {
@@ -59,6 +75,18 @@ export interface CombatLogEntry {
   critMultiplier?: number;
   playerHpAfter?: number;
   mobHpAfter?: number;
+  spellName?: string;
+  healAmount?: number;
+  effectsApplied?: Array<{
+    stat: string;
+    modifier: number;
+    duration: number;
+    target: 'player' | 'mob';
+  }>;
+  effectsExpired?: Array<{
+    name: string;
+    target: 'player' | 'mob';
+  }>;
 }
 
 export type CombatAction = 'attack' | 'spell' | 'defend' | 'flee';

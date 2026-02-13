@@ -69,7 +69,7 @@ export function generatePrefixSpells(
   for (let round = template.startRound; round <= MAX_PREFIX_SPELL_ROUND; round += template.interval) {
     actions.push({
       round,
-      action: template.actionName,
+      name: template.actionName,
       damage,
     });
   }

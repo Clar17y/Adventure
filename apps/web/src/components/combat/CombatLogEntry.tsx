@@ -8,8 +8,11 @@ function isMagicDamage(entry: LastCombatLogEntry): boolean {
 }
 
 function getActionIcon(entry: LastCombatLogEntry): string {
+  if (entry.effectsExpired && entry.effectsExpired.length > 0) return '✨';
   if (entry.evaded) return '💨';
   if (entry.isCritical) return '💥';
+  if (entry.healAmount && entry.healAmount > 0 && !entry.damage) return '💚';
+  if (entry.effectsApplied && entry.effectsApplied.length > 0 && !entry.damage) return '🔮';
   if (entry.damage && entry.damage > 0) return isMagicDamage(entry) ? '✨' : '⚔️';
   if (entry.roll && !entry.damage) return '❌';
   return '';
@@ -80,18 +83,39 @@ export function CombatLogEntry({
             </span>
           </>
         ) : (
-          <>
-            <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">R{entry.round}</span>
-            <span className={`shrink-0 ${actorColor}`}>{isPlayerAction ? 'You' : 'Mob'}</span>
-            {icon && <span className="shrink-0 text-xs">{icon}</span>}
-            {entry.damage !== undefined && entry.damage > 0 && (
-              <span className="text-[var(--rpg-text-primary)] font-mono font-semibold">{entry.damage} dmg</span>
-            )}
-            {entry.evaded && <span className="text-[var(--rpg-blue-light)] text-xs">Dodged</span>}
-            {entry.roll !== undefined && !entry.damage && !entry.evaded && (
-              <span className="text-[var(--rpg-text-secondary)] text-xs">Miss</span>
-            )}
-          </>
+          <>{entry.effectsExpired && entry.effectsExpired.length > 0 ? (
+            <>
+              <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">R{entry.round}</span>
+              <span className="shrink-0 text-xs">✨</span>
+              <span className="text-[var(--rpg-text-secondary)] text-xs italic">
+                {entry.effectsExpired.map(e => `${e.name} wore off`).join(', ')}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">R{entry.round}</span>
+              <span className={`shrink-0 ${actorColor}`}>{isPlayerAction ? 'You' : 'Mob'}</span>
+              {icon && <span className="shrink-0 text-xs">{icon}</span>}
+              {entry.damage !== undefined && entry.damage > 0 && (
+                <span className="text-[var(--rpg-text-primary)] font-mono font-semibold">{entry.damage} dmg</span>
+              )}
+              {entry.healAmount !== undefined && entry.healAmount > 0 && (
+                <span className="text-[var(--rpg-green-light)] font-mono font-semibold">+{entry.healAmount} HP</span>
+              )}
+              {entry.effectsApplied && entry.effectsApplied.length > 0 && !entry.damage && !entry.healAmount && (
+                <span className="text-[var(--rpg-blue-light)] text-xs">
+                  {entry.effectsApplied.map(e =>
+                    `${e.stat} ${e.modifier > 0 ? '+' : ''}${e.modifier}`
+                  ).join(', ')}
+                  {` (${entry.effectsApplied[0].duration} rds)`}
+                </span>
+              )}
+              {entry.evaded && <span className="text-[var(--rpg-blue-light)] text-xs">Dodged</span>}
+              {entry.roll !== undefined && !entry.damage && !entry.evaded && !entry.effectsApplied && !entry.healAmount && (
+                <span className="text-[var(--rpg-text-secondary)] text-xs">Miss</span>
+              )}
+            </>
+          )}</>
         )}
         <span className="ml-auto flex gap-2 text-xs font-mono text-[var(--rpg-text-secondary)]">
           {entry.playerHpAfter !== undefined && (

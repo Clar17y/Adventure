@@ -14,6 +14,7 @@ import {
   getInventory,
   getPlayer,
   getEncounterSites,
+  getPvpNotifications,
   getSkills,
   getTurns,
   getZones,
@@ -40,7 +41,8 @@ export type Screen =
   | 'crafting'
   | 'forge'
   | 'gathering'
-  | 'rest';
+  | 'rest'
+  | 'arena';
 
 export interface PendingEncounter {
   encounterSiteId: string;
@@ -368,6 +370,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     discovered: boolean;
   }>>([]);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
+  const [pvpNotificationCount, setPvpNotificationCount] = useState(0);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
     mobDisplayName: string;
@@ -402,6 +405,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
     if (turnRes.data) setTurns(turnRes.data.currentTurns);
     if (hpRes.data) setHpState(hpRes.data);
+  }, []);
+
+  const loadPvpNotificationCount = useCallback(async () => {
+    const result = await getPvpNotifications();
+    if (result.data) {
+      setPvpNotificationCount(result.data.notifications?.length ?? 0);
+    }
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -463,10 +473,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   useEffect(() => {
     if (isAuthenticated) {
       void loadAll();
+      void loadPvpNotificationCount();
       const interval = setInterval(() => void loadTurnsAndHp(), 10000);
-      return () => clearInterval(interval);
+      // Poll PvP notifications less frequently (60s)
+      const pvpInterval = setInterval(() => void loadPvpNotificationCount(), 60000);
+      return () => { clearInterval(interval); clearInterval(pvpInterval); };
     }
-  }, [isAuthenticated, loadAll, loadTurnsAndHp]);
+  }, [isAuthenticated, loadAll, loadTurnsAndHp, loadPvpNotificationCount]);
 
   const refreshPendingEncounters = useCallback(async (options?: { background?: boolean }) => {
     if (!isAuthenticated) return;
@@ -652,7 +665,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
-    if (['combat'].includes(activeScreen)) return 'combat';
+    if (['combat', 'arena'].includes(activeScreen)) return 'combat';
     return 'profile';
   };
 
@@ -1390,6 +1403,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     bestiaryPrefixSummary,
     hpState,
     setHpState,
+    pvpNotificationCount,
     playbackActive,
     combatPlaybackData,
     explorationPlaybackData,

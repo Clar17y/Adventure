@@ -43,6 +43,8 @@ interface CraftingProps {
   activityLog: ActivityLogEntry[];
   isRecovering?: boolean;
   recoveryCost?: number | null;
+  zoneCraftingLevel: number | null;
+  zoneName: string | null;
 }
 
 const PERCENT_STATS = new Set(['critChance', 'critDamage']);
@@ -77,7 +79,7 @@ function statEntries(stats: Record<string, unknown> | undefined): Array<[string,
     });
 }
 
-export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog, isRecovering = false, recoveryCost }: CraftingProps) {
+export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog, isRecovering = false, recoveryCost, zoneCraftingLevel, zoneName }: CraftingProps) {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
 
@@ -96,7 +98,14 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
   const selectedRecipeLocked = selectedRecipe?.isAdvanced && selectedRecipe?.isDiscovered === false;
   const selectedLevelLocked = selectedRecipe ? selectedRecipe.requiredLevel > skillLevel : false;
 
+  const noFacility = zoneCraftingLevel === 0;
+  const forgeLocked = (recipe: Recipe) =>
+    zoneCraftingLevel !== null && recipe.requiredLevel > zoneCraftingLevel;
+  const selectedForgeLocked = selectedRecipe ? forgeLocked(selectedRecipe) : false;
+
   const maxCraftable = (recipe: Recipe): number => {
+    if (noFacility) return 0;
+    if (forgeLocked(recipe)) return 0;
     if (recipe.requiredLevel > skillLevel) return 0;
     if (recipe.isAdvanced && recipe.isDiscovered === false) return 0;
     if (recipe.materials.length === 0) return 99;
@@ -111,6 +120,8 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
   }, [selectedRecipeId, selectedMax]);
 
   const canCraft = (recipe: Recipe) => {
+    if (noFacility) return false;
+    if (forgeLocked(recipe)) return false;
     if (recipe.requiredLevel > skillLevel) return false;
     if (recipe.isAdvanced && recipe.isDiscovered === false) return false;
     return recipe.materials.every((m) => m.owned >= m.required);
@@ -143,7 +154,8 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
             const craftable = canCraft(recipe);
             const levelLocked = recipe.requiredLevel > skillLevel;
             const discoveryLocked = recipe.isAdvanced && recipe.isDiscovered === false;
-            const listLocked = levelLocked || discoveryLocked;
+            const forgeCapLocked = forgeLocked(recipe);
+            const listLocked = levelLocked || discoveryLocked || noFacility || forgeCapLocked;
 
             return (
               <button
@@ -200,7 +212,11 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
                           <XCircle size={12} color="var(--rpg-red)" />
                         )}
                         <span className="text-xs text-[var(--rpg-text-secondary)]">
-                          {levelLocked
+                          {noFacility
+                            ? 'No crafting facilities here'
+                            : forgeCapLocked
+                            ? `Requires higher-level forge (Lv. ${recipe.requiredLevel})`
+                            : levelLocked
                             ? `Unlocks at Lv. ${recipe.requiredLevel}`
                             : discoveryLocked
                             ? 'Recipe not discovered'
@@ -380,10 +396,14 @@ export function Crafting({ skillName, skillLevel, recipes, onCraft, activityLog,
             size="lg"
             className="w-full"
             onClick={() => onCraft(selectedRecipe.id, quantity)}
-            disabled={isRecovering || selectedMax < 1}
+            disabled={isRecovering || noFacility || selectedMax < 1}
           >
             {isRecovering
               ? 'Recover First'
+              : noFacility
+              ? 'No Crafting Facility'
+              : selectedForgeLocked
+              ? 'Requires Higher-Level Forge'
               : selectedLevelLocked
               ? `Requires Lv. ${selectedRecipe.requiredLevel}`
               : selectedRecipeLocked

@@ -238,6 +238,8 @@ export default function GamePage() {
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,
+    zoneCraftingLevel,
+    zoneCraftingName,
   } = useGameController({ isAuthenticated });
 
   if (isLoading) {
@@ -365,6 +367,7 @@ export default function GamePage() {
             onEquip={handleEquipItem}
             onUnequip={handleUnequipSlot}
             onUse={handleUseItem}
+            zoneCraftingLevel={zoneCraftingLevel}
           />
         );
       case 'equipment':
@@ -587,6 +590,8 @@ export default function GamePage() {
               activityLog={activityLog}
               isRecovering={hpState.isRecovering}
               recoveryCost={hpState.recoveryCost}
+              zoneCraftingLevel={zoneCraftingLevel}
+              zoneName={zoneCraftingName}
             />
           </div>
         );
@@ -618,6 +623,7 @@ export default function GamePage() {
             onReroll={handleForgeReroll}
             isRecovering={hpState.isRecovering}
             recoveryCost={hpState.recoveryCost}
+            zoneCraftingLevel={zoneCraftingLevel}
           />
         );
       case 'gathering':

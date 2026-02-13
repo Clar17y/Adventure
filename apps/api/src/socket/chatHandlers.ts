@@ -41,13 +41,16 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
   socket.join('chat:world');
 
   // Look up player's current zone and join it
-  void prisma.player
+  prisma.player
     .findUnique({ where: { id: playerId }, select: { currentZoneId: true } })
     .then((player) => {
       if (player?.currentZoneId) {
         socket.join(`chat:zone:${player.currentZoneId}`);
       }
       schedulePresenceBroadcast(io);
+    })
+    .catch(() => {
+      // Best-effort — presence will update on next event
     });
 
   // Handle chat:send
@@ -57,6 +60,13 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
 
     if (typeof channelType !== 'string' || typeof channelId !== 'string' || typeof message !== 'string') return;
     if (!VALID_CHANNEL_TYPES.has(channelType as ChatChannelType)) return;
+
+    // Derive the expected room and verify the socket is a member
+    const room = `chat:${channelId}`;
+    if (!socket.rooms.has(room)) {
+      socket.emit('chat:error', { code: 'NOT_IN_CHANNEL', message: 'You are not in that channel.' });
+      return;
+    }
 
     const trimmed = message.trim();
     if (!trimmed || trimmed.length > CHAT_CONSTANTS.MAX_MESSAGE_LENGTH) return;
@@ -84,7 +94,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       createdAt: saved.createdAt.toISOString(),
     };
 
-    io.to(`chat:${channelId}`).emit('chat:message', event);
+    io.to(room).emit('chat:message', event);
   });
 
   // Handle zone switching (when player travels)

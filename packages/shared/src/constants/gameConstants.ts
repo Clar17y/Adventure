@@ -382,3 +382,22 @@ export const CHAT_CONSTANTS = {
   WORLD_RATE_LIMIT_MS: 2000,
   ZONE_RATE_LIMIT_MS: 1000,
 } as const;
+
+// =============================================================================
+// WORLD EVENTS
+// =============================================================================
+
+export const WORLD_EVENT_CONSTANTS = {
+  RESOURCE_EVENT_DURATION_HOURS: 6,
+  MOB_EVENT_DURATION_HOURS: 6,
+  EVENT_RESPAWN_DELAY_MINUTES: 30,
+  EVENT_DISCOVERY_CHANCE_PER_TURN: 0.0001,
+  BOSS_ROUND_INTERVAL_MINUTES: 30,
+  BOSS_AOE_DAMAGE: 40,
+  BOSS_EXPECTED_PARTICIPANTS: 10,
+  BOSS_HP_SCALE_FACTOR: 0.05,
+  HEALER_MAX_TARGETS: 5,
+  PERSISTED_MOB_REGEN_PERCENT_PER_MINUTE: 1,
+  PERSISTED_MOB_REENCOUNTER_CHANCE: 0.3,
+  PERSISTED_MOB_MAX_AGE_MINUTES: 120,
+} as const;

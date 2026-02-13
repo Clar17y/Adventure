@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
 import {
+  applyMobEventModifiers,
   applyMobPrefix,
   buildPlayerCombatStats,
   calculateFleeResult,
@@ -13,6 +14,8 @@ import {
 } from '@adventure/game-engine';
 import {
   EXPLORATION_CONSTANTS,
+  WORLD_EVENT_TEMPLATES,
+  WORLD_EVENT_CONSTANTS,
   type MobTemplate,
   type SkillType,
 } from '@adventure/shared';
@@ -26,6 +29,12 @@ import { degradeEquippedDurability } from '../services/durabilityService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { discoverZone, getUndiscoveredNeighborZones, respawnToHomeTown } from '../services/zoneDiscoveryService';
+import { getActiveZoneModifiers } from '../services/worldEventService';
+import { spawnWorldEvent } from '../services/worldEventService';
+import { checkAndSpawnEvents } from '../services/eventSchedulerService';
+import { getIo } from '../socket';
+import { emitSystemMessage } from '../services/systemMessageService';
+import { persistMobHp } from '../services/persistedMobService';
 
 export const explorationRouter = Router();
 
@@ -53,7 +62,8 @@ type NarrativeEventType =
   | 'encounter_site'
   | 'resource_node'
   | 'hidden_cache'
-  | 'zone_exit';
+  | 'zone_exit'
+  | 'event_discovery';
 
 interface EncounterMobSlot {
   slot: number;
@@ -397,6 +407,12 @@ explorationRouter.post('/start', async (req, res, next) => {
     const undiscoveredNeighbors = await getUndiscoveredNeighborZones(playerId, body.zoneId);
     const effectiveExitChance = undiscoveredNeighbors.length > 0 ? zone.zoneExitChance : null;
 
+    // Trigger lazy event scheduler
+    await checkAndSpawnEvents(getIo());
+
+    // Fetch zone modifiers from active world events
+    const zoneModifiers = await getActiveZoneModifiers(body.zoneId);
+
     const turnSpend = await spendPlayerTurns(playerId, body.turns);
 
     const outcomes = simulateExploration(body.turns, effectiveExitChance);
@@ -428,7 +444,8 @@ explorationRouter.post('/start', async (req, res, next) => {
             : [],
         };
 
-        const prefixedMob = applyMobPrefix(baseMob, rollMobPrefix());
+        const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
+        const prefixedMob = applyMobPrefix(modifiedMob, rollMobPrefix());
         const playerStats = buildPlayerCombatStats(
           currentHp,
           hpState.maxHp,
@@ -559,6 +576,11 @@ explorationRouter.post('/start', async (req, res, next) => {
           } else {
             currentHp = fleeResult.remainingHp;
             await setHp(playerId, currentHp);
+          }
+
+          // Persist the mob's remaining HP for potential reencounter
+          if (combatResult.mobHpRemaining > 0) {
+            await persistMobHp(playerId, prefixedMob.id, body.zoneId, combatResult.mobHpRemaining, prefixedMob.hp);
           }
 
           const defeatDescription = fleeResult.outcome === 'knockout'
@@ -714,6 +736,44 @@ explorationRouter.post('/start', async (req, res, next) => {
             discoveredZoneName: neighbor.name,
           },
         });
+      }
+
+      if (outcome.type === 'event_discovery') {
+        // Pick a random event template eligible for wild zones
+        const eligible = WORLD_EVENT_TEMPLATES.filter(
+          (t) => t.type !== 'boss' && (!t.zoneType || t.zoneType === zone.zoneType),
+        );
+        if (eligible.length > 0) {
+          const template = eligible[randomIntInclusive(0, eligible.length - 1)]!;
+          const durationHours = template.type === 'resource'
+            ? WORLD_EVENT_CONSTANTS.RESOURCE_EVENT_DURATION_HOURS
+            : WORLD_EVENT_CONSTANTS.MOB_EVENT_DURATION_HOURS;
+          const spawned = await spawnWorldEvent({
+            type: template.type,
+            zoneId: body.zoneId,
+            title: template.title,
+            description: template.description,
+            effectType: template.effectType,
+            effectValue: template.effectValue,
+            durationHours,
+            createdBy: 'player_discovery',
+          });
+
+          if (spawned) {
+            await emitSystemMessage(
+              getIo(),
+              'zone',
+              body.zoneId,
+              `Event discovered in ${zone.name}: ${spawned.title} — ${spawned.description}`,
+            );
+            events.push({
+              turn: outcome.turnOccurred,
+              type: 'event_discovery',
+              description: `You triggered a world event: **${spawned.title}** — ${spawned.description}`,
+              details: { eventId: spawned.id, eventTitle: spawned.title },
+            });
+          }
+        }
       }
     }
 

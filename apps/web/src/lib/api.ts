@@ -1067,7 +1067,76 @@ export async function getChatHistory(channelType: string, channelId: string) {
       playerId: string;
       username: string;
       message: string;
+      messageType?: string;
       createdAt: string;
     }>;
   }>(`/api/v1/chat/history?channelType=${encodeURIComponent(channelType)}&channelId=${encodeURIComponent(channelId)}`);
+}
+
+// World Events
+export interface WorldEventResponse {
+  id: string;
+  type: string;
+  zoneId: string;
+  title: string;
+  description: string;
+  effectType: string;
+  effectValue: number;
+  startedAt: string;
+  expiresAt: string | null;
+  status: string;
+}
+
+export async function getActiveEvents() {
+  return fetchApi<{ events: WorldEventResponse[] }>('/api/v1/events');
+}
+
+export async function getZoneEvents(zoneId: string) {
+  return fetchApi<{ events: WorldEventResponse[] }>(`/api/v1/events/zone/${zoneId}`);
+}
+
+// Boss Encounters
+export interface BossEncounterResponse {
+  id: string;
+  eventId: string;
+  mobTemplateId: string;
+  currentHp: number;
+  maxHp: number;
+  roundNumber: number;
+  nextRoundAt: string | null;
+  status: string;
+  mobName: string;
+  mobLevel: number;
+  zoneId?: string;
+  zoneName?: string;
+}
+
+export interface BossParticipantResponse {
+  id: string;
+  playerId: string;
+  role: string;
+  roundNumber: number;
+  turnsCommitted: number;
+  totalDamage: number;
+  totalHealing: number;
+  currentHp: number;
+  status: string;
+}
+
+export async function getActiveBossEncounters() {
+  return fetchApi<{ encounters: BossEncounterResponse[] }>('/api/v1/boss/active');
+}
+
+export async function getBossEncounter(id: string) {
+  return fetchApi<{
+    encounter: BossEncounterResponse;
+    participants: BossParticipantResponse[];
+  }>(`/api/v1/boss/${id}`);
+}
+
+export async function signUpForBoss(id: string, role: 'attacker' | 'healer', turnsCommitted: number) {
+  return fetchApi<{ participant: BossParticipantResponse }>(`/api/v1/boss/${id}/signup`, {
+    method: 'POST',
+    body: JSON.stringify({ role, turnsCommitted }),
+  });
 }

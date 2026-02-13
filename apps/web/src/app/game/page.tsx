@@ -17,6 +17,7 @@ import { Crafting } from '@/components/screens/Crafting';
 import { Forge } from '@/components/screens/Forge';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
+import { WorldEvents } from '@/components/screens/WorldEvents';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { rarityFromTier } from '@/lib/rarity';
@@ -737,6 +738,10 @@ export default function GamePage() {
             </button>
           </div>
         );
+      case 'worldEvents':
+        return (
+          <WorldEvents onNavigate={(s) => setActiveScreen(s as Screen)} />
+        );
       default:
         return null;
     }
@@ -764,6 +769,7 @@ export default function GamePage() {
               { id: 'skills', label: 'Skills' },
               { id: 'zones', label: 'Map' },
               { id: 'bestiary', label: 'Bestiary' },
+              { id: 'worldEvents', label: 'Events' },
             ].map((tab) => (
               <button
                 key={tab.id}

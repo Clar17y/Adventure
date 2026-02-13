@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
 import {
+  applyMobEventModifiers,
   applyMobPrefix,
   buildPlayerCombatStats,
   runCombat,
@@ -27,6 +28,12 @@ import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { respawnToHomeTown } from '../services/zoneDiscoveryService';
 import { grantEncounterSiteChestRewardsTx } from '../services/chestService';
+import { getActiveZoneModifiers } from '../services/worldEventService';
+import {
+  persistMobHp,
+  checkPersistedMobReencounter,
+  removePersistedMob,
+} from '../services/persistedMobService';
 
 export const combatRouter = Router();
 
@@ -536,10 +543,27 @@ combatRouter.post('/start', async (req, res, next) => {
       ...mob,
       spellPattern: Array.isArray(mob.spellPattern) ? (mob.spellPattern as MobTemplate['spellPattern']) : [],
     };
-    const prefixedMob = applyMobPrefix(baseMob, mobPrefix);
+    // Apply world event modifiers to mob stats
+    const zoneModifiers = await getActiveZoneModifiers(zoneId);
+    const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
+    const prefixedMob = applyMobPrefix(modifiedMob, mobPrefix);
     mobPrefix = prefixedMob.mobPrefix;
 
-    const combatResult = runCombat(playerStats, prefixedMob);
+    // Check for persisted mob reencounter (damaged mob from a previous fight)
+    let persistedMobId: string | null = null;
+    let mobHpOverride: { currentHp: number; maxHp: number } | null = null;
+    if (!body.encounterSiteId) {
+      const persisted = await checkPersistedMobReencounter(playerId, zoneId, prefixedMob.id);
+      if (persisted) {
+        persistedMobId = persisted.id;
+        mobHpOverride = { currentHp: persisted.currentHp, maxHp: persisted.maxHp };
+      }
+    }
+
+    const combatResult = runCombat(
+      playerStats,
+      mobHpOverride ? { ...prefixedMob, ...mobHpOverride } : prefixedMob,
+    );
     const turnSpend = await prisma.$transaction(async (tx) => {
       const txAny = tx as unknown as any;
       const spent = await spendPlayerTurnsTx(tx, playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
@@ -617,6 +641,13 @@ combatRouter.post('/start', async (req, res, next) => {
       } else {
         await setHp(playerId, fleeResult.remainingHp);
       }
+    }
+
+    // Handle persisted mob HP
+    if (combatResult.outcome === 'victory' && persistedMobId) {
+      await removePersistedMob(persistedMobId);
+    } else if (combatResult.outcome === 'defeat' && combatResult.mobHpRemaining > 0 && !body.encounterSiteId) {
+      await persistMobHp(playerId, prefixedMob.id, zoneId, combatResult.mobHpRemaining, prefixedMob.hp);
     }
 
     const lootWithNames = await enrichLootWithNames(loot);

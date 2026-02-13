@@ -2,6 +2,8 @@
 export * from './combat/combatEngine';
 export * from './combat/damageCalculator';
 export * from './combat/mobPrefixes';
+export * from './combat/persistedMobRegen';
+export * from './combat/bossRoundResolver';
 
 // Turns
 export * from './turns/turnCalculator';
@@ -22,3 +24,6 @@ export * from './crafting/craftingCrit';
 
 // Items
 export * from './items/itemRarity';
+
+// Events
+export * from './events/applyEventModifiers';

@@ -187,6 +187,7 @@ export function runCombat(
     durabilityLost: [],
     turnsSpent: 0,
     playerHpRemaining: Math.max(0, state.playerHp),
+    mobHpRemaining: Math.max(0, state.mobHp),
   };
 }
 

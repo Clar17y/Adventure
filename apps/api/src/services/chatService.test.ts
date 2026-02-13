@@ -54,6 +54,7 @@ describe('chatService', () => {
           playerId: 'p1',
           username: 'TestUser',
           message: 'Hello world!',
+          messageType: 'player',
         },
         select: { id: true, createdAt: true },
       });
@@ -80,8 +81,8 @@ describe('chatService', () => {
   describe('getChannelHistory', () => {
     it('returns messages in chronological order', async () => {
       const rows = [
-        { id: '2', channelType: 'world', channelId: 'world', playerId: 'p1', username: 'A', message: 'Second', createdAt: new Date('2025-01-02') },
-        { id: '1', channelType: 'world', channelId: 'world', playerId: 'p2', username: 'B', message: 'First', createdAt: new Date('2025-01-01') },
+        { id: '2', channelType: 'world', channelId: 'world', playerId: 'p1', username: 'A', message: 'Second', messageType: 'player', createdAt: new Date('2025-01-02') },
+        { id: '1', channelType: 'world', channelId: 'world', playerId: 'p2', username: 'B', message: 'First', messageType: 'player', createdAt: new Date('2025-01-01') },
       ];
       mockPrisma.chatMessage.findMany.mockResolvedValue(rows);
 

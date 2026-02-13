@@ -16,8 +16,12 @@ import { craftingRouter } from './routes/crafting';
 import { bestiaryRouter } from './routes/bestiary';
 import { hpRouter } from './routes/hp';
 import { chatRouter } from './routes/chat';
+import { worldEventsRouter } from './routes/worldEvents';
+import { bossRouter } from './routes/boss';
 import { errorHandler } from './middleware/errorHandler';
-import { createSocketServer } from './socket';
+import { createSocketServer, getIo } from './socket';
+import { checkAndResolveDueBossRounds } from './services/bossEncounterService';
+import { cleanupFullyHealedMobs } from './services/persistedMobService';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -86,6 +90,8 @@ app.use('/api/v1/crafting', craftingRouter);
 app.use('/api/v1/bestiary', bestiaryRouter);
 app.use('/api/v1/hp', hpRouter);
 app.use('/api/v1/chat', chatRouter);
+app.use('/api/v1/events', worldEventsRouter);
+app.use('/api/v1/boss', bossRouter);
 
 // Error handler
 app.use(errorHandler);
@@ -95,4 +101,18 @@ createSocketServer(server, isAllowedCorsOrigin);
 
 server.listen(PORT, () => {
   console.log(`Adventure API running on port ${PORT}`);
+
+  // Boss round resolution timer (every 60 seconds)
+  setInterval(() => {
+    checkAndResolveDueBossRounds(getIo()).catch((err) => {
+      console.error('Boss round resolution error:', err);
+    });
+  }, 60_000);
+
+  // Persisted mob cleanup timer (every 5 minutes)
+  setInterval(() => {
+    cleanupFullyHealedMobs().catch((err) => {
+      console.error('Persisted mob cleanup error:', err);
+    });
+  }, 300_000);
 });

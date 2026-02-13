@@ -16,6 +16,9 @@ type MobRow = {
   encounterWeight?: number;
   spellPattern?: unknown[];
   damageType?: 'physical' | 'magic';
+  isBoss?: boolean;
+  bossAoeDmg?: number;
+  bossBaseHp?: number;
 };
 
 function mob(r: MobRow) {
@@ -35,6 +38,9 @@ function mob(r: MobRow) {
     encounterWeight: r.encounterWeight ?? 100,
     spellPattern: r.spellPattern ?? [],
     damageType: r.damageType ?? 'physical',
+    isBoss: r.isBoss ?? false,
+    bossAoeDmg: r.bossAoeDmg ?? null,
+    bossBaseHp: r.bossBaseHp ?? null,
   };
 }
 
@@ -65,7 +71,7 @@ export function getAllMobTemplates() {
     mob({ id: m.youngWolf, name: 'Young Wolf', zoneId: z.deepForest, level: 4, hp: 22, accuracy: 7, defence: 8, magicDefence: 3, evasion: 5, damageMin: 3, damageMax: 6, xpReward: 18 }),
     mob({ id: m.forestWolf, name: 'Forest Wolf', zoneId: z.deepForest, level: 5, hp: 30, accuracy: 8, defence: 10, magicDefence: 4, evasion: 5, damageMin: 3, damageMax: 7, xpReward: 22 }),
     mob({ id: m.direWolf, name: 'Dire Wolf', zoneId: z.deepForest, level: 6, hp: 45, accuracy: 10, defence: 14, magicDefence: 5, evasion: 4, damageMin: 5, damageMax: 10, xpReward: 38 }),
-    mob({ id: m.alphaWolf, name: 'Alpha Wolf', zoneId: z.deepForest, level: 8, hp: 65, accuracy: 12, defence: 16, magicDefence: 6, evasion: 6, damageMin: 6, damageMax: 12, xpReward: 55, spellPattern: [spell(3, 'Howl', { effects: [{ stat: 'attack', modifier: 2, duration: 3 }] }), spell(5, 'Lunge', { damage: 10 })] }),
+    mob({ id: m.alphaWolf, name: 'Alpha Wolf', zoneId: z.deepForest, level: 8, hp: 65, accuracy: 12, defence: 16, magicDefence: 6, evasion: 6, damageMin: 6, damageMax: 12, xpReward: 55, spellPattern: [spell(3, 'Howl', { effects: [{ stat: 'attack', modifier: 2, duration: 3 }] }), spell(5, 'Lunge', { damage: 10 })], isBoss: true, bossAoeDmg: 25, bossBaseHp: 650 }),
     mob({ id: m.woodlandBandit, name: 'Woodland Bandit', zoneId: z.deepForest, level: 4, hp: 25, accuracy: 6, defence: 7, magicDefence: 5, evasion: 4, damageMin: 2, damageMax: 6, xpReward: 16 }),
     mob({ id: m.banditScout, name: 'Bandit Scout', zoneId: z.deepForest, level: 4, hp: 18, accuracy: 7, defence: 5, magicDefence: 4, evasion: 7, damageMin: 2, damageMax: 5, xpReward: 14 }),
     mob({ id: m.banditEnforcer, name: 'Bandit Enforcer', zoneId: z.deepForest, level: 6, hp: 40, accuracy: 9, defence: 12, magicDefence: 8, evasion: 3, damageMin: 4, damageMax: 9, xpReward: 34 }),
@@ -79,7 +85,7 @@ export function getAllMobTemplates() {
     mob({ id: m.forestSprite, name: 'Forest Sprite', zoneId: z.ancientGrove, level: 10, hp: 25, accuracy: 8, defence: 8, magicDefence: 12, evasion: 10, damageMin: 3, damageMax: 6, xpReward: 24, spellPattern: [spell(3, 'Sparkle', { damage: 4 })], damageType: 'magic' }),
     mob({ id: m.wisp, name: 'Wisp', zoneId: z.ancientGrove, level: 10, hp: 18, accuracy: 7, defence: 6, magicDefence: 10, evasion: 12, damageMin: 2, damageMax: 5, xpReward: 20, damageType: 'magic' }),
     mob({ id: m.dryad, name: 'Dryad', zoneId: z.ancientGrove, level: 13, hp: 45, accuracy: 10, defence: 14, magicDefence: 18, evasion: 8, damageMin: 5, damageMax: 9, xpReward: 42, spellPattern: [spell(3, 'Heal Self', { heal: 8 }), spell(5, 'Thorn Burst', { damage: 9 })], damageType: 'magic' }),
-    mob({ id: m.ancientSpirit, name: 'Ancient Spirit', zoneId: z.ancientGrove, level: 16, hp: 70, accuracy: 12, defence: 18, magicDefence: 24, evasion: 10, damageMin: 6, damageMax: 12, xpReward: 65, spellPattern: [spell(2, 'Spirit Shield', { effects: [{ stat: 'defence', modifier: 4, duration: 3 }] }), spell(4, 'Soul Drain', { damage: 10 }), spell(7, 'Wrath', { damage: 15 })], damageType: 'magic' }),
+    mob({ id: m.ancientSpirit, name: 'Ancient Spirit', zoneId: z.ancientGrove, level: 16, hp: 70, accuracy: 12, defence: 18, magicDefence: 24, evasion: 10, damageMin: 6, damageMax: 12, xpReward: 65, spellPattern: [spell(2, 'Spirit Shield', { effects: [{ stat: 'defence', modifier: 4, duration: 3 }] }), spell(4, 'Soul Drain', { damage: 10 }), spell(7, 'Wrath', { damage: 15 })], damageType: 'magic', isBoss: true, bossAoeDmg: 35, bossBaseHp: 1400 }),
     mob({ id: m.darkTreantGrove, name: 'Dark Treant', zoneId: z.ancientGrove, level: 11, hp: 50, accuracy: 7, defence: 18, magicDefence: 9, evasion: 0, damageMin: 4, damageMax: 8, xpReward: 30 }),
     mob({ id: m.mossGolem, name: 'Moss Golem', zoneId: z.ancientGrove, level: 11, hp: 55, accuracy: 6, defence: 22, magicDefence: 8, evasion: 0, damageMin: 3, damageMax: 7, xpReward: 28 }),
     mob({ id: m.ancientTreant, name: 'Ancient Treant', zoneId: z.ancientGrove, level: 14, hp: 75, accuracy: 9, defence: 26, magicDefence: 13, evasion: 0, damageMin: 5, damageMax: 10, xpReward: 50, spellPattern: [spell(3, 'Root Cage', { damage: 8 }), spell(6, 'Bark Shield', { effects: [{ stat: 'defence', modifier: 3, duration: 3 }] })] }),

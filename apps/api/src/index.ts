@@ -16,6 +16,7 @@ import { craftingRouter } from './routes/crafting';
 import { bestiaryRouter } from './routes/bestiary';
 import { hpRouter } from './routes/hp';
 import { chatRouter } from './routes/chat';
+import { pvpRouter } from './routes/pvp';
 import { errorHandler } from './middleware/errorHandler';
 import { createSocketServer } from './socket';
 
@@ -86,6 +87,7 @@ app.use('/api/v1/crafting', craftingRouter);
 app.use('/api/v1/bestiary', bestiaryRouter);
 app.use('/api/v1/hp', hpRouter);
 app.use('/api/v1/chat', chatRouter);
+app.use('/api/v1/pvp', pvpRouter);
 
 // Error handler
 app.use(errorHandler);

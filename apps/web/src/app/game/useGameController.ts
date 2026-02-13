@@ -1032,12 +1032,19 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       });
 
       for (const detail of data.craftedItemDetails ?? []) {
-        if (!detail.isCrit || !detail.bonusStat || typeof detail.bonusValue !== 'number') continue;
-        newLogs.push({
-          timestamp,
-          type: 'success',
-          message: `Critical craft! +${formatStatValue(detail.bonusStat, detail.bonusValue)} ${formatStatName(detail.bonusStat)}.`,
-        });
+        if (!detail.isCrit) continue;
+        const stats = detail.bonusStats
+          ?? (detail.bonusStat && typeof detail.bonusValue === 'number'
+            ? { [detail.bonusStat]: detail.bonusValue }
+            : {});
+        const rarityLabel = detail.rarity !== 'uncommon' ? ` ${detail.rarity}` : '';
+        for (const [stat, value] of Object.entries(stats)) {
+          newLogs.push({
+            timestamp,
+            type: 'success',
+            message: `Critical${rarityLabel} craft! +${formatStatValue(stat, value)} ${formatStatName(stat)}.`,
+          });
+        }
       }
 
       newLogs.push({

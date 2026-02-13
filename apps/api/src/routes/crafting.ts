@@ -444,6 +444,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
       rarity: ItemRarity;
       bonusStat?: string;
       bonusValue?: number;
+      bonusStats?: Record<string, number>;
     }> = [];
     const needsDurability = recipe.resultTemplate.itemType === 'weapon' || recipe.resultTemplate.itemType === 'armor';
     const levelBuckets = Math.floor((skillLevel - recipe.requiredLevel) / 10);
@@ -522,13 +523,13 @@ craftingRouter.post('/craft', async (req, res, next) => {
         });
         craftedItemIds.push(created.id);
         if (critResult.isCrit && bonusEntries.length > 0) {
-          const [bonusStat, bonusValue] = bonusEntries[0]!;
           craftedItemDetails.push({
             id: created.id,
             isCrit: true,
             rarity,
-            bonusStat,
-            bonusValue,
+            bonusStat: bonusEntries[0]![0],
+            bonusValue: bonusEntries[0]![1],
+            bonusStats: Object.fromEntries(bonusEntries),
           });
         } else {
           craftedItemDetails.push({ id: created.id, isCrit: false, rarity });

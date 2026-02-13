@@ -35,6 +35,7 @@ interface InventoryProps {
   onEquip?: (itemId: string, slot: string) => void | Promise<void>;
   onUnequip?: (slot: string) => void | Promise<void>;
   onUse?: (itemId: string) => void | Promise<void>;
+  zoneCraftingLevel?: number | null;
 }
 
 function numStat(value: unknown): number | null {
@@ -90,7 +91,7 @@ function statDisplay(stat: string) {
   return { Icon: Zap, color: 'text-[var(--rpg-gold)]', label: prettyStatName(stat) };
 }
 
-export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequip, onUse }: InventoryProps) {
+export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequip, onUse, zoneCraftingLevel }: InventoryProps) {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -118,7 +119,8 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
   );
   const canEquip = Boolean(onEquip && isEquippable && !isEquipped);
   const canUnequip = Boolean(onUnequip && isEquippable && isEquipped);
-  const canSalvage = Boolean(onSalvage && isEquipment && !isEquipped);
+  const noFacility = zoneCraftingLevel === 0;
+  const canSalvage = Boolean(onSalvage && isEquipment && !isEquipped && !noFacility);
   const canDrop = Boolean(onDrop && !isEquipped);
   const canUse = Boolean(onUse && isConsumable);
 
@@ -389,7 +391,7 @@ export function Inventory({ items, onDrop, onSalvage, onRepair, onEquip, onUnequ
                     }
                   }}
                 >
-                  Salvage
+                  {noFacility ? 'No Facility' : 'Salvage'}
                 </PixelButton>
 
                 <PixelButton

@@ -31,6 +31,7 @@ interface ForgeProps {
   onReroll: (itemId: string, sacrificialItemId: string) => void | Promise<void>;
   isRecovering?: boolean;
   recoveryCost?: number | null;
+  zoneCraftingLevel: number | null;
 }
 
 function statEntries(stats: Record<string, unknown> | null | undefined): Array<[string, number]> {
@@ -73,11 +74,13 @@ export function Forge({
   onReroll,
   isRecovering = false,
   recoveryCost,
+  zoneCraftingLevel,
 }: ForgeProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(items[0]?.id ?? null);
   const [selectedUpgradeSacrificeId, setSelectedUpgradeSacrificeId] = useState<string | null>(null);
   const [selectedRerollSacrificeId, setSelectedRerollSacrificeId] = useState<string | null>(null);
   const [busy, setBusy] = useState<'upgrade' | 'reroll' | null>(null);
+  const noFacility = zoneCraftingLevel === 0;
 
   useEffect(() => {
     if (!selectedItemId || !items.some((item) => item.id === selectedItemId)) {
@@ -158,6 +161,12 @@ export function Forge({
         <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Forge</h2>
         <div className="text-sm text-[var(--rpg-text-secondary)]">Luck: {equippedLuck}</div>
       </div>
+
+      {noFacility && (
+        <div className="text-sm text-[var(--rpg-text-secondary)] bg-[var(--rpg-surface)] rounded-lg p-3 border border-[var(--rpg-border)]">
+          No forge available here. Travel to a town to use the forge.
+        </div>
+      )}
 
       <PixelCard>
         <div className="text-sm font-semibold text-[var(--rpg-text-primary)] mb-2">Eligible Items</div>
@@ -293,6 +302,7 @@ export function Forge({
                 className="w-full"
                 disabled={
                   isRecovering
+                  || noFacility
                   || !canUseForge
                   || !hasUpgradeSacrifice
                   || !selectedUpgradeSacrificeId
@@ -357,6 +367,7 @@ export function Forge({
                 className="w-full"
                 disabled={
                   isRecovering
+                  || noFacility
                   || !canUseForge
                   || !hasRerollSacrifice
                   || !selectedRerollSacrificeId

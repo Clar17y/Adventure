@@ -1,3 +1,4 @@
+import http from 'http';
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -14,7 +15,9 @@ import { gatheringRouter } from './routes/gathering';
 import { craftingRouter } from './routes/crafting';
 import { bestiaryRouter } from './routes/bestiary';
 import { hpRouter } from './routes/hp';
+import { chatRouter } from './routes/chat';
 import { errorHandler } from './middleware/errorHandler';
+import { createSocketServer } from './socket';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -82,10 +85,14 @@ app.use('/api/v1/gathering', gatheringRouter);
 app.use('/api/v1/crafting', craftingRouter);
 app.use('/api/v1/bestiary', bestiaryRouter);
 app.use('/api/v1/hp', hpRouter);
+app.use('/api/v1/chat', chatRouter);
 
 // Error handler
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+createSocketServer(server, isAllowedCorsOrigin);
+
+server.listen(PORT, () => {
   console.log(`Adventure API running on port ${PORT}`);
 });

@@ -468,3 +468,20 @@ model ChestDropTable {
   @@index([mobFamilyId, chestRarity])
   @@map("chest_drop_tables")
 }
+
+// =============================================================================
+// CHAT
+// =============================================================================
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  channelType String   @map("channel_type") @db.VarChar(16)
+  channelId   String   @map("channel_id") @db.VarChar(64)
+  playerId    String   @map("player_id")
+  username    String   @db.VarChar(32)
+  message     String   @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([channelType, channelId, createdAt])
+  @@map("chat_messages")
+}

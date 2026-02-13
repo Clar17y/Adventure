@@ -371,3 +371,14 @@ export const ZONE_CONSTANTS = {
   /** Multiplier for difficult terrain */
   DIFFICULT_TERRAIN_MULTIPLIER: 2,
 } as const;
+
+// =============================================================================
+// CHAT
+// =============================================================================
+
+export const CHAT_CONSTANTS = {
+  MAX_MESSAGE_LENGTH: 200,
+  HISTORY_LIMIT: 50,
+  WORLD_RATE_LIMIT_MS: 2000,
+  ZONE_RATE_LIMIT_MS: 1000,
+} as const;

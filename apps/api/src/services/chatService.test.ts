@@ -1,0 +1,109 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@adventure/database', () => import('../__mocks__/database'));
+
+import { prisma } from '@adventure/database';
+import { checkRateLimit, saveMessage, getChannelHistory } from './chatService';
+
+const mockPrisma = prisma as unknown as Record<string, any>;
+
+describe('chatService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('checkRateLimit', () => {
+    it('allows first message', () => {
+      expect(checkRateLimit('player-1', 'world')).toBe(true);
+    });
+
+    it('blocks rapid second message on same channel', () => {
+      checkRateLimit('player-2', 'world');
+      expect(checkRateLimit('player-2', 'world')).toBe(false);
+    });
+
+    it('allows messages on different channels', () => {
+      checkRateLimit('player-3', 'world');
+      expect(checkRateLimit('player-3', 'zone')).toBe(true);
+    });
+
+    it('allows messages from different players', () => {
+      checkRateLimit('player-4', 'world');
+      expect(checkRateLimit('player-5', 'world')).toBe(true);
+    });
+  });
+
+  describe('saveMessage', () => {
+    it('creates a chat message in DB and truncates to max length', async () => {
+      const createdAt = new Date();
+      mockPrisma.chatMessage.create.mockResolvedValue({ id: 'msg-1', createdAt });
+
+      const result = await saveMessage({
+        channelType: 'world',
+        channelId: 'world',
+        playerId: 'p1',
+        username: 'TestUser',
+        message: 'Hello world!',
+      });
+
+      expect(result).toEqual({ id: 'msg-1', createdAt });
+      expect(mockPrisma.chatMessage.create).toHaveBeenCalledWith({
+        data: {
+          channelType: 'world',
+          channelId: 'world',
+          playerId: 'p1',
+          username: 'TestUser',
+          message: 'Hello world!',
+        },
+        select: { id: true, createdAt: true },
+      });
+    });
+
+    it('truncates messages longer than MAX_MESSAGE_LENGTH', async () => {
+      const createdAt = new Date();
+      mockPrisma.chatMessage.create.mockResolvedValue({ id: 'msg-2', createdAt });
+
+      const longMessage = 'a'.repeat(300);
+      await saveMessage({
+        channelType: 'zone',
+        channelId: 'zone:z1',
+        playerId: 'p1',
+        username: 'User',
+        message: longMessage,
+      });
+
+      const callArgs = mockPrisma.chatMessage.create.mock.calls[0][0];
+      expect(callArgs.data.message.length).toBe(200);
+    });
+  });
+
+  describe('getChannelHistory', () => {
+    it('returns messages in chronological order', async () => {
+      const rows = [
+        { id: '2', channelType: 'world', channelId: 'world', playerId: 'p1', username: 'A', message: 'Second', createdAt: new Date('2025-01-02') },
+        { id: '1', channelType: 'world', channelId: 'world', playerId: 'p2', username: 'B', message: 'First', createdAt: new Date('2025-01-01') },
+      ];
+      mockPrisma.chatMessage.findMany.mockResolvedValue(rows);
+
+      const result = await getChannelHistory('world', 'world');
+
+      expect(result).toHaveLength(2);
+      // Reversed from desc to chronological
+      expect(result[0].message).toBe('First');
+      expect(result[1].message).toBe('Second');
+      expect(result[0].createdAt).toBe('2025-01-01T00:00:00.000Z');
+    });
+
+    it('queries with correct limit and ordering', async () => {
+      mockPrisma.chatMessage.findMany.mockResolvedValue([]);
+
+      await getChannelHistory('zone', 'zone:z1');
+
+      expect(mockPrisma.chatMessage.findMany).toHaveBeenCalledWith({
+        where: { channelType: 'zone', channelId: 'zone:z1' },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+    });
+  });
+});

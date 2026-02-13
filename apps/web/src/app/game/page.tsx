@@ -26,6 +26,8 @@ import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
 import { Sword, Shield, Crosshair, Sparkles, Pickaxe, Hammer, Leaf, FlaskConical, Axe, Scissors, Anvil } from 'lucide-react';
 import { CombatScreen } from './screens/CombatScreen';
 import { useGameController, type Screen } from './useGameController';
+import { useChat } from '@/hooks/useChat';
+import { ChatPanel } from '@/components/ChatPanel';
 
 const SKILL_META: Record<string, { name: string; icon: typeof Sword; color: string }> = {
   melee: { name: 'Melee', icon: Sword, color: 'var(--rpg-red)' },
@@ -241,6 +243,8 @@ export default function GamePage() {
     zoneCraftingLevel,
     zoneCraftingName,
   } = useGameController({ isAuthenticated });
+
+  const chat = useChat({ isAuthenticated, currentZoneId: activeZoneId });
 
   if (isLoading) {
     return (
@@ -827,6 +831,22 @@ export default function GamePage() {
 
         {renderScreen()}
       </AppShell>
+      <ChatPanel
+        isOpen={chat.isOpen}
+        toggleChat={chat.toggleChat}
+        activeChannel={chat.activeChannel}
+        setActiveChannel={chat.setActiveChannel}
+        worldMessages={chat.worldMessages}
+        zoneMessages={chat.zoneMessages}
+        presence={chat.presence}
+        unreadWorld={chat.unreadWorld}
+        unreadZone={chat.unreadZone}
+        sendMessage={chat.sendMessage}
+        rateLimitError={chat.rateLimitError}
+        currentZoneId={activeZoneId}
+        currentZoneName={currentZone?.name ?? null}
+        playerId={player?.id ?? null}
+      />
       <BottomNav activeTab={getActiveTab()} onNavigate={handleNavigate} />
     </>
   );

@@ -55,6 +55,40 @@ async function getSkillLevel(playerId: string, skillType: SkillType): Promise<nu
   return skill?.level ?? 1;
 }
 
+async function getZoneCraftingLevel(playerId: string): Promise<{ maxCraftingLevel: number | null; zoneName: string }> {
+  const player = await prisma.player.findUnique({
+    where: { id: playerId },
+    select: { currentZoneId: true },
+  });
+  if (!player?.currentZoneId) {
+    throw new AppError(400, 'You must be in a zone to craft', 'NO_ZONE');
+  }
+  const zone = await prisma.zone.findUnique({
+    where: { id: player.currentZoneId },
+    select: { name: true, maxCraftingLevel: true },
+  });
+  if (!zone) {
+    throw new AppError(400, 'Current zone not found', 'NO_ZONE');
+  }
+  return { maxCraftingLevel: zone.maxCraftingLevel, zoneName: zone.name };
+}
+
+function assertZoneAllowsCrafting(zone: { maxCraftingLevel: number | null; zoneName: string }): void {
+  if (zone.maxCraftingLevel === 0) {
+    throw new AppError(400, 'No crafting facilities available here. Travel to a town to craft.', 'NO_CRAFTING_FACILITY');
+  }
+}
+
+function assertZoneAllowsRecipeLevel(zone: { maxCraftingLevel: number | null; zoneName: string }, requiredLevel: number): void {
+  if (zone.maxCraftingLevel !== null && requiredLevel > zone.maxCraftingLevel) {
+    throw new AppError(
+      400,
+      `${zone.zoneName}'s forge can only craft up to level ${zone.maxCraftingLevel} recipes. This recipe requires level ${requiredLevel}.`,
+      'FORGE_LEVEL_TOO_LOW',
+    );
+  }
+}
+
 function parseMaterials(value: unknown): CraftingMaterial[] {
   const materialSchema = z.object({
     templateId: z.string().uuid(),
@@ -317,6 +351,9 @@ craftingRouter.post('/craft', async (req, res, next) => {
       throw new AppError(400, 'Cannot craft while recovering', 'IS_RECOVERING');
     }
 
+    const zone = await getZoneCraftingLevel(playerId);
+    assertZoneAllowsCrafting(zone);
+
     const recipe = await prismaAny.craftingRecipe.findUnique({
       where: { id: body.recipeId },
       include: { resultTemplate: true },
@@ -345,6 +382,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
     if (skillLevel < recipe.requiredLevel) {
       throw new AppError(400, 'Insufficient crafting level', 'INSUFFICIENT_LEVEL');
     }
+    assertZoneAllowsRecipeLevel(zone, recipe.requiredLevel);
     if (recipe.isAdvanced) {
       const unlocked = await prismaAny.playerRecipe.findUnique({
         where: {
@@ -563,6 +601,9 @@ craftingRouter.post('/forge/upgrade', async (req, res, next) => {
       throw new AppError(400, 'Cannot use forge while recovering', 'IS_RECOVERING');
     }
 
+    const zone = await getZoneCraftingLevel(playerId);
+    assertZoneAllowsCrafting(zone);
+
     const item = await (prisma as any).item.findUnique({
       where: { id: body.itemId },
       include: { template: true },
@@ -779,6 +820,9 @@ craftingRouter.post('/forge/reroll', async (req, res, next) => {
       throw new AppError(400, 'Cannot use forge while recovering', 'IS_RECOVERING');
     }
 
+    const zone = await getZoneCraftingLevel(playerId);
+    assertZoneAllowsCrafting(zone);
+
     const item = await (prisma as any).item.findUnique({
       where: { id: body.itemId },
       include: { template: true },
@@ -898,6 +942,9 @@ craftingRouter.post('/salvage', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = salvageSchema.parse(req.body);
+
+    const zone = await getZoneCraftingLevel(playerId);
+    assertZoneAllowsCrafting(zone);
 
     const item = await prisma.item.findUnique({
       where: { id: body.itemId },

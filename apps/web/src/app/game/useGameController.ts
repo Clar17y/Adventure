@@ -192,6 +192,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     isStarter: boolean;
     discovered: boolean;
     zoneType: string;
+    maxCraftingLevel: number | null;
   }>>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [zoneConnections, setZoneConnections] = useState<Array<{ fromId: string; toId: string }>>([]);
@@ -280,6 +281,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     zones: [],
     resourceTypes: [],
   });
+  const [zoneCraftingLevel, setZoneCraftingLevel] = useState<number | null>(0);
+  const [zoneCraftingName, setZoneCraftingName] = useState<string | null>(null);
   const [craftingRecipes, setCraftingRecipes] = useState<Array<{
     id: string;
     skillType: string;
@@ -436,7 +439,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         }))
       );
     }
-    if (recipesRes.data) setCraftingRecipes(recipesRes.data.recipes);
+    if (recipesRes.data) {
+      setCraftingRecipes(recipesRes.data.recipes);
+      setZoneCraftingLevel(recipesRes.data.zoneCraftingLevel);
+      setZoneCraftingName(recipesRes.data.zoneName);
+    }
   }, []);
 
   useEffect(() => {
@@ -1344,6 +1351,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     activeGatheringSkill,
     setActiveGatheringSkill,
     craftingRecipes,
+    zoneCraftingLevel,
+    zoneCraftingName,
     activeCraftingSkill,
     setActiveCraftingSkill,
     activityLog,

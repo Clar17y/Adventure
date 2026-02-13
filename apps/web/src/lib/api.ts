@@ -911,6 +911,8 @@ export async function getCraftingRecipes() {
       materialTemplates: Array<{ id: string; name: string; itemType: string; stackable: boolean }>;
       xpReward: number;
     }>;
+    zoneCraftingLevel: number | null;
+    zoneName: string | null;
   }>('/api/v1/crafting/recipes');
 }
 

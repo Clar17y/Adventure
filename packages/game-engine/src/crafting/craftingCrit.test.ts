@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateCraftingCrit,
   calculateCritChance,
+  calculateRareCraftChance,
+  calculateEpicCraftChance,
   getEligibleBonusStats,
   rollBonusStat,
 } from './craftingCrit';
@@ -18,6 +20,44 @@ describe('calculateCritChance', () => {
   it('clamps to min and max bounds', () => {
     expect(calculateCritChance(1, 50, 0)).toBeCloseTo(0.01);
     expect(calculateCritChance(100, 1, 500)).toBeCloseTo(0.5);
+  });
+});
+
+describe('calculateRareCraftChance', () => {
+  it('returns base rare chance at exact recipe level', () => {
+    expect(calculateRareCraftChance(10, 10, 0)).toBeCloseTo(0.005);
+  });
+
+  it('scales with level advantage and luck', () => {
+    // 0.005 + 10*0.001 + 15*0.0005 = 0.0225
+    expect(calculateRareCraftChance(20, 10, 15)).toBeCloseTo(0.0225);
+  });
+
+  it('clamps to max', () => {
+    expect(calculateRareCraftChance(100, 1, 500)).toBeCloseTo(0.04);
+  });
+
+  it('floors at 0 when underlevel', () => {
+    expect(calculateRareCraftChance(1, 50, 0)).toBe(0);
+  });
+});
+
+describe('calculateEpicCraftChance', () => {
+  it('returns base epic chance at exact recipe level', () => {
+    expect(calculateEpicCraftChance(10, 10, 0)).toBeCloseTo(0.0005);
+  });
+
+  it('scales with level advantage and luck', () => {
+    // 0.0005 + 10*0.0001 + 15*0.00005 = 0.00225
+    expect(calculateEpicCraftChance(20, 10, 15)).toBeCloseTo(0.00225);
+  });
+
+  it('clamps to max', () => {
+    expect(calculateEpicCraftChance(100, 1, 500)).toBeCloseTo(0.004);
+  });
+
+  it('floors at 0 when underlevel', () => {
+    expect(calculateEpicCraftChance(1, 50, 0)).toBe(0);
   });
 });
 
@@ -219,5 +259,89 @@ describe('calculateCraftingCrit', () => {
     // main_hand pool with attack baseStats: [attack, critChance, critDamage, accuracy, luck]
     expect(result.bonusStat).toBe('attack');
     expect(result.bonusValue).toBeGreaterThan(0);
+  });
+
+  it('returns rare rarity when roll is between epic and rare thresholds', () => {
+    // At skillLevel=10, requiredLevel=10, luck=0:
+    // epicCraftChance = 0.0005, rareCraftChance = 0.005, critChance = 0.05
+    const result = calculateCraftingCrit({
+      skillLevel: 10,
+      requiredLevel: 10,
+      luckStat: 0,
+      itemType: 'weapon',
+      baseStats: { attack: 50 },
+      slot: 'main_hand',
+    }, {
+      critRoll: 0.001,   // 0.0005 < 0.001 < 0.005 → rare
+      statRoll: 0,
+      bonusPercentRoll: 0.5,
+    });
+    expect(result.isCrit).toBe(true);
+    expect(result.rarity).toBe('rare');
+  });
+
+  it('returns epic rarity when roll is below epic threshold', () => {
+    const result = calculateCraftingCrit({
+      skillLevel: 10,
+      requiredLevel: 10,
+      luckStat: 0,
+      itemType: 'weapon',
+      baseStats: { attack: 50 },
+      slot: 'main_hand',
+    }, {
+      critRoll: 0.0001,  // below epicCraftChance (0.0005)
+      statRoll: 0,
+      bonusPercentRoll: 0.5,
+    });
+    expect(result.isCrit).toBe(true);
+    expect(result.rarity).toBe('epic');
+  });
+
+  it('returns uncommon rarity for normal crit above rare threshold', () => {
+    const result = calculateCraftingCrit({
+      skillLevel: 10,
+      requiredLevel: 10,
+      luckStat: 0,
+      itemType: 'weapon',
+      baseStats: { attack: 50 },
+      slot: 'main_hand',
+    }, {
+      critRoll: 0.01,    // above rareCraftChance (0.005), below critChance (0.05)
+      statRoll: 0,
+      bonusPercentRoll: 0.5,
+    });
+    expect(result.isCrit).toBe(true);
+    expect(result.rarity).toBe('uncommon');
+  });
+
+  it('returns common rarity when roll misses crit', () => {
+    const result = calculateCraftingCrit({
+      skillLevel: 10,
+      requiredLevel: 10,
+      luckStat: 0,
+      itemType: 'weapon',
+      baseStats: { attack: 50 },
+      slot: 'main_hand',
+    }, {
+      critRoll: 0.9,
+      statRoll: 0,
+      bonusPercentRoll: 0.5,
+    });
+    expect(result.isCrit).toBe(false);
+    expect(result.rarity).toBe('common');
+  });
+
+  it('returns common rarity for non-equipment even with low roll', () => {
+    const result = calculateCraftingCrit({
+      skillLevel: 20,
+      requiredLevel: 1,
+      luckStat: 20,
+      itemType: 'resource',
+      baseStats: {},
+    }, {
+      critRoll: 0,
+    });
+    expect(result.isCrit).toBe(false);
+    expect(result.rarity).toBe('common');
   });
 });

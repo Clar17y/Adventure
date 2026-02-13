@@ -926,8 +926,7 @@ export async function craft(recipeId: string, quantity: number = 1) {
       id: string;
       isCrit: boolean;
       rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-      bonusStat?: string;
-      bonusValue?: number;
+      bonusStats?: Record<string, number>;
     }>;
     xp: {
       skillType: string;

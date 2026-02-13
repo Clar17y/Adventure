@@ -324,7 +324,7 @@ craftingRouter.get('/recipes', async (req, res, next) => {
 
     res.json({
       recipes: visible,
-      zoneCraftingLevel: currentZone?.maxCraftingLevel ?? 0,
+      zoneCraftingLevel: currentZone ? currentZone.maxCraftingLevel : 0,
       zoneName: currentZone?.name ?? null,
     });
   } catch (err) {

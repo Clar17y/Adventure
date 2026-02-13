@@ -442,8 +442,6 @@ craftingRouter.post('/craft', async (req, res, next) => {
       id: string;
       isCrit: boolean;
       rarity: ItemRarity;
-      bonusStat?: string;
-      bonusValue?: number;
       bonusStats?: Record<string, number>;
     }> = [];
     const needsDurability = recipe.resultTemplate.itemType === 'weapon' || recipe.resultTemplate.itemType === 'armor';
@@ -527,8 +525,6 @@ craftingRouter.post('/craft', async (req, res, next) => {
             id: created.id,
             isCrit: true,
             rarity,
-            bonusStat: bonusEntries[0]![0],
-            bonusValue: bonusEntries[0]![1],
             bonusStats: Object.fromEntries(bonusEntries),
           });
         } else {

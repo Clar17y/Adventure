@@ -1032,13 +1032,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       });
 
       for (const detail of data.craftedItemDetails ?? []) {
-        if (!detail.isCrit) continue;
-        const stats = detail.bonusStats
-          ?? (detail.bonusStat && typeof detail.bonusValue === 'number'
-            ? { [detail.bonusStat]: detail.bonusValue }
-            : {});
+        if (!detail.isCrit || !detail.bonusStats) continue;
         const rarityLabel = detail.rarity !== 'uncommon' ? ` ${detail.rarity}` : '';
-        for (const [stat, value] of Object.entries(stats)) {
+        for (const [stat, value] of Object.entries(detail.bonusStats)) {
           newLogs.push({
             timestamp,
             type: 'success',

@@ -115,6 +115,10 @@ export function TurnPlayback({
               critMultiplier?: number;
               playerHpAfter?: number;
               mobHpAfter?: number;
+              spellName?: string;
+              healAmount?: number;
+              effectsApplied?: Array<{ stat: string; modifier: number; duration: number; target: 'player' | 'mob' }>;
+              effectsExpired?: Array<{ name: string; target: 'player' | 'mob' }>;
             }>) ?? []}
             onComplete={() => {
               // Track player HP after this fight for the next combat

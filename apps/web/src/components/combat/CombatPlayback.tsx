@@ -175,10 +175,10 @@ export function CombatPlayback({
             if (lastEntry.evaded) return <span className="text-[var(--rpg-blue-light)]">Dodged!</span>;
             if (lastEntry.isCritical) return <span className="text-[var(--rpg-gold)] font-bold">Critical Hit! {lastEntry.damage} dmg</span>;
             if (lastEntry.damage && lastEntry.damage > 0 && lastEntry.healAmount && lastEntry.healAmount > 0) {
-              return <span className="text-[var(--rpg-text-primary)]">{lastEntry.damage} dmg, +{lastEntry.healAmount} HP</span>;
+              return <span className="text-[var(--rpg-text-primary)]">{lastEntry.spellName ? `${lastEntry.spellName}: ` : ''}{lastEntry.damage} dmg, +{lastEntry.healAmount} HP</span>;
             }
-            if (lastEntry.damage && lastEntry.damage > 0) return <span className="text-[var(--rpg-text-primary)]">{lastEntry.damage} dmg</span>;
-            if (lastEntry.healAmount && lastEntry.healAmount > 0) return <span className="text-[var(--rpg-green-light)]">+{lastEntry.healAmount} HP</span>;
+            if (lastEntry.damage && lastEntry.damage > 0) return <span className="text-[var(--rpg-text-primary)]">{lastEntry.spellName ? `${lastEntry.spellName}: ` : ''}{lastEntry.damage} dmg</span>;
+            if (lastEntry.healAmount && lastEntry.healAmount > 0) return <span className="text-[var(--rpg-green-light)]">{lastEntry.spellName ? `${lastEntry.spellName}: ` : ''}+{lastEntry.healAmount} HP</span>;
             if (lastEntry.effectsApplied && lastEntry.effectsApplied.length > 0) {
               const e = lastEntry.effectsApplied[0];
               return <span className="text-[var(--rpg-blue-light)]">
@@ -186,6 +186,7 @@ export function CombatPlayback({
               </span>;
             }
             if (lastEntry.roll && !lastEntry.damage) return <span className="text-[var(--rpg-text-secondary)]">Miss!</span>;
+            if (lastEntry.spellName) return <span className="text-[var(--rpg-blue-light)]">{lastEntry.spellName}</span>;
             return null;
           })()}
         </div>

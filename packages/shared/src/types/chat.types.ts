@@ -6,6 +6,9 @@ export interface ChatSendPayload {
   message: string;
 }
 
+export type ChatRole = 'player' | 'admin' | 'moderator';
+export type ChatMessageType = 'player' | 'system';
+
 export interface ChatMessageEvent {
   id: string;
   channelType: ChatChannelType;
@@ -14,6 +17,15 @@ export interface ChatMessageEvent {
   username: string;
   message: string;
   createdAt: string;
+  role?: ChatRole;
+  messageType?: ChatMessageType;
+}
+
+export interface ChatPinnedMessageEvent {
+  id: string | null;
+  message: string | null;
+  pinnedBy: string;
+  channelId: string;
 }
 
 export interface ChatPresenceEvent {

@@ -13,7 +13,7 @@ function makeSocket(auth: Record<string, unknown> = {}) {
 
 describe('authenticateSocket', () => {
   it('attaches player data on valid token', () => {
-    const token = jwt.sign({ playerId: 'p1', username: 'Alice' }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ playerId: 'p1', username: 'Alice', role: 'player' }, JWT_SECRET, { expiresIn: '1h' });
     const socket = makeSocket({ token });
     const next = vi.fn();
 
@@ -22,6 +22,7 @@ describe('authenticateSocket', () => {
     expect(next).toHaveBeenCalledWith();
     expect(socket.data.playerId).toBe('p1');
     expect(socket.data.username).toBe('Alice');
+    expect(socket.data.role).toBe('player');
   });
 
   it('calls next with error on missing token', () => {
@@ -45,7 +46,7 @@ describe('authenticateSocket', () => {
   });
 
   it('calls next with error on expired token', () => {
-    const token = jwt.sign({ playerId: 'p1', username: 'Alice' }, JWT_SECRET, { expiresIn: '-1s' });
+    const token = jwt.sign({ playerId: 'p1', username: 'Alice', role: 'player' }, JWT_SECRET, { expiresIn: '-1s' });
     const socket = makeSocket({ token });
     const next = vi.fn();
 

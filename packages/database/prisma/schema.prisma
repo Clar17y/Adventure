@@ -16,6 +16,7 @@ model Player {
   username     String    @unique @db.VarChar(32)
   email        String    @unique @db.VarChar(255)
   passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         String    @default("player") @db.VarChar(16)
   createdAt    DateTime  @default(now()) @map("created_at")
   lastActiveAt DateTime? @map("last_active_at")
 

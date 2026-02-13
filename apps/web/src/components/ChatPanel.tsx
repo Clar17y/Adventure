@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, type FormEvent } from 'react';
 import { MessageCircle, Send, X } from 'lucide-react';
 import { CHAT_CONSTANTS } from '@adventure/shared';
-import type { ChatMessageEvent, ChatPresenceEvent } from '@adventure/shared';
+import type { ChatMessageEvent, ChatPresenceEvent, ChatPinnedMessageEvent } from '@adventure/shared';
 import type { ChatChannel } from '@/hooks/useChat';
 
 interface ChatPanelProps {
@@ -21,6 +21,7 @@ interface ChatPanelProps {
   currentZoneId: string | null;
   currentZoneName: string | null;
   playerId: string | null;
+  pinnedMessage: ChatPinnedMessageEvent | null;
 }
 
 export function ChatPanel({
@@ -38,12 +39,20 @@ export function ChatPanel({
   currentZoneId,
   currentZoneName,
   playerId,
+  pinnedMessage,
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const [pinnedDismissed, setPinnedDismissed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const messages = activeChannel === 'world' ? worldMessages : zoneMessages;
+  const pinnedId = pinnedMessage?.id;
+
+  // Reset dismiss when a new pin arrives
+  useEffect(() => {
+    setPinnedDismissed(false);
+  }, [pinnedId]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -131,6 +140,22 @@ export function ChatPanel({
           </button>
         </div>
 
+        {/* Pinned banner */}
+        {pinnedMessage && !pinnedDismissed && (
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[var(--rpg-gold)]/40 bg-[var(--rpg-gold)]/10 shrink-0">
+            <span className="text-[10px]">📌</span>
+            <span className="flex-1 text-[11px] text-[var(--rpg-gold)] truncate">{pinnedMessage.message}</span>
+            <span className="text-[10px] text-[var(--rpg-text-secondary)] shrink-0">— {pinnedMessage.pinnedBy}</span>
+            <button
+              onClick={() => setPinnedDismissed(true)}
+              className="text-[var(--rpg-text-secondary)] hover:text-[var(--rpg-text-primary)] text-xs ml-1 shrink-0"
+              aria-label="Dismiss pin"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 min-h-0">
           {messages.length === 0 && (
@@ -141,10 +166,30 @@ export function ChatPanel({
           {messages.map((msg) => {
             const isOwn = msg.playerId === playerId;
             const time = formatTime(msg.createdAt);
+            const isSystem = msg.messageType === 'system';
+            const isAdmin = msg.role === 'admin';
+            const isMod = msg.role === 'moderator';
+
+            if (isSystem) {
+              return (
+                <div key={msg.id} className="text-xs leading-relaxed italic text-[var(--rpg-gold)]">
+                  <span className="text-[var(--rpg-text-secondary)]">[{time}] </span>
+                  <span>⚔ {msg.message}</span>
+                </div>
+              );
+            }
+
             return (
               <div key={msg.id} className="text-xs leading-relaxed">
                 <span className="text-[var(--rpg-text-secondary)]">[{time}] </span>
-                <span className={isOwn ? 'text-[var(--rpg-gold)] font-medium' : 'text-[var(--rpg-blue-light)] font-medium'}>
+                {isAdmin && <span className="text-[var(--rpg-red)] font-bold">[Admin] </span>}
+                {isMod && <span className="text-[var(--rpg-green-light)] font-bold">[Mod] </span>}
+                <span className={
+                  isAdmin ? 'text-[var(--rpg-red)] font-medium'
+                  : isMod ? 'text-[var(--rpg-green-light)] font-medium'
+                  : isOwn ? 'text-[var(--rpg-gold)] font-medium'
+                  : 'text-[var(--rpg-blue-light)] font-medium'
+                }>
                   {msg.username}
                 </span>
                 <span className="text-[var(--rpg-text-secondary)]">: </span>

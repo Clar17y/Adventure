@@ -53,6 +53,7 @@ function touchPlayerLastActive(playerId: string): void {
 export interface AuthPayload {
   playerId: string;
   username: string;
+  role: string;
 }
 
 declare global {
@@ -106,12 +107,13 @@ export function verifyRefreshToken(token: string): AuthPayload {
 
   const playerId = (decoded as { playerId?: unknown }).playerId;
   const username = (decoded as { username?: unknown }).username;
+  const role = (decoded as { role?: unknown }).role;
 
   if (typeof playerId !== 'string' || typeof username !== 'string') {
     throw new AppError(401, 'Invalid or expired token', 'INVALID_TOKEN');
   }
 
-  return { playerId, username };
+  return { playerId, username, role: typeof role === 'string' ? role : 'player' };
 }
 
 export function refreshTokenExpiresAt(nowMs = Date.now()): Date {

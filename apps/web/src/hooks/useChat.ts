@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatMessageEvent, ChatPresenceEvent } from '@adventure/shared';
+import type { ChatMessageEvent, ChatPresenceEvent, ChatPinnedMessageEvent } from '@adventure/shared';
 import { CHAT_CONSTANTS } from '@adventure/shared';
 import { getSocket, connectSocket, disconnectSocket } from '@/lib/socket';
 import { getChatHistory } from '@/lib/api';
@@ -25,6 +25,10 @@ export interface UseChatReturn {
   unreadZone: number;
   sendMessage: (text: string) => void;
   rateLimitError: string | null;
+  pinnedWorld: ChatPinnedMessageEvent | null;
+  pinnedZone: ChatPinnedMessageEvent | null;
+  pinMessage: (channelId: string, message: string) => void;
+  unpinMessage: (channelId: string) => void;
 }
 
 export function useChat({ isAuthenticated, currentZoneId }: UseChatParams): UseChatReturn {
@@ -36,6 +40,8 @@ export function useChat({ isAuthenticated, currentZoneId }: UseChatParams): UseC
   const [unreadWorld, setUnreadWorld] = useState(0);
   const [unreadZone, setUnreadZone] = useState(0);
   const [rateLimitError, setRateLimitError] = useState<string | null>(null);
+  const [pinnedWorld, setPinnedWorld] = useState<ChatPinnedMessageEvent | null>(null);
+  const [pinnedZone, setPinnedZone] = useState<ChatPinnedMessageEvent | null>(null);
 
   const currentZoneIdRef = useRef(currentZoneId);
   const isOpenRef = useRef(isOpen);
@@ -74,10 +80,18 @@ export function useChat({ isAuthenticated, currentZoneId }: UseChatParams): UseC
         setTimeout(() => setRateLimitError(null), 3000);
       }
     };
+    const onPinned = (pin: ChatPinnedMessageEvent) => {
+      if (pin.channelId === 'world') {
+        setPinnedWorld(pin.id ? pin : null);
+      } else {
+        setPinnedZone(pin.id ? pin : null);
+      }
+    };
 
     socket.on('chat:message', onMessage);
     socket.on('chat:presence', onPresence);
     socket.on('chat:error', onError);
+    socket.on('chat:pinned', onPinned);
 
     // Load world history on connect
     const onConnect = () => {
@@ -104,6 +118,7 @@ export function useChat({ isAuthenticated, currentZoneId }: UseChatParams): UseC
       socket.off('chat:message', onMessage);
       socket.off('chat:presence', onPresence);
       socket.off('chat:error', onError);
+      socket.off('chat:pinned', onPinned);
       socket.off('connect', onConnect);
       disconnectSocket();
     };
@@ -123,6 +138,7 @@ export function useChat({ isAuthenticated, currentZoneId }: UseChatParams): UseC
     }
 
     setZoneMessages([]);
+    setPinnedZone(null);
     getChatHistory('zone', `zone:${currentZoneId}`).then((res) => {
       if (res.data) {
         setZoneMessages(res.data.messages as ChatMessageEvent[]);
@@ -161,6 +177,18 @@ export function useChat({ isAuthenticated, currentZoneId }: UseChatParams): UseC
     socket.emit('chat:send', { channelType, channelId, message: trimmed });
   }, []);
 
+  const pinMessage = useCallback((channelId: string, message: string) => {
+    const socket = getSocket();
+    if (!socket.connected) return;
+    socket.emit('chat:pin', { channelId, message });
+  }, []);
+
+  const unpinMessage = useCallback((channelId: string) => {
+    const socket = getSocket();
+    if (!socket.connected) return;
+    socket.emit('chat:unpin', { channelId });
+  }, []);
+
   return {
     worldMessages,
     zoneMessages,
@@ -173,5 +201,9 @@ export function useChat({ isAuthenticated, currentZoneId }: UseChatParams): UseC
     unreadZone,
     sendMessage,
     rateLimitError,
+    pinnedWorld,
+    pinnedZone,
+    pinMessage,
+    unpinMessage,
   };
 }

@@ -10,7 +10,9 @@
       "Bash(popd:*)",
       "Bash(dir:*)",
       "Bash(grep:*)",
-      "Bash(grepai search:*)"
+      "Bash(grepai search:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

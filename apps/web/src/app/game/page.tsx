@@ -846,6 +846,7 @@ export default function GamePage() {
         currentZoneId={activeZoneId}
         currentZoneName={currentZone?.name ?? null}
         playerId={player?.id ?? null}
+        pinnedMessage={chat.activeChannel === 'world' ? chat.pinnedWorld : chat.pinnedZone}
       />
       <BottomNav activeTab={getActiveTab()} onNavigate={handleNavigate} />
     </>

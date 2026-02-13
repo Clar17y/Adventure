@@ -1,8 +1,11 @@
 import type { Server, Socket } from 'socket.io';
 import { prisma } from '@adventure/database';
 import { CHAT_CONSTANTS } from '@adventure/shared';
-import type { ChatChannelType, ChatMessageEvent, ChatPresenceEvent } from '@adventure/shared';
+import type { ChatChannelType, ChatMessageEvent, ChatPresenceEvent, ChatPinnedMessageEvent } from '@adventure/shared';
 import { checkRateLimit, saveMessage } from '../services/chatService';
+
+// In-memory pinned messages keyed by channelId (ephemeral, lost on server restart)
+const pinnedMessages = new Map<string, ChatPinnedMessageEvent>();
 
 // Throttle presence broadcasts to avoid spam on rapid connect/disconnect
 let presenceTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -35,10 +38,14 @@ function broadcastPresence(io: Server): void {
 const VALID_CHANNEL_TYPES = new Set<ChatChannelType>(['world', 'zone']);
 
 export function registerChatHandlers(io: Server, socket: Socket): void {
-  const { playerId, username } = socket.data;
+  const { playerId, username, role } = socket.data;
 
-  // Join world room
+  // Join world room + emit current world pin if any
   socket.join('chat:world');
+  const worldPin = pinnedMessages.get('world');
+  if (worldPin) {
+    socket.emit('chat:pinned', worldPin);
+  }
 
   // Look up player's current zone and join it
   prisma.player
@@ -46,6 +53,10 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     .then((player) => {
       if (player?.currentZoneId) {
         socket.join(`chat:zone:${player.currentZoneId}`);
+        const zonePin = pinnedMessages.get(`zone:${player.currentZoneId}`);
+        if (zonePin) {
+          socket.emit('chat:pinned', zonePin);
+        }
       }
       schedulePresenceBroadcast(io);
     })
@@ -92,6 +103,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       username,
       message: trimmed,
       createdAt: saved.createdAt.toISOString(),
+      role: role as ChatMessageEvent['role'],
     };
 
     io.to(room).emit('chat:message', event);
@@ -111,7 +123,51 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     }
 
     socket.join(`chat:zone:${zoneId}`);
+    const zonePin = pinnedMessages.get(`zone:${zoneId}`);
+    if (zonePin) {
+      socket.emit('chat:pinned', zonePin);
+    }
     schedulePresenceBroadcast(io);
+  });
+
+  // Pin a message (admin only)
+  socket.on('chat:pin', (payload: unknown) => {
+    if (role !== 'admin') {
+      socket.emit('chat:error', { code: 'FORBIDDEN', message: 'Only admins can pin messages.' });
+      return;
+    }
+    if (!payload || typeof payload !== 'object') return;
+    const { channelId, message } = payload as Record<string, unknown>;
+    if (typeof channelId !== 'string' || typeof message !== 'string') return;
+
+    const pinEvent: ChatPinnedMessageEvent = {
+      id: crypto.randomUUID(),
+      message,
+      pinnedBy: username,
+      channelId,
+    };
+    pinnedMessages.set(channelId, pinEvent);
+    io.to(`chat:${channelId}`).emit('chat:pinned', pinEvent);
+  });
+
+  // Unpin a message (admin only)
+  socket.on('chat:unpin', (payload: unknown) => {
+    if (role !== 'admin') {
+      socket.emit('chat:error', { code: 'FORBIDDEN', message: 'Only admins can unpin messages.' });
+      return;
+    }
+    if (!payload || typeof payload !== 'object') return;
+    const { channelId } = payload as Record<string, unknown>;
+    if (typeof channelId !== 'string') return;
+
+    pinnedMessages.delete(channelId);
+    const unpinEvent: ChatPinnedMessageEvent = {
+      id: null,
+      message: null,
+      pinnedBy: username,
+      channelId,
+    };
+    io.to(`chat:${channelId}`).emit('chat:pinned', unpinEvent);
   });
 
   socket.on('disconnect', () => {

@@ -1,4 +1,5 @@
 import {
+  ActiveEffect,
   CombatState,
   CombatLogEntry,
   CombatResult,
@@ -22,6 +23,71 @@ function hpSnapshot(state: CombatState): Pick<CombatLogEntry, 'playerHpAfter' | 
     playerHpAfter: Math.max(0, state.playerHp),
     mobHpAfter: Math.max(0, state.mobHp),
   };
+}
+
+function tickEffects(state: CombatState): void {
+  const expired: ActiveEffect[] = [];
+  const remaining: ActiveEffect[] = [];
+
+  for (const effect of state.activeEffects) {
+    effect.remainingRounds--;
+    if (effect.remainingRounds <= 0) {
+      expired.push(effect);
+    } else {
+      remaining.push(effect);
+    }
+  }
+
+  state.activeEffects = remaining;
+
+  // Group expired effects by spell name for cleaner log
+  const expiredNames = new Map<string, { target: 'player' | 'mob' }>();
+  for (const e of expired) {
+    if (!expiredNames.has(e.name)) {
+      expiredNames.set(e.name, { target: e.target });
+    }
+  }
+
+  if (expiredNames.size > 0) {
+    state.log.push({
+      round: state.round,
+      actor: 'mob',
+      action: 'spell',
+      message: Array.from(expiredNames.keys()).map(n => `${n} wore off.`).join(' '),
+      effectsExpired: Array.from(expiredNames.entries()).map(([name, { target }]) => ({ name, target })),
+      ...hpSnapshot(state),
+    });
+  }
+}
+
+function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffect[], target: 'player' | 'mob'): CombatantStats {
+  const effective = { ...baseStats };
+
+  for (const effect of activeEffects) {
+    if (effect.target !== target) continue;
+
+    switch (effect.stat) {
+      case 'attack': effective.attack += effect.modifier; break;
+      case 'accuracy': effective.accuracy += effect.modifier; break;
+      case 'defence': effective.defence += effect.modifier; break;
+      case 'magicDefence': effective.magicDefence += effect.modifier; break;
+      case 'dodge': effective.dodge += effect.modifier; break;
+      case 'evasion': effective.evasion += effect.modifier; break;
+      case 'speed': effective.speed += effect.modifier; break;
+      case 'critChance': effective.critChance = (effective.critChance ?? 0) + effect.modifier; break;
+      case 'damageMin': effective.damageMin += effect.modifier; break;
+      case 'damageMax': effective.damageMax += effect.modifier; break;
+    }
+  }
+
+  effective.defence = Math.max(0, effective.defence);
+  effective.magicDefence = Math.max(0, effective.magicDefence);
+  effective.dodge = Math.max(0, effective.dodge);
+  effective.evasion = Math.max(0, effective.evasion);
+  effective.damageMin = Math.max(1, effective.damageMin);
+  effective.damageMax = Math.max(effective.damageMin, effective.damageMax);
+
+  return effective;
 }
 
 /**
@@ -58,6 +124,7 @@ export function runCombat(
     round: 0,
     log: [],
     outcome: null,
+    activeEffects: [],
   };
 
   const playerInit = rollInitiative(playerStats.speed);
@@ -76,14 +143,18 @@ export function runCombat(
   while (state.round < MAX_ROUNDS && state.outcome === null) {
     state.round++;
 
+    tickEffects(state);
+    const effectivePlayerStats = getEffectiveStats(playerStats, state.activeEffects, 'player');
+    const effectiveMobStats = getEffectiveStats(mobStats, state.activeEffects, 'mob');
+
     if (playerGoesFirst) {
-      executePlayerAttack(state, playerStats, mobStats, mob.name);
+      executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
       if (state.outcome) break;
-      executeMobAttack(state, mobStats, playerStats, mob);
+      executeMobAttack(state, effectiveMobStats, effectivePlayerStats, mob);
     } else {
-      executeMobAttack(state, mobStats, playerStats, mob);
+      executeMobAttack(state, effectiveMobStats, effectivePlayerStats, mob);
       if (state.outcome) break;
-      executePlayerAttack(state, playerStats, mobStats, mob.name);
+      executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
     }
   }
 

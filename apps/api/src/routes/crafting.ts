@@ -495,9 +495,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
           baseStats: templateBaseStats,
           slot: templateSlot,
         });
-        const rarity: ItemRarity = (itemType === 'weapon' || itemType === 'armor') && critResult.isCrit
-          ? 'uncommon'
-          : 'common';
+        const rarity: ItemRarity = critResult.rarity;
         const rolledBonusStats = rollBonusStatsForRarity({
           itemType,
           rarity,

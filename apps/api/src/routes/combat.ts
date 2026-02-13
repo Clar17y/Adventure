@@ -12,6 +12,7 @@ import {
   COMBAT_CONSTANTS,
   EXPLORATION_CONSTANTS,
   getMobPrefixDefinition,
+  type CombatOptions,
   type LootDrop,
   type MobTemplate,
   type SkillType,
@@ -27,6 +28,7 @@ import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { respawnToHomeTown } from '../services/zoneDiscoveryService';
 import { grantEncounterSiteChestRewardsTx } from '../services/chestService';
+import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 
 export const combatRouter = Router();
 
@@ -539,7 +541,20 @@ combatRouter.post('/start', async (req, res, next) => {
     const prefixedMob = applyMobPrefix(baseMob, mobPrefix);
     mobPrefix = prefixedMob.mobPrefix;
 
-    const combatResult = runCombat(playerStats, prefixedMob);
+    // Auto-potion setup
+    const playerRecord = await prismaAny.player.findUnique({
+      where: { id: playerId },
+      select: { autoPotionThreshold: true },
+    });
+    const autoPotionThreshold = playerRecord?.autoPotionThreshold ?? 0;
+
+    let combatOptions: CombatOptions | undefined;
+    if (autoPotionThreshold > 0) {
+      const potions = await buildPotionPool(playerId, hpState.maxHp);
+      combatOptions = { autoPotionThreshold, potions };
+    }
+
+    const combatResult = runCombat(playerStats, prefixedMob, combatOptions);
     const turnSpend = await prisma.$transaction(async (tx) => {
       const txAny = tx as unknown as any;
       const spent = await spendPlayerTurnsTx(tx, playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
@@ -584,6 +599,8 @@ combatRouter.post('/start', async (req, res, next) => {
           });
         }
       }
+
+      await deductConsumedPotions(playerId, combatResult.potionsConsumed, tx);
 
       return spent;
     });
@@ -678,6 +695,7 @@ combatRouter.post('/start', async (req, res, next) => {
           playerMaxHp: combatResult.playerMaxHp,
           mobMaxHp: combatResult.mobMaxHp,
           log: combatResult.log,
+          potionsConsumed: combatResult.potionsConsumed,
           rewards: {
             xp: xpAwarded,
             baseXp,
@@ -719,6 +737,7 @@ combatRouter.post('/start', async (req, res, next) => {
         mobMaxHp: combatResult.mobMaxHp,
         log: combatResult.log,
         playerHpRemaining: combatResult.playerHpRemaining,
+        potionsConsumed: combatResult.potionsConsumed,
         fleeResult: fleeResult
           ? {
               outcome: fleeResult.outcome,

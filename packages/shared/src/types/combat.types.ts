@@ -89,7 +89,7 @@ export interface CombatLogEntry {
   }>;
 }
 
-export type CombatAction = 'attack' | 'spell' | 'defend' | 'flee';
+export type CombatAction = 'attack' | 'spell' | 'defend' | 'flee' | 'potion';
 
 export type CombatOutcome = 'victory' | 'defeat' | 'fled';
 
@@ -103,6 +103,7 @@ export interface CombatResult {
   durabilityLost: DurabilityLoss[];
   turnsSpent: number;
   playerHpRemaining: number;
+  potionsConsumed: PotionConsumed[];
 }
 
 export interface LootDrop {
@@ -121,6 +122,24 @@ export interface DurabilityLoss {
   isBroken?: boolean;
   /** True only when crossing below the warning threshold this tick */
   crossedWarningThreshold?: boolean;
+}
+
+export interface CombatPotion {
+  name: string;
+  healAmount: number;
+  templateId: string;
+}
+
+export interface CombatOptions {
+  autoPotionThreshold?: number;
+  potions?: CombatPotion[];
+}
+
+export interface PotionConsumed {
+  templateId: string;
+  name: string;
+  healAmount: number;
+  round: number;
 }
 
 export interface CombatantStats {

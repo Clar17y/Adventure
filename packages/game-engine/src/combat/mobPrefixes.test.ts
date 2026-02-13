@@ -32,9 +32,9 @@ describe('generatePrefixSpells', () => {
       10
     );
 
-    expect(spells[0]).toEqual({ round: 3, action: 'Shamanic Bolt', damage: 8 });
-    expect(spells[1]).toEqual({ round: 6, action: 'Shamanic Bolt', damage: 8 });
-    expect(spells[spells.length - 1]).toEqual({ round: 99, action: 'Shamanic Bolt', damage: 8 });
+    expect(spells[0]).toEqual({ round: 3, name: 'Shamanic Bolt', damage: 8 });
+    expect(spells[1]).toEqual({ round: 6, name: 'Shamanic Bolt', damage: 8 });
+    expect(spells[spells.length - 1]).toEqual({ round: 99, name: 'Shamanic Bolt', damage: 8 });
   });
 });
 
@@ -53,7 +53,7 @@ describe('applyMobPrefix', () => {
     damageMax: 4,
     xpReward: 10,
     encounterWeight: 120,
-    spellPattern: [{ round: 3, action: 'Base Spell', damage: 3 }],
+    spellPattern: [{ round: 3, name: 'Base Spell', damage: 3 }],
     damageType: 'physical',
   };
 
@@ -77,7 +77,7 @@ describe('applyMobPrefix', () => {
     expect(result.damageMax).toBe(3);
     expect(result.xpReward).toBe(15);
     expect(result.dropChanceMultiplier).toBe(1.3);
-    expect(result.spellPattern[0]).toEqual({ round: 3, action: 'Shamanic Bolt', damage: 2 });
+    expect(result.spellPattern[0]).toEqual({ round: 3, name: 'Shamanic Bolt', damage: 2 });
   });
 
   it('scales magicDefence with prefix multiplier', () => {

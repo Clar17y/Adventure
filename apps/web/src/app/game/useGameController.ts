@@ -192,6 +192,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     isStarter: boolean;
     discovered: boolean;
     zoneType: string;
+    zoneExitChance: number | null;
     maxCraftingLevel: number | null;
   }>>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);

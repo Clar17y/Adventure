@@ -415,6 +415,7 @@ export async function getZones() {
       discovered: boolean;
       zoneType: string;
       zoneExitChance: number | null;
+      maxCraftingLevel: number | null;
     }>;
     connections: Array<{ fromId: string; toId: string }>;
     currentZoneId: string;

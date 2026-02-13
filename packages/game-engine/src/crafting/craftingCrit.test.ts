@@ -106,7 +106,7 @@ describe('getEligibleBonusStats', () => {
 
   it('returns slot-aware pool for chest', () => {
     const pool = getEligibleBonusStats('armor', { armor: 10, health: 5 }, 'chest');
-    expect(pool).toEqual(['armor', 'health', 'luck']);
+    expect(pool).toEqual(['armor', 'magicDefence', 'health', 'luck']);
   });
 
   it('returns slot-aware pool for ring', () => {
@@ -121,7 +121,7 @@ describe('getEligibleBonusStats', () => {
 
   it('returns slot-aware pool for off_hand', () => {
     const pool = getEligibleBonusStats('armor', {}, 'off_hand');
-    expect(pool).toEqual(['armor', 'dodge', 'health', 'luck']);
+    expect(pool).toEqual(['armor', 'magicDefence', 'dodge', 'health', 'luck']);
   });
 });
 

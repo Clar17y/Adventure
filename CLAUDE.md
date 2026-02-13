@@ -19,7 +19,10 @@ Turn-based async RPG with real-time turn regeneration. Players explore, fight mo
 **All work MUST be done in git worktrees.** Do not work directly in the main clone. Create and use worktrees for all feature branches and fixes.
 
 ```bash
-# Create a worktree for a feature branch
+# Create a worktree with a new branch (-b creates the branch)
+git worktree add -b feature-branch-name ../adventure-feature-name
+
+# Create a worktree for an existing branch
 git worktree add ../adventure-feature-name feature-branch-name
 
 # List active worktrees

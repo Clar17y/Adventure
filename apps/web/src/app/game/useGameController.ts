@@ -63,7 +63,8 @@ export interface PendingEncounter {
 
 export interface LastCombatLogEntry {
   round: number;
-  actor: 'player' | 'mob';
+  actor: 'combatantA' | 'combatantB';
+  actorName?: string;
   action: string;
   message: string;
   roll?: number;
@@ -80,19 +81,19 @@ export interface LastCombatLogEntry {
   magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
-  playerHpAfter?: number;
-  mobHpAfter?: number;
+  combatantAHpAfter?: number;
+  combatantBHpAfter?: number;
   spellName?: string;
   healAmount?: number;
   effectsApplied?: Array<{
     stat: string;
     modifier: number;
     duration: number;
-    target: 'player' | 'mob';
+    target: 'combatantA' | 'combatantB';
   }>;
   effectsExpired?: Array<{
     name: string;
-    target: 'player' | 'mob';
+    target: 'combatantA' | 'combatantB';
   }>;
 }
 
@@ -101,8 +102,8 @@ export interface LastCombat {
   mobPrefix: string | null;
   mobDisplayName: string;
   outcome: string;
-  playerMaxHp: number;
-  mobMaxHp: number;
+  combatantAMaxHp: number;
+  combatantBMaxHp: number;
   log: LastCombatLogEntry[];
   rewards: {
     xp: number;
@@ -371,9 +372,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
     mobDisplayName: string;
     outcome: string;
-    playerMaxHp: number;
+    combatantAMaxHp: number;
     playerStartHp: number;
-    mobMaxHp: number;
+    combatantBMaxHp: number;
     log: LastCombatLogEntry[];
     rewards: LastCombat['rewards'];
   } | null>(null);
@@ -875,9 +876,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setCombatPlaybackData({
         mobDisplayName: data.combat.mobDisplayName,
         outcome: data.combat.outcome,
-        playerMaxHp: data.combat.playerMaxHp,
+        combatantAMaxHp: data.combat.playerMaxHp,
         playerStartHp: hpBefore,
-        mobMaxHp: data.combat.mobMaxHp,
+        combatantBMaxHp: data.combat.mobMaxHp,
         log: data.combat.log,
         rewards,
       });
@@ -922,8 +923,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         mobPrefix: null,
         mobDisplayName: combatPlaybackData.mobDisplayName,
         outcome: combatPlaybackData.outcome,
-        playerMaxHp: combatPlaybackData.playerMaxHp,
-        mobMaxHp: combatPlaybackData.mobMaxHp,
+        combatantAMaxHp: combatPlaybackData.combatantAMaxHp,
+        combatantBMaxHp: combatPlaybackData.combatantBMaxHp,
         log: combatPlaybackData.log,
         rewards: combatPlaybackData.rewards,
       });

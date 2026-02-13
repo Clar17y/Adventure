@@ -1,11 +1,12 @@
 export interface ShareCombatLogEntry {
   round: number;
-  actor: 'player' | 'mob';
+  actor: 'combatantA' | 'combatantB';
+  actorName?: string;
   roll?: number;
   damage?: number;
   evaded?: boolean;
-  playerHpAfter?: number;
-  mobHpAfter?: number;
+  combatantAHpAfter?: number;
+  combatantBHpAfter?: number;
 }
 
 export interface ShareCombatRewards {
@@ -36,14 +37,14 @@ function hpWithMax(current: number | undefined, max: number | undefined): string
 
 export function resolvePlayerMaxHp(log: ShareCombatLogEntry[], explicit?: number): number | undefined {
   if (typeof explicit === 'number' && explicit > 0) return explicit;
-  const values = log.map((entry) => entry.playerHpAfter).filter((v): v is number => typeof v === 'number');
+  const values = log.map((entry) => entry.combatantAHpAfter).filter((v): v is number => typeof v === 'number');
   if (values.length === 0) return undefined;
   return Math.max(...values);
 }
 
 export function resolveMobMaxHp(log: ShareCombatLogEntry[], explicit?: number): number | undefined {
   if (typeof explicit === 'number' && explicit > 0) return explicit;
-  const values = log.map((entry) => entry.mobHpAfter).filter((v): v is number => typeof v === 'number');
+  const values = log.map((entry) => entry.combatantBHpAfter).filter((v): v is number => typeof v === 'number');
   if (values.length === 0) return undefined;
   return Math.max(...values);
 }
@@ -62,11 +63,11 @@ export function formatCombatShareText(input: CombatShareInput): string {
   lines.push('Rounds');
 
   for (const entry of input.log) {
-    const actor = entry.actor === 'player' ? 'You' : 'Mob';
+    const actor = entry.actor === 'combatantA' ? (entry.actorName ?? 'You') : (entry.actorName ?? 'Mob');
     const dmg = entry.damage !== undefined ? ` ${entry.damage} dmg` : '';
     const status = entry.evaded ? ' Dodged' : (entry.roll !== undefined && entry.damage === undefined ? ' Miss' : '');
     lines.push(
-      `R${entry.round} ${actor}${dmg}${status} | You ${hpWithMax(entry.playerHpAfter, playerMaxHp)} | Mob ${hpWithMax(entry.mobHpAfter, mobMaxHp)}`
+      `R${entry.round} ${actor}${dmg}${status} | You ${hpWithMax(entry.combatantAHpAfter, playerMaxHp)} | Mob ${hpWithMax(entry.combatantBHpAfter, mobMaxHp)}`
     );
   }
 

@@ -33,7 +33,7 @@ export function CombatPlayback({
 }: CombatPlaybackProps) {
   const [revealedCount, setRevealedCount] = useState(0);
   const [phase, setPhase] = useState<Phase>('playing');
-  const [shakeTarget, setShakeTarget] = useState<'player' | 'mob' | null>(null);
+  const [shakeTarget, setShakeTarget] = useState<'combatantA' | 'combatantB' | null>(null);
 
   const playbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,11 +72,11 @@ export function CombatPlayback({
     const entry = log[revealedCount - 1];
     if (!entry) return;
 
-    let target: 'player' | 'mob' | null = null;
+    let target: 'combatantA' | 'combatantB' | null = null;
 
     if (entry.damage && entry.damage > 0) {
       // Damage: shake the target (opposite of actor)
-      target = entry.actor === 'player' ? 'mob' : 'player';
+      target = entry.actor === 'combatantA' ? 'combatantB' : 'combatantA';
     } else if (entry.healAmount && entry.healAmount > 0) {
       // Heal: shake the caster
       target = entry.actor;
@@ -115,10 +115,10 @@ export function CombatPlayback({
   // Derive current HP from the last revealed entry
   const currentPlayerHp = revealedCount === 0
     ? playerStartHp
-    : (log[revealedCount - 1].playerHpAfter ?? playerStartHp);
+    : (log[revealedCount - 1].combatantAHpAfter ?? playerStartHp);
   const currentMobHp = revealedCount === 0
     ? mobMaxHp
-    : (log[revealedCount - 1].mobHpAfter ?? mobMaxHp);
+    : (log[revealedCount - 1].combatantBHpAfter ?? mobMaxHp);
 
   return (
     <div>
@@ -133,7 +133,7 @@ export function CombatPlayback({
             <span className="text-[var(--rpg-green-light)]">You</span>
             <span className="text-[var(--rpg-green-light)] font-mono">{currentPlayerHp}/{playerMaxHp}</span>
           </div>
-          <div className={`h-4 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded overflow-hidden ${shakeTarget === 'player' ? 'animate-shake' : ''}`}>
+          <div className={`h-4 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded overflow-hidden ${shakeTarget === 'combatantA' ? 'animate-shake' : ''}`}>
             <div
               className="h-full bg-[var(--rpg-green-light)]"
               style={{
@@ -150,7 +150,7 @@ export function CombatPlayback({
             <span className="text-[var(--rpg-red)]">{mobDisplayName}</span>
             <span className="text-[var(--rpg-red)] font-mono">{Math.max(0, currentMobHp)}/{mobMaxHp}</span>
           </div>
-          <div className={`h-4 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded overflow-hidden ${shakeTarget === 'mob' ? 'animate-shake' : ''}`}>
+          <div className={`h-4 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded overflow-hidden ${shakeTarget === 'combatantB' ? 'animate-shake' : ''}`}>
             <div
               className="h-full bg-[var(--rpg-red)]"
               style={{

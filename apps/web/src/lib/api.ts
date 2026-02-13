@@ -501,7 +501,8 @@ export async function startExploration(zoneId: string, turns: number) {
 
 export interface CombatLogEntryResponse {
   round: number;
-  actor: 'player' | 'mob';
+  actor: 'combatantA' | 'combatantB';
+  actorName?: string;
   action: string;
   message: string;
   roll?: number;
@@ -518,7 +519,11 @@ export interface CombatLogEntryResponse {
   magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
+  combatantAHpAfter?: number;
+  combatantBHpAfter?: number;
+  /** @deprecated Backward compat alias */
   playerHpAfter?: number;
+  /** @deprecated Backward compat alias */
   mobHpAfter?: number;
 }
 

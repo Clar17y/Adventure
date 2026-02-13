@@ -8,8 +8,9 @@ import {
   rollMobPrefix,
   simulateTravelAmbushes,
   calculateFleeResult,
+  mobToCombatantStats,
 } from '@adventure/game-engine';
-import type { MobTemplate, SkillType } from '@adventure/shared';
+import type { Combatant, MobTemplate, SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns, refundPlayerTurns } from '../services/turnBankService';
@@ -297,14 +298,25 @@ zonesRouter.post('/travel', async (req, res, next) => {
             equipmentStats,
           );
 
-          const combatResult = runCombat(playerStats, prefixedMob);
-          currentHp = combatResult.playerHpRemaining;
+          const combatantA: Combatant = {
+            id: playerId,
+            name: req.player!.username,
+            stats: playerStats,
+          };
+          const combatantB: Combatant = {
+            id: prefixedMob.id,
+            name: prefixedMob.mobDisplayName ?? prefixedMob.name,
+            stats: mobToCombatantStats(prefixedMob),
+            spells: prefixedMob.spellPattern,
+          };
+          const combatResult = runCombat(combatantA, combatantB);
+          currentHp = combatResult.combatantAHpRemaining;
 
           const durabilityLost = await degradeEquippedDurability(playerId);
 
           if (combatResult.outcome === 'victory') {
             const loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
-            const xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
+            const xpGrant = await grantSkillXp(playerId, attackSkill, prefixedMob.xpReward);
             const xpGain = xpGrant.xpResult.xpAfterEfficiency;
             await setHp(playerId, currentHp);
 
@@ -342,12 +354,12 @@ zonesRouter.post('/travel', async (req, res, next) => {
                   encounterSiteId: null,
                   attackSkill,
                   outcome: combatResult.outcome,
-                  playerMaxHp: combatResult.playerMaxHp,
-                  mobMaxHp: combatResult.mobMaxHp,
+                  playerMaxHp: combatResult.combatantAMaxHp,
+                  mobMaxHp: combatResult.combatantBMaxHp,
                   log: combatResult.log,
                   rewards: {
-                    xp: combatResult.xpGained,
-                    baseXp: combatResult.xpGained,
+                    xp: prefixedMob.xpReward,
+                    baseXp: prefixedMob.xpReward,
                     loot,
                     durabilityLost,
                     skillXp: {
@@ -375,8 +387,8 @@ zonesRouter.post('/travel', async (req, res, next) => {
                 mobName: prefixedMob.mobDisplayName,
                 mobDisplayName: prefixedMob.mobDisplayName,
                 outcome: combatResult.outcome,
-                playerMaxHp: combatResult.playerMaxHp,
-                mobMaxHp: combatResult.mobMaxHp,
+                playerMaxHp: combatResult.combatantAMaxHp,
+                mobMaxHp: combatResult.combatantBMaxHp,
                 log: combatResult.log,
                 xp: xpGain,
                 loot,
@@ -413,8 +425,8 @@ zonesRouter.post('/travel', async (req, res, next) => {
                     encounterSiteId: null,
                     attackSkill,
                     outcome: combatResult.outcome,
-                    playerMaxHp: combatResult.playerMaxHp,
-                    mobMaxHp: combatResult.mobMaxHp,
+                    playerMaxHp: combatResult.combatantAMaxHp,
+                    mobMaxHp: combatResult.combatantBMaxHp,
                     log: combatResult.log,
                     rewards: {
                       xp: 0,
@@ -435,8 +447,8 @@ zonesRouter.post('/travel', async (req, res, next) => {
                   mobName: prefixedMob.mobDisplayName,
                   mobDisplayName: prefixedMob.mobDisplayName,
                   outcome: combatResult.outcome,
-                  playerMaxHp: combatResult.playerMaxHp,
-                  mobMaxHp: combatResult.mobMaxHp,
+                  playerMaxHp: combatResult.combatantAMaxHp,
+                  mobMaxHp: combatResult.combatantBMaxHp,
                   log: combatResult.log,
                   fleeResult: { outcome: fleeResult.outcome, remainingHp: fleeResult.remainingHp },
                   durabilityLost,
@@ -487,8 +499,8 @@ zonesRouter.post('/travel', async (req, res, next) => {
                     encounterSiteId: null,
                     attackSkill,
                     outcome: combatResult.outcome,
-                    playerMaxHp: combatResult.playerMaxHp,
-                    mobMaxHp: combatResult.mobMaxHp,
+                    playerMaxHp: combatResult.combatantAMaxHp,
+                    mobMaxHp: combatResult.combatantBMaxHp,
                     log: combatResult.log,
                     rewards: {
                       xp: 0,
@@ -509,8 +521,8 @@ zonesRouter.post('/travel', async (req, res, next) => {
                   mobName: prefixedMob.mobDisplayName,
                   mobDisplayName: prefixedMob.mobDisplayName,
                   outcome: combatResult.outcome,
-                  playerMaxHp: combatResult.playerMaxHp,
-                  mobMaxHp: combatResult.mobMaxHp,
+                  playerMaxHp: combatResult.combatantAMaxHp,
+                  mobMaxHp: combatResult.combatantBMaxHp,
                   log: combatResult.log,
                   remainingHp: currentHp,
                   fleeResult: { outcome: fleeResult.outcome, remainingHp: fleeResult.remainingHp },

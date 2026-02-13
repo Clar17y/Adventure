@@ -96,7 +96,8 @@ export function TurnPlayback({
             mobMaxHp={(combatEvent.details?.mobMaxHp as number) ?? 100}
             log={(combatEvent.details?.log as Array<{
               round: number;
-              actor: 'player' | 'mob';
+              actor: 'combatantA' | 'combatantB';
+              actorName?: string;
               action: string;
               message: string;
               roll?: number;
@@ -113,16 +114,16 @@ export function TurnPlayback({
               magicDefenceReduction?: number;
               isCritical?: boolean;
               critMultiplier?: number;
-              playerHpAfter?: number;
-              mobHpAfter?: number;
+              combatantAHpAfter?: number;
+              combatantBHpAfter?: number;
             }>) ?? []}
             onComplete={() => {
               // Track player HP after this fight for the next combat
-              const combatLog = (combatEvent.details?.log as Array<{ playerHpAfter?: number }>) ?? [];
+              const combatLog = (combatEvent.details?.log as Array<{ combatantAHpAfter?: number }>) ?? [];
               if (combatLog.length > 0) {
                 const lastEntry = combatLog[combatLog.length - 1];
-                if (lastEntry.playerHpAfter !== undefined) {
-                  setPlayerHpForNextCombat(lastEntry.playerHpAfter);
+                if (lastEntry.combatantAHpAfter !== undefined) {
+                  setPlayerHpForNextCombat(lastEntry.combatantAHpAfter);
                 }
               }
 

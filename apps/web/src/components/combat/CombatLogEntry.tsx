@@ -65,7 +65,7 @@ export function CombatLogEntry({
   const hasDetails = entry.attackModifier !== undefined || entry.rawDamage !== undefined;
   const hitOutcome = resolveHitOutcome(entry);
 
-  const isPlayerAction = entry.actor === 'player';
+  const isPlayerAction = entry.actor === 'combatantA';
   const actorColor = isPlayerAction ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]';
 
   return (
@@ -118,11 +118,11 @@ export function CombatLogEntry({
           )}</>
         )}
         <span className="ml-auto flex gap-2 text-xs font-mono text-[var(--rpg-text-secondary)]">
-          {entry.playerHpAfter !== undefined && (
-            <span className="text-[var(--rpg-green-light)]">{formatHp(entry.playerHpAfter, playerMaxHp)}</span>
+          {entry.combatantAHpAfter !== undefined && (
+            <span className="text-[var(--rpg-green-light)]">{formatHp(entry.combatantAHpAfter, playerMaxHp)}</span>
           )}
-          {entry.mobHpAfter !== undefined && (
-            <span className="text-[var(--rpg-red)]">{formatHp(entry.mobHpAfter, mobMaxHp)}</span>
+          {entry.combatantBHpAfter !== undefined && (
+            <span className="text-[var(--rpg-red)]">{formatHp(entry.combatantBHpAfter, mobMaxHp)}</span>
           )}
         </span>
         {hasDetails && (

@@ -24,10 +24,6 @@ function getHp(state: CombatState, actor: CombatActor): number {
   return actor === 'combatantA' ? state.combatantAHp : state.combatantBHp;
 }
 
-function getMaxHp(state: CombatState, actor: CombatActor): number {
-  return actor === 'combatantA' ? state.combatantAMaxHp : state.combatantBMaxHp;
-}
-
 function applyDamage(state: CombatState, target: CombatActor, damage: number): void {
   if (target === 'combatantA') {
     state.combatantAHp -= damage;

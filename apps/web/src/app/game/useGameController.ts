@@ -14,7 +14,7 @@ import {
   getInventory,
   getPlayer,
   getEncounterSites,
-  getPvpNotifications,
+  getPvpNotificationCount,
   getSkills,
   getTurns,
   getZones,
@@ -408,9 +408,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }, []);
 
   const loadPvpNotificationCount = useCallback(async () => {
-    const result = await getPvpNotifications();
+    const result = await getPvpNotificationCount();
     if (result.data) {
-      setPvpNotificationCount(result.data.notifications?.length ?? 0);
+      setPvpNotificationCount(result.data.count);
     }
   }, []);
 
@@ -1439,6 +1439,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,
+    loadTurnsAndHp,
+    loadPvpNotificationCount,
   };
 }
 

@@ -7,21 +7,21 @@ import { getEquipmentStats } from './equipmentService';
 import { spendPlayerTurnsTx } from './turnBankService';
 import { degradeEquippedDurability } from './durabilityService';
 import { normalizePlayerAttributes } from './attributesService';
+import { getHpState } from './hpService';
 
 type AttackStyle = 'melee' | 'ranged' | 'magic';
 
-// Temporary shim for Prisma models not yet recognized by local client
-const prismaAny = prisma as unknown as any;
+const REVENGE_WINDOW_DAYS = 7;
 
 // ---------------------------------------------------------------------------
 // getOrCreateRating
 // ---------------------------------------------------------------------------
 
 export async function getOrCreateRating(playerId: string) {
-  const existing = await prismaAny.pvpRating.findUnique({ where: { playerId } });
+  const existing = await prisma.pvpRating.findUnique({ where: { playerId } });
   if (existing) return existing;
 
-  return prismaAny.pvpRating.create({
+  return prisma.pvpRating.create({
     data: {
       playerId,
       rating: PVP_CONSTANTS.STARTING_RATING,
@@ -40,14 +40,14 @@ export async function getLadder(playerId: string) {
   const upperBound = Math.ceil(myRating.rating * (1 + PVP_CONSTANTS.BRACKET_RANGE));
 
   // Get active cooldowns for this attacker
-  const cooldowns = await prismaAny.pvpCooldown.findMany({
+  const cooldowns = await prisma.pvpCooldown.findMany({
     where: { attackerId: playerId, expiresAt: { gt: new Date() } },
     select: { defenderId: true },
   });
-  const cooldownIds = new Set<string>(cooldowns.map((c: { defenderId: string }) => c.defenderId));
+  const cooldownIds = new Set(cooldowns.map((c) => c.defenderId));
 
   // Find opponents in bracket
-  const candidates = await prismaAny.pvpRating.findMany({
+  const candidates = await prisma.pvpRating.findMany({
     where: {
       playerId: { not: playerId },
       rating: { gte: lowerBound, lte: upperBound },
@@ -60,8 +60,8 @@ export async function getLadder(playerId: string) {
   });
 
   const opponents = candidates
-    .filter((c: { playerId: string }) => !cooldownIds.has(c.playerId))
-    .map((c: { playerId: string; rating: number; player: { username: string; characterLevel: number } }) => ({
+    .filter((c) => !cooldownIds.has(c.playerId))
+    .map((c) => ({
       playerId: c.playerId,
       username: c.player.username,
       rating: c.rating,
@@ -85,12 +85,18 @@ export async function getLadder(playerId: string) {
 // ---------------------------------------------------------------------------
 
 export async function scoutOpponent(attackerId: string, targetId: string) {
+  // HP/knockout check
+  const hpState = await getHpState(attackerId);
+  if (hpState.isRecovering) {
+    throw new AppError(400, 'Cannot scout while recovering', 'IS_RECOVERING');
+  }
+
   // Spend turns for scouting
   await prisma.$transaction(async (tx) => {
     await spendPlayerTurnsTx(tx, attackerId, PVP_CONSTANTS.SCOUT_TURN_COST);
   });
 
-  const target = await prismaAny.player.findUnique({
+  const target = await prisma.player.findUnique({
     where: { id: targetId },
     select: {
       characterLevel: true,
@@ -164,6 +170,7 @@ async function getSkillLevel(playerId: string, skillType: SkillType): Promise<nu
 
 export async function challenge(
   attackerId: string,
+  attackerUsername: string,
   targetId: string,
   attackStyle: AttackStyle,
 ) {
@@ -172,8 +179,17 @@ export async function challenge(
     throw new AppError(400, 'Cannot challenge yourself', 'SELF_CHALLENGE');
   }
 
+  // HP/knockout check
+  const hpState = await getHpState(attackerId);
+  if (hpState.isRecovering) {
+    throw new AppError(400, 'Cannot challenge while recovering', 'IS_RECOVERING');
+  }
+  if (hpState.currentHp <= 0) {
+    throw new AppError(400, 'Cannot challenge with 0 HP', 'NO_HP');
+  }
+
   // Validation: attacker in town zone
-  const attacker = await prismaAny.player.findUnique({
+  const attacker = await prisma.player.findUnique({
     where: { id: attackerId },
     select: {
       characterLevel: true,
@@ -192,7 +208,7 @@ export async function challenge(
   }
 
   // Validation: cooldown
-  const cooldown = await prismaAny.pvpCooldown.findUnique({
+  const cooldown = await prisma.pvpCooldown.findUnique({
     where: { attackerId_defenderId: { attackerId, defenderId: targetId } },
   });
   if (cooldown && cooldown.expiresAt > new Date()) {
@@ -200,7 +216,7 @@ export async function challenge(
   }
 
   // Validation: target level
-  const target = await prismaAny.player.findUnique({
+  const target = await prisma.player.findUnique({
     where: { id: targetId },
     select: {
       characterLevel: true,
@@ -222,9 +238,14 @@ export async function challenge(
     throw new AppError(400, 'Target is outside your rating bracket', 'OUT_OF_BRACKET');
   }
 
-  // Check revenge: most recent match where target attacked this player
-  const revengeMatch = await prismaAny.pvpMatch.findFirst({
-    where: { attackerId: targetId, defenderId: attackerId },
+  // Check revenge: most recent match where target attacked this player, within window
+  const revengeWindow = new Date(Date.now() - REVENGE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const revengeMatch = await prisma.pvpMatch.findFirst({
+    where: {
+      attackerId: targetId,
+      defenderId: attackerId,
+      createdAt: { gte: revengeWindow },
+    },
     orderBy: { createdAt: 'desc' },
   });
   const isRevenge = !!revengeMatch;
@@ -261,15 +282,9 @@ export async function challenge(
     defenderEquipStats,
   );
 
-  // Get attacker username for combatant naming
-  const attackerPlayer = await prisma.player.findUnique({
-    where: { id: attackerId },
-    select: { username: true },
-  });
-
   const combatantA: Combatant = {
     id: attackerId,
-    name: attackerPlayer?.username ?? 'Attacker',
+    name: attackerUsername,
     stats: attackerStats,
   };
   const combatantB: Combatant = {
@@ -293,14 +308,23 @@ export async function challenge(
 
   // Execute everything in a transaction
   const match = await prisma.$transaction(async (tx) => {
-    const txAny = tx as unknown as any;
-
     // Spend turns
     await spendPlayerTurnsTx(tx, attackerId, turnCost, now);
 
+    // Re-check bracket inside transaction for safety
+    const freshAttackerRating = await tx.pvpRating.findUnique({ where: { playerId: attackerId } });
+    const freshDefenderRating = await tx.pvpRating.findUnique({ where: { playerId: targetId } });
+    if (freshAttackerRating && freshDefenderRating) {
+      const freshLower = Math.floor(freshAttackerRating.rating * (1 - PVP_CONSTANTS.BRACKET_RANGE));
+      const freshUpper = Math.ceil(freshAttackerRating.rating * (1 + PVP_CONSTANTS.BRACKET_RANGE));
+      if (freshDefenderRating.rating < freshLower || freshDefenderRating.rating > freshUpper) {
+        throw new AppError(409, 'Target moved outside your rating bracket', 'OUT_OF_BRACKET');
+      }
+    }
+
     // Update attacker rating
     const newAttackerRating = Math.max(0, attackerRating.rating + attackerRatingChange);
-    await txAny.pvpRating.update({
+    await tx.pvpRating.update({
       where: { playerId: attackerId },
       data: {
         rating: newAttackerRating,
@@ -314,7 +338,7 @@ export async function challenge(
 
     // Update defender rating
     const newDefenderRating = Math.max(0, defenderRating.rating + defenderRatingChange);
-    await txAny.pvpRating.update({
+    await tx.pvpRating.update({
       where: { playerId: targetId },
       data: {
         rating: newDefenderRating,
@@ -327,7 +351,7 @@ export async function challenge(
     });
 
     // Create match record
-    const matchRecord = await txAny.pvpMatch.create({
+    const matchRecord = await tx.pvpMatch.create({
       data: {
         attackerId,
         defenderId: targetId,
@@ -348,7 +372,7 @@ export async function challenge(
 
     // Upsert cooldown
     const expiresAt = new Date(now.getTime() + PVP_CONSTANTS.COOLDOWN_HOURS * 60 * 60 * 1000);
-    await txAny.pvpCooldown.upsert({
+    await tx.pvpCooldown.upsert({
       where: { attackerId_defenderId: { attackerId, defenderId: targetId } },
       create: { attackerId, defenderId: targetId, expiresAt },
       update: { expiresAt },
@@ -367,7 +391,7 @@ export async function challenge(
     matchId: match.id,
     attackerId,
     defenderId: targetId,
-    attackerName: attackerPlayer?.username ?? 'Attacker',
+    attackerName: attackerUsername,
     defenderName: target.username,
     winnerId,
     isRevenge,
@@ -396,7 +420,7 @@ export async function getHistory(playerId: string, page: number, pageSize: numbe
   };
 
   const [matches, total] = await Promise.all([
-    prismaAny.pvpMatch.findMany({
+    prisma.pvpMatch.findMany({
       where,
       include: {
         attacker: { select: { username: true } },
@@ -406,13 +430,13 @@ export async function getHistory(playerId: string, page: number, pageSize: numbe
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    prismaAny.pvpMatch.count({ where }),
+    prisma.pvpMatch.count({ where }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return {
-    matches: matches.map((m: any) => ({
+    matches: matches.map((m) => ({
       matchId: m.id,
       attackerId: m.attackerId,
       attackerName: m.attacker.username,
@@ -441,33 +465,40 @@ export async function getHistory(playerId: string, page: number, pageSize: numbe
 }
 
 // ---------------------------------------------------------------------------
-// getNotifications
+// getNotificationCount (read-only, no side effects)
+// ---------------------------------------------------------------------------
+
+export async function getNotificationCount(playerId: string) {
+  return prisma.pvpMatch.count({
+    where: { defenderId: playerId, defenderRead: false },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// getNotifications (read-only)
 // ---------------------------------------------------------------------------
 
 export async function getNotifications(playerId: string) {
-  const unread = await prismaAny.pvpMatch.findMany({
+  return prisma.pvpMatch.findMany({
     where: { defenderId: playerId, defenderRead: false },
     include: {
       attacker: { select: { username: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
+}
 
-  // Mark all as read
-  if (unread.length > 0) {
-    const ids = unread.map((m: { id: string }) => m.id);
-    await prismaAny.pvpMatch.updateMany({
-      where: { id: { in: ids } },
-      data: { defenderRead: true },
-    });
-  }
+// ---------------------------------------------------------------------------
+// markNotificationsRead
+// ---------------------------------------------------------------------------
 
-  return unread.map((m: any) => ({
-    matchId: m.id,
-    attackerName: m.attacker.username,
-    winnerId: m.winnerId,
-    defenderRatingChange: m.defenderRatingChange,
-    isRevenge: m.isRevenge,
-    createdAt: m.createdAt.toISOString(),
-  }));
+export async function markNotificationsRead(playerId: string, matchIds?: string[]) {
+  const where = matchIds
+    ? { id: { in: matchIds }, defenderId: playerId }
+    : { defenderId: playerId, defenderRead: false };
+
+  await prisma.pvpMatch.updateMany({
+    where,
+    data: { defenderRead: true },
+  });
 }

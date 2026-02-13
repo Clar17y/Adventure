@@ -1175,6 +1175,17 @@ export async function getPvpNotifications() {
   return fetchApi<{ notifications: PvpNotification[] }>('/api/v1/pvp/notifications');
 }
 
+export async function getPvpNotificationCount() {
+  return fetchApi<{ count: number }>('/api/v1/pvp/notifications/count');
+}
+
+export async function markPvpNotificationsRead(matchIds?: string[]) {
+  return fetchApi<{ success: boolean }>('/api/v1/pvp/notifications/read', {
+    method: 'POST',
+    body: JSON.stringify(matchIds ? { matchIds } : {}),
+  });
+}
+
 // Chat
 export async function getChatHistory(channelType: string, channelId: string) {
   return fetchApi<{

@@ -7,7 +7,9 @@ import {
   scoutOpponent,
   challenge,
   getHistory,
+  getNotificationCount,
   getNotifications,
+  markNotificationsRead,
 } from '../services/pvpService';
 
 export const pvpRouter = Router();
@@ -25,6 +27,10 @@ const challengeSchema = z.object({
 const historyQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+const markReadSchema = z.object({
+  matchIds: z.array(z.string().uuid()).optional(),
 });
 
 /**
@@ -84,7 +90,7 @@ pvpRouter.post('/challenge', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = challengeSchema.parse(req.body);
-    const result = await challenge(playerId, body.targetId, body.attackStyle);
+    const result = await challenge(playerId, req.player!.username, body.targetId, body.attackStyle);
     res.json(result);
   } catch (err) {
     next(err);
@@ -110,14 +116,52 @@ pvpRouter.get('/history', async (req, res, next) => {
 });
 
 /**
+ * GET /api/v1/pvp/notifications/count
+ * Read-only count of unread attack results (for badge polling).
+ */
+pvpRouter.get('/notifications/count', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const count = await getNotificationCount(playerId);
+    res.json({ count });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/pvp/notifications
- * Unread attack results (marks them as read).
+ * Unread attack results (read-only, does NOT mark as read).
  */
 pvpRouter.get('/notifications', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
-    const result = await getNotifications(playerId);
-    res.json({ notifications: result });
+    const unread = await getNotifications(playerId);
+    res.json({
+      notifications: unread.map((m) => ({
+        matchId: m.id,
+        attackerName: m.attacker.username,
+        winnerId: m.winnerId,
+        defenderRatingChange: m.defenderRatingChange,
+        isRevenge: m.isRevenge,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/pvp/notifications/read
+ * Mark notifications as read. Optionally pass matchIds to mark specific ones.
+ */
+pvpRouter.post('/notifications/read', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = markReadSchema.parse(req.body ?? {});
+    await markNotificationsRead(playerId, body.matchIds);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

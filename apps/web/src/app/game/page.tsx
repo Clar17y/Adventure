@@ -244,6 +244,8 @@ export default function GamePage() {
     handleAllocateAttribute,
     zoneCraftingLevel,
     zoneCraftingName,
+    loadTurnsAndHp,
+    loadPvpNotificationCount,
   } = useGameController({ isAuthenticated });
 
   const chat = useChat({ isAuthenticated, currentZoneId: activeZoneId });
@@ -724,6 +726,8 @@ export default function GamePage() {
             busyAction={busyAction}
             currentTurns={turns}
             playerId={player?.id ?? null}
+            onTurnsChanged={() => void loadTurnsAndHp()}
+            onNotificationsChanged={() => void loadPvpNotificationCount()}
           />
         );
       case 'rest':

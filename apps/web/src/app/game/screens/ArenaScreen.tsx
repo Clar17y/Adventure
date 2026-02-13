@@ -10,6 +10,7 @@ import {
   getPvpHistory,
   scoutPvpOpponent,
   challengePvpOpponent,
+  markPvpNotificationsRead,
   type PvpRatingResponse,
   type PvpLadderEntry,
   type PvpNotification,
@@ -25,11 +26,13 @@ interface ArenaScreenProps {
   busyAction: string | null;
   currentTurns: number;
   playerId: string | null;
+  onTurnsChanged?: () => void;
+  onNotificationsChanged?: () => void;
 }
 
 type ArenaView = 'ladder' | 'history' | 'notifications';
 
-export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId }: ArenaScreenProps) {
+export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId, onTurnsChanged, onNotificationsChanged }: ArenaScreenProps) {
   const [rating, setRating] = useState<PvpRatingResponse | null>(null);
   const [ladder, setLadder] = useState<PvpLadderEntry[]>([]);
   const [notifications, setNotifications] = useState<PvpNotification[]>([]);
@@ -54,21 +57,28 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
     setLoading(true);
     setError(null);
     try {
-      const [ratingRes, ladderRes, notifRes] = await Promise.all([
+      const [ratingRes, ladderRes] = await Promise.all([
         getPvpRating(),
         getPvpLadder(),
-        getPvpNotifications(),
       ]);
       if (ratingRes.data) setRating(ratingRes.data);
       if (ladderRes.data) {
         if (ladderRes.data.myRating) setRating(ladderRes.data.myRating);
         setLadder(ladderRes.data.opponents ?? []);
       }
-      if (notifRes.data) setNotifications(notifRes.data.notifications ?? []);
     } catch {
       setError('Failed to load arena data');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadNotifications() {
+    try {
+      const notifRes = await getPvpNotifications();
+      if (notifRes.data) setNotifications(notifRes.data.notifications ?? []);
+    } catch {
+      // ignore
     }
   }
 
@@ -100,6 +110,7 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
       }
     } finally {
       setActionBusy(null);
+      onTurnsChanged?.();
     }
   }
 
@@ -118,6 +129,8 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
       }
     } finally {
       setActionBusy(null);
+      onTurnsChanged?.();
+      onNotificationsChanged?.();
     }
   }
 
@@ -126,6 +139,14 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
     setError(null);
     if (view === 'history' && history.length === 0) {
       void loadHistory(1);
+    }
+    if (view === 'notifications') {
+      void loadNotifications().then(() => {
+        // Mark all as read when user views the tab
+        void markPvpNotificationsRead().then(() => {
+          onNotificationsChanged?.();
+        });
+      });
     }
   }
 
@@ -413,7 +434,6 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
         </PixelCard>
       )}
       {notifications.map((notif) => {
-        const defended = notif.winnerId !== notif.matchId; // defender won if winnerId != attackerId matchId
         const won = notif.defenderRatingChange >= 0;
         return (
           <PixelCard key={notif.matchId} padding="sm">

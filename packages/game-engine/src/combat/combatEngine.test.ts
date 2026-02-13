@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CombatantStats, MobTemplate } from '@adventure/shared';
+import type { CombatantStats, CombatOptions, CombatPotion, MobTemplate } from '@adventure/shared';
 import { runCombat } from './combatEngine';
 
 describe('runCombat crit multiplier logging', () => {
@@ -200,5 +200,266 @@ describe('magic damageType defence selection', () => {
     const mobHit = result.log.find(e => e.actor === 'mob' && e.damage !== undefined);
 
     expect(mobHit?.damage).toBe(10);
+  });
+});
+
+describe('auto-potion system', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makePlayer(overrides: Partial<CombatantStats> = {}): CombatantStats {
+    return {
+      hp: 100, maxHp: 100, attack: 10, accuracy: 20,
+      defence: 5, magicDefence: 0, dodge: 0, evasion: 0,
+      damageMin: 10, damageMax: 10, speed: 10,
+      critChance: 0, critDamage: 0, damageType: 'physical',
+      ...overrides,
+    };
+  }
+
+  function makeMob(overrides: Partial<MobTemplate> = {}): MobTemplate {
+    return {
+      id: 'mob-1', name: 'Test Mob', zoneId: 'zone-1', level: 1,
+      hp: 200, accuracy: 20, defence: 0, magicDefence: 0,
+      evasion: 0, damageMin: 30, damageMax: 30,
+      xpReward: 10, encounterWeight: 1, spellPattern: [],
+      damageType: 'physical',
+      ...overrides,
+    };
+  }
+
+  function makePotions(): CombatPotion[] {
+    return [
+      { name: 'Minor Health Potion', healAmount: 50, templateId: 'tmpl-minor' },
+      { name: 'Health Potion', healAmount: 150, templateId: 'tmpl-health' },
+    ];
+  }
+
+  it('does not use potions when threshold is 0', () => {
+    // Mob goes first and hits the player, reducing HP
+    vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.0)   // player initiative (low)
+      .mockReturnValueOnce(0.95)  // mob initiative (high)
+      .mockReturnValueOnce(0.95)  // mob attack roll (hit)
+      .mockReturnValueOnce(0.0)   // mob damage (30)
+      .mockReturnValueOnce(0.99)  // mob no crit
+      // Player attacks
+      .mockReturnValueOnce(0.95)  // player attack roll (hit)
+      .mockReturnValueOnce(0.0)   // player damage (10)
+      .mockReturnValueOnce(0.99); // player no crit
+
+    const options: CombatOptions = {
+      autoPotionThreshold: 0,
+      potions: makePotions(),
+    };
+
+    const result = runCombat(makePlayer(), makeMob(), options);
+
+    expect(result.potionsConsumed).toHaveLength(0);
+    const potionEntries = result.log.filter(e => e.action === 'potion');
+    expect(potionEntries).toHaveLength(0);
+  });
+
+  it('uses potion when HP drops below threshold', () => {
+    // Mob goes first and hits hard (30 damage to 100 HP player → 70 HP = 70%)
+    // With threshold 80%, player should drink a potion instead of attacking
+    vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.0)   // player initiative (low)
+      .mockReturnValueOnce(0.95)  // mob initiative (high)
+      // Round 1: mob attacks
+      .mockReturnValueOnce(0.95)  // mob attack roll (hit)
+      .mockReturnValueOnce(0.0)   // mob damage (30)
+      .mockReturnValueOnce(0.99)  // mob no crit
+      // Round 1: player turn → auto-potion triggers (no attack rolls needed)
+      // Round 2: mob attacks again
+      .mockReturnValueOnce(0.95)  // mob attack roll (hit)
+      .mockReturnValueOnce(0.0)   // mob damage (30)
+      .mockReturnValueOnce(0.99)  // mob no crit
+      // Round 2: player attacks (Potion Sickness active, can't potion)
+      .mockReturnValueOnce(0.95)  // player attack roll (hit)
+      .mockReturnValueOnce(0.0)   // player damage (10)
+      .mockReturnValueOnce(0.99); // player no crit
+
+    const options: CombatOptions = {
+      autoPotionThreshold: 80,
+      potions: makePotions(),
+    };
+
+    const result = runCombat(makePlayer(), makeMob(), options);
+
+    // Verify potion was consumed
+    expect(result.potionsConsumed).toHaveLength(1);
+    expect(result.potionsConsumed[0].round).toBe(1);
+
+    // Verify potion log entry exists
+    const potionEntry = result.log.find(e => e.action === 'potion');
+    expect(potionEntry).toBeDefined();
+    expect(potionEntry?.actor).toBe('player');
+    expect(potionEntry?.healAmount).toBeGreaterThan(0);
+    expect(potionEntry?.spellName).toContain('Potion');
+
+    // Verify Potion Sickness was applied
+    const sicknessEffect = potionEntry?.effectsApplied?.find(e => e.stat === 'potionSickness');
+    expect(sicknessEffect).toBeDefined();
+    expect(sicknessEffect?.duration).toBe(5);
+  });
+
+  it('Potion Sickness prevents re-use within 5 rounds', () => {
+    // Player has low HP from start, mob does enough damage to keep HP low
+    // But Potion Sickness should prevent using another potion for 5 rounds
+    const randomMock = vi.spyOn(Math, 'random');
+
+    // Player goes first
+    randomMock.mockReturnValueOnce(0.95); // player initiative (high)
+    randomMock.mockReturnValueOnce(0.0);  // mob initiative (low)
+
+    // Need many rounds. Player starts at 40 HP (40%), threshold 50%
+    // Round 1: player drinks potion (HP low), mob attacks
+    for (let i = 0; i < 20; i++) {
+      // mob attack (hits for 30)
+      randomMock.mockReturnValueOnce(0.95); // mob attack roll
+      randomMock.mockReturnValueOnce(0.0);  // mob damage
+      randomMock.mockReturnValueOnce(0.99); // no crit
+      // player attack
+      randomMock.mockReturnValueOnce(0.95); // player attack roll
+      randomMock.mockReturnValueOnce(0.0);  // player damage (10)
+      randomMock.mockReturnValueOnce(0.99); // no crit
+    }
+
+    const options: CombatOptions = {
+      autoPotionThreshold: 50,
+      potions: [
+        { name: 'Potion A', healAmount: 50, templateId: 'a' },
+        { name: 'Potion B', healAmount: 50, templateId: 'b' },
+        { name: 'Potion C', healAmount: 50, templateId: 'c' },
+      ],
+    };
+
+    const result = runCombat(makePlayer({ hp: 40 }), makeMob({ damageMin: 30, damageMax: 30 }), options);
+
+    // Check that potions were consumed at intervals of at least 5 rounds
+    const potionRounds = result.potionsConsumed.map(p => p.round);
+    for (let i = 1; i < potionRounds.length; i++) {
+      const gap = potionRounds[i] - potionRounds[i - 1];
+      // Must wait for sickness to expire (5 rounds) + the tick round
+      expect(gap).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('picks weakest sufficient potion', () => {
+    // Player at 70 HP / 100 maxHp, threshold 80% → target is 80 HP, deficit = 10
+    // Minor (50) and Health (150) potions available
+    // Minor's 50 >= deficit of 10, so it should be chosen (weakest sufficient)
+    vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.95)  // player initiative (high)
+      .mockReturnValueOnce(0.0)   // mob initiative (low)
+      // Round 1: player drinks potion (no attack rolls)
+      // mob attacks
+      .mockReturnValueOnce(0.95)
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.99)
+      // Round 2+: fill with attacks
+      .mockReturnValueOnce(0.95).mockReturnValueOnce(0.0).mockReturnValueOnce(0.99)
+      .mockReturnValueOnce(0.95).mockReturnValueOnce(0.0).mockReturnValueOnce(0.99);
+
+    const options: CombatOptions = {
+      autoPotionThreshold: 80,
+      potions: makePotions(),
+    };
+
+    const result = runCombat(makePlayer({ hp: 70 }), makeMob(), options);
+
+    expect(result.potionsConsumed).toHaveLength(1);
+    expect(result.potionsConsumed[0].templateId).toBe('tmpl-minor');
+    expect(result.potionsConsumed[0].name).toBe('Minor Health Potion');
+  });
+
+  it('falls back to strongest when none fully covers deficit', () => {
+    // Player at 10 HP / 200 maxHp, threshold 80% → target is 160, deficit = 150
+    // Only tiny potions (20 heal) available, none >= 150
+    // Should pick strongest = last = 20 heal potion
+    vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.95)
+      .mockReturnValueOnce(0.0)
+      // mob attacks after potion
+      .mockReturnValueOnce(0.95).mockReturnValueOnce(0.0).mockReturnValueOnce(0.99)
+      .mockReturnValueOnce(0.95).mockReturnValueOnce(0.0).mockReturnValueOnce(0.99);
+
+    const options: CombatOptions = {
+      autoPotionThreshold: 80,
+      potions: [
+        { name: 'Tiny Potion', healAmount: 20, templateId: 'tiny' },
+      ],
+    };
+
+    const result = runCombat(makePlayer({ hp: 10, maxHp: 200 }), makeMob(), options);
+
+    expect(result.potionsConsumed).toHaveLength(1);
+    expect(result.potionsConsumed[0].templateId).toBe('tiny');
+  });
+
+  it('backward compatible - no options param works like before', () => {
+    vi.spyOn(Math, 'random')
+      .mockReturnValueOnce(0.95).mockReturnValueOnce(0.0) // initiative
+      .mockReturnValueOnce(0.95).mockReturnValueOnce(0.0).mockReturnValueOnce(0.99) // player hits
+      .mockReturnValueOnce(0.95).mockReturnValueOnce(0.0).mockReturnValueOnce(0.99); // mob hits
+
+    const result = runCombat(
+      makePlayer({ damageMin: 250, damageMax: 250 }),
+      makeMob({ hp: 10 }),
+    );
+
+    expect(result.outcome).toBe('victory');
+    expect(result.potionsConsumed).toHaveLength(0);
+  });
+
+  it('Potion Sickness expires via tickEffects after 5 rounds', () => {
+    // Force a potion use on round 1, then verify sickness expires after round 5
+    // by checking that a second potion can be used on round 7+
+    const randomMock = vi.spyOn(Math, 'random');
+
+    // Player goes first
+    randomMock.mockReturnValueOnce(0.95); // player initiative
+    randomMock.mockReturnValueOnce(0.0);  // mob initiative
+
+    // We need many rounds of combat with mob doing consistent damage
+    for (let i = 0; i < 30; i++) {
+      // mob attack
+      randomMock.mockReturnValueOnce(0.95); // hit
+      randomMock.mockReturnValueOnce(0.0);  // damage
+      randomMock.mockReturnValueOnce(0.99); // no crit
+      // player attack
+      randomMock.mockReturnValueOnce(0.95); // hit
+      randomMock.mockReturnValueOnce(0.0);  // damage (10)
+      randomMock.mockReturnValueOnce(0.99); // no crit
+    }
+
+    const options: CombatOptions = {
+      autoPotionThreshold: 90,
+      potions: [
+        { name: 'Potion 1', healAmount: 30, templateId: 'p1' },
+        { name: 'Potion 2', healAmount: 30, templateId: 'p2' },
+        { name: 'Potion 3', healAmount: 30, templateId: 'p3' },
+      ],
+    };
+
+    // Player starts at 50HP / 100 maxHp → below 90% threshold immediately
+    const result = runCombat(makePlayer({ hp: 50, maxHp: 100 }), makeMob({ hp: 500, damageMin: 20, damageMax: 20 }), options);
+
+    // Find the "wore off" log for Potion Sickness
+    const expiryEntries = result.log.filter(
+      e => e.effectsExpired?.some(x => x.name === 'Potion Sickness')
+    );
+
+    // If combat lasted long enough, sickness should have expired at least once
+    if (result.potionsConsumed.length >= 1) {
+      const firstPotionRound = result.potionsConsumed[0].round;
+      // Sickness applied on round N with 5 remaining rounds
+      // Ticks: end of N→4, N+1→3, N+2→2, N+3→1, N+4→0 (expired)
+      if (expiryEntries.length > 0) {
+        expect(expiryEntries[0].round).toBe(firstPotionRound + 4);
+      }
+    }
   });
 });

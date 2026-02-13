@@ -2,9 +2,13 @@ import {
   ActiveEffect,
   CombatState,
   CombatLogEntry,
+  CombatOptions,
+  CombatPotion,
   CombatResult,
   CombatantStats,
   MobTemplate,
+  POTION_CONSTANTS,
+  PotionConsumed,
   SpellAction,
 } from '@adventure/shared';
 import {
@@ -50,9 +54,13 @@ function tickEffects(state: CombatState): void {
   }
 
   if (expiredNames.size > 0) {
+    // Derive actor: if all expired effects targeted the player, the actor is player
+    const targets = Array.from(expiredNames.values()).map(e => e.target);
+    const actor = targets.every(t => t === 'player') ? 'player' : 'mob';
+
     state.log.push({
       round: state.round,
-      actor: 'mob',
+      actor,
       action: 'spell',
       message: Array.from(expiredNames.keys()).map(n => `${n} wore off.`).join(' '),
       effectsExpired: Array.from(expiredNames.entries()).map(([name, { target }]) => ({ name, target })),
@@ -96,13 +104,96 @@ function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffec
   return effective;
 }
 
+function tryAutoPotion(
+  state: CombatState,
+  availablePotions: CombatPotion[],
+  potionsConsumed: PotionConsumed[],
+  threshold: number,
+): boolean {
+  if (threshold <= 0 || availablePotions.length === 0) return false;
+
+  const hpPercent = (state.playerHp / state.playerMaxHp) * 100;
+  if (hpPercent >= threshold) return false;
+
+  // Check for Potion Sickness active effect
+  const hasSickness = state.activeEffects.some(
+    e => e.target === 'player' && e.stat === 'potionSickness'
+  );
+  if (hasSickness) return false;
+
+  // Smart selection: pick weakest potion whose healAmount >= deficit
+  const deficit = Math.floor(state.playerMaxHp * (threshold / 100)) - state.playerHp;
+  let chosenIndex = -1;
+
+  // Ensure ascending sort for weakest-sufficient selection
+  availablePotions.sort((a, b) => a.healAmount - b.healAmount);
+
+  for (let i = 0; i < availablePotions.length; i++) {
+    if (availablePotions[i].healAmount >= deficit) {
+      chosenIndex = i;
+      break;
+    }
+  }
+
+  // If none fully covers the deficit, pick the strongest available (last one)
+  if (chosenIndex === -1) {
+    chosenIndex = availablePotions.length - 1;
+  }
+
+  const potion = availablePotions[chosenIndex];
+  const hpBefore = state.playerHp;
+  state.playerHp = Math.min(state.playerMaxHp, state.playerHp + potion.healAmount);
+  const actualHeal = state.playerHp - hpBefore;
+
+  // Remove used potion from pool
+  availablePotions.splice(chosenIndex, 1);
+
+  // Record consumption
+  potionsConsumed.push({
+    templateId: potion.templateId,
+    name: potion.name,
+    healAmount: actualHeal,
+    round: state.round,
+  });
+
+  // Apply Potion Sickness cooldown
+  const sicknessEffect: ActiveEffect = {
+    name: 'Potion Sickness',
+    target: 'player',
+    stat: 'potionSickness',
+    modifier: 0,
+    remainingRounds: POTION_CONSTANTS.AUTO_POTION_SICKNESS_DURATION,
+  };
+  state.activeEffects.push(sicknessEffect);
+
+  // Log the potion use
+  state.log.push({
+    round: state.round,
+    actor: 'player',
+    action: 'potion',
+    spellName: potion.name,
+    healAmount: actualHeal,
+    message: `You drink a ${potion.name}! +${actualHeal} HP`,
+    effectsApplied: [{
+      stat: 'potionSickness',
+      modifier: 0,
+      duration: POTION_CONSTANTS.AUTO_POTION_SICKNESS_DURATION,
+      target: 'player',
+    }],
+    ...hpSnapshot(state),
+  });
+
+  return true;
+}
+
 /**
  * Run a complete combat encounter.
  * Pure function - no side effects, fully deterministic given same random seed.
  */
 export function runCombat(
   playerStats: CombatantStats,
-  mob: MobTemplate & { currentHp?: number; maxHp?: number }
+  mob: MobTemplate & { currentHp?: number; maxHp?: number },
+  options?: CombatOptions,
 ): CombatResult {
   const mobMaxHp = typeof mob.maxHp === 'number' ? mob.maxHp : mob.hp;
   const mobCurrentHp = typeof mob.currentHp === 'number' ? mob.currentHp : mob.hp;
@@ -121,6 +212,10 @@ export function runCombat(
     speed: 0,
     damageType: mob.damageType,
   };
+
+  const availablePotions = options?.potions ? [...options.potions] : [];
+  const threshold = options?.autoPotionThreshold ?? 0;
+  const potionsConsumed: PotionConsumed[] = [];
 
   const state: CombatState = {
     playerHp: playerStats.hp,
@@ -153,13 +248,19 @@ export function runCombat(
     const effectiveMobStats = getEffectiveStats(mobStats, state.activeEffects, 'mob');
 
     if (playerGoesFirst) {
-      executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
+      const usedPotion = tryAutoPotion(state, availablePotions, potionsConsumed, threshold);
+      if (!usedPotion) {
+        executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
+      }
       if (state.outcome) break;
       executeMobAttack(state, effectiveMobStats, effectivePlayerStats, mob);
     } else {
       executeMobAttack(state, effectiveMobStats, effectivePlayerStats, mob);
       if (state.outcome) break;
-      executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
+      const usedPotion = tryAutoPotion(state, availablePotions, potionsConsumed, threshold);
+      if (!usedPotion) {
+        executePlayerAttack(state, effectivePlayerStats, effectiveMobStats, mob.name);
+      }
     }
 
     // Tick effects after round resolves so duration N means N full rounds of benefit
@@ -187,6 +288,7 @@ export function runCombat(
     durabilityLost: [],
     turnsSpent: 0,
     playerHpRemaining: Math.max(0, state.playerHp),
+    potionsConsumed,
   };
 }
 

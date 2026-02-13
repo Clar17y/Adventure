@@ -172,6 +172,7 @@ export function CombatPlayback({
                 {lastEntry.effectsExpired.map(e => `${e.name} wore off`).join(', ')}
               </span>;
             }
+            if (lastEntry.action === 'potion') return <span className="text-[var(--rpg-green-light)]">🧪 {lastEntry.spellName}: +{lastEntry.healAmount} HP</span>;
             if (lastEntry.evaded) return <span className="text-[var(--rpg-blue-light)]">Dodged!</span>;
             if (lastEntry.isCritical) return <span className="text-[var(--rpg-gold)] font-bold">Critical Hit! {lastEntry.damage} dmg</span>;
             if (lastEntry.damage && lastEntry.damage > 0 && lastEntry.healAmount && lastEntry.healAmount > 0) {

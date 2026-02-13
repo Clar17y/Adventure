@@ -370,6 +370,9 @@ export const POTION_CONSTANTS = {
 
   /** HP percentage restored by Greater Recovery Potion */
   GREATER_RECOVERY_PERCENT: 1.0,
+
+  /** Rounds of Potion Sickness cooldown after auto-potion use */
+  AUTO_POTION_SICKNESS_DURATION: 5,
 } as const;
 
 // =============================================================================

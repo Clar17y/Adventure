@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/Slider';
 import { KnockoutBanner } from '@/components/KnockoutBanner';
 import { titleCaseFromSnake } from '@/lib/format';
 import { Pickaxe, MapPin } from 'lucide-react';
+import { TurnPresets } from '@/components/common/TurnPresets';
 import { GATHERING_CONSTANTS } from '@adventure/shared';
 import { ActivityLog } from '@/components/ActivityLog';
 import type { ActivityLogEntry } from '@/app/game/useGameController';
@@ -83,8 +84,21 @@ export function Gathering({
   isRecovering = false,
   recoveryCost,
 }: GatheringProps) {
+  const getNodeTurnsToDeplete = (node: ResourceNode) => {
+    const levelsAbove = Math.max(0, skillLevel - node.levelRequired);
+    const yieldMultiplier = 1 + levelsAbove * GATHERING_CONSTANTS.YIELD_MULTIPLIER_PER_LEVEL;
+    const baseYield = Math.max(node.baseYield, GATHERING_CONSTANTS.BASE_YIELD);
+    const yieldPerAction = Math.floor(baseYield * yieldMultiplier);
+    if (yieldPerAction <= 0) return GATHERING_CONSTANTS.BASE_TURN_COST;
+    return Math.ceil(node.remainingCapacity / yieldPerAction) * GATHERING_CONSTANTS.BASE_TURN_COST;
+  };
+
   const [selectedNode, setSelectedNode] = useState<ResourceNode | null>(nodes[0] || null);
-  const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
+  const [turnInvestment, setTurnInvestment] = useState(() => {
+    const node = nodes[0];
+    if (!node) return [Math.min(100, availableTurns)];
+    return [Math.max(10, Math.min(getNodeTurnsToDeplete(node), availableTurns))];
+  });
 
   // Sync selected node with updated data from props (e.g., after mining reduces capacity)
   useEffect(() => {
@@ -102,6 +116,14 @@ export function Gathering({
       setSelectedNode(updatedNode);
     }
   }, [nodes, selectedNode]);
+
+  // Reset turn investment when a different node is selected
+  useEffect(() => {
+    if (!selectedNode) return;
+    const ttd = getNodeTurnsToDeplete(selectedNode);
+    setTurnInvestment([Math.max(10, Math.min(ttd, availableTurns))]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNode?.id]);
 
   const calculateYield = (node: ResourceNode, turns: number) => {
     // Match backend formula exactly: linear +10% per level above requirement
@@ -121,6 +143,28 @@ export function Gathering({
   };
 
   const yieldInfo = selectedNode ? calculateYield(selectedNode, turnInvestment[0]) : null;
+
+  // Percentage-based presets for selected node
+  const turnsToDeplete = selectedNode ? getNodeTurnsToDeplete(selectedNode) : 0;
+  const sliderMax = turnsToDeplete > 0
+    ? Math.max(10, Math.min(turnsToDeplete, availableTurns))
+    : Math.min(1000, availableTurns);
+
+  const gatheringPresets = selectedNode && turnsToDeplete > 0 ? [
+    { label: 'Full', pct: 1.0 },
+    { label: '75%', pct: 0.75 },
+    { label: '50%', pct: 0.50 },
+    { label: '25%', pct: 0.25 },
+  ].map(({ label, pct }) => {
+    const levelsAbove = Math.max(0, skillLevel - selectedNode.levelRequired);
+    const yieldMultiplier = 1 + levelsAbove * GATHERING_CONSTANTS.YIELD_MULTIPLIER_PER_LEVEL;
+    const baseYield = Math.max(selectedNode.baseYield, GATHERING_CONSTANTS.BASE_YIELD);
+    const yieldPerAction = Math.floor(baseYield * yieldMultiplier);
+    const targetYield = Math.ceil(selectedNode.remainingCapacity * pct);
+    const actions = Math.ceil(targetYield / Math.max(1, yieldPerAction));
+    const rawTurns = actions * GATHERING_CONSTANTS.BASE_TURN_COST;
+    return { label, turns: Math.min(Math.max(GATHERING_CONSTANTS.BASE_TURN_COST, rawTurns), availableTurns) };
+  }) : null;
 
   return (
     <div className="space-y-4">
@@ -283,37 +327,18 @@ export function Gathering({
               value={turnInvestment}
               onValueChange={setTurnInvestment}
               min={10}
-              max={Math.min(1000, availableTurns)}
+              max={sliderMax}
               step={10}
               className="w-full"
             />
 
-            <div className="flex gap-2">
-              <button
-                onClick={() => setTurnInvestment([Math.min(100, availableTurns)])}
-                className="flex-1 px-3 py-1.5 text-sm bg-[var(--rpg-background)] border border-[var(--rpg-border)] rounded hover:border-[var(--rpg-gold)] transition-colors text-[var(--rpg-text-primary)]"
-              >
-                100
-              </button>
-              <button
-                onClick={() => setTurnInvestment([Math.min(250, availableTurns)])}
-                className="flex-1 px-3 py-1.5 text-sm bg-[var(--rpg-background)] border border-[var(--rpg-border)] rounded hover:border-[var(--rpg-gold)] transition-colors text-[var(--rpg-text-primary)]"
-              >
-                250
-              </button>
-              <button
-                onClick={() => setTurnInvestment([Math.min(500, availableTurns)])}
-                className="flex-1 px-3 py-1.5 text-sm bg-[var(--rpg-background)] border border-[var(--rpg-border)] rounded hover:border-[var(--rpg-gold)] transition-colors text-[var(--rpg-text-primary)]"
-              >
-                500
-              </button>
-              <button
-                onClick={() => setTurnInvestment([Math.min(1000, availableTurns)])}
-                className="flex-1 px-3 py-1.5 text-sm bg-[var(--rpg-background)] border border-[var(--rpg-border)] rounded hover:border-[var(--rpg-gold)] transition-colors text-[var(--rpg-text-primary)]"
-              >
-                1K
-              </button>
-            </div>
+            {gatheringPresets && (
+              <TurnPresets
+                presets={gatheringPresets}
+                currentValue={turnInvestment[0]}
+                onChange={(t) => setTurnInvestment([t])}
+              />
+            )}
           </div>
         </PixelCard>
       )}

@@ -222,13 +222,16 @@ npm run dev
 
 ## Coding Guidelines
 
-1. **Type Safety** - Strict TypeScript, no `any`
-2. **Pure Game Logic** - `game-engine` has no side effects, fully testable
-3. **Service Layer** - `apps/api/src/services/` for all business logic and DB access
-4. **Route Handlers** - `apps/api/src/routes/` orchestrate request/response, delegate to services
-5. **Constants Central** - All tunable values in `packages/shared/src/constants/gameConstants.ts`
-6. **Zod Validation** - Request validation at API boundaries
-7. **Prisma Transactions** - Used for multi-step DB operations to ensure consistency
+1. **KISS** - Implement the simplest solution that satisfies the requirement. Avoid unnecessary abstractions and over-engineering
+2. **DRY** - Re-use existing utilities, hooks, and components instead of duplicating logic. Extract shared code into well-named helpers
+3. **Type Safety** - Strict TypeScript, no `any`
+4. **Pure Game Logic** - `game-engine` has no side effects, fully testable
+5. **Service Layer** - `apps/api/src/services/` for all business logic and DB access
+6. **Route Handlers** - `apps/api/src/routes/` orchestrate request/response, delegate to services
+7. **Constants Central** - All tunable values in `packages/shared/src/constants/gameConstants.ts`
+8. **Zod Validation** - Request validation at API boundaries
+9. **Prisma Transactions** - Used for multi-step DB operations to ensure consistency
+10. **Extract Shared Patterns** - When implementing UI or logic that duplicates an existing pattern across 2+ files, proactively extract it into a shared component (`components/common/`) or utility. Don't wait to be asked
 
 ## grepai - Semantic Code Search
 

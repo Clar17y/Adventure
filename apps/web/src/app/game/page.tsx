@@ -721,6 +721,7 @@ export default function GamePage() {
             onComplete={() => setActiveScreen('home')}
             onTurnsUpdate={(newTurns) => setTurns(newTurns)}
             onHpUpdate={(hp) => setHpState(hp)}
+            availableTurns={turns}
           />
         );
       case 'profile':

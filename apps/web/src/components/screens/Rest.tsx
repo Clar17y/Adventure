@@ -5,6 +5,7 @@ import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
 import { Slider } from '@/components/ui/Slider';
+import { TurnPresets } from '@/components/common/TurnPresets';
 import { Heart, AlertTriangle } from 'lucide-react';
 import * as api from '@/lib/api';
 
@@ -12,9 +13,10 @@ interface RestProps {
   onComplete: () => void;
   onTurnsUpdate: (turns: number) => void;
   onHpUpdate: (hp: { currentHp: number; maxHp: number; regenPerSecond: number; isRecovering: boolean; recoveryCost: number | null }) => void;
+  availableTurns: number;
 }
 
-export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
+export function Rest({ onComplete, onTurnsUpdate, onHpUpdate, availableTurns }: RestProps) {
   const [hpState, setHpState] = useState<{
     currentHp: number;
     maxHp: number;
@@ -23,7 +25,8 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
     recoveryCost: number | null;
   } | null>(null);
 
-  const [turns, setTurns] = useState(100);
+  const [turns, setTurns] = useState(10);
+  const [healPerTurn, setHealPerTurn] = useState<number | null>(null);
   const [estimate, setEstimate] = useState<{
     healAmount: number;
     resultingHp: number;
@@ -36,6 +39,7 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
   // Use refs for callbacks to avoid dependency issues
   const onHpUpdateRef = useRef(onHpUpdate);
   onHpUpdateRef.current = onHpUpdate;
+  const turnsInitialized = useRef(false);
 
   // Fetch HP state once on mount
   useEffect(() => {
@@ -57,6 +61,7 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
     const timer = setTimeout(async () => {
       const result = await api.restEstimate(turns);
       if (result.data && !result.data.isRecovering) {
+        if (result.data.healPerTurn) setHealPerTurn(result.data.healPerTurn);
         setEstimate({
           healAmount: result.data.healAmount ?? 0,
           resultingHp: result.data.resultingHp ?? 0,
@@ -67,6 +72,15 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
 
     return () => clearTimeout(timer);
   }, [turns, hpState?.currentHp, hpState?.isRecovering]);
+
+  // Default to "Full" when healPerTurn first loads
+  useEffect(() => {
+    if (!healPerTurn || !hpState || hpState.currentHp >= hpState.maxHp || turnsInitialized.current) return;
+    turnsInitialized.current = true;
+    const full = Math.ceil((hpState.maxHp - hpState.currentHp) / healPerTurn);
+    const rounded = Math.ceil(full / 10) * 10;
+    setTurns(Math.max(10, Math.min(rounded, availableTurns)));
+  }, [healPerTurn, hpState, availableTurns]);
 
   const handleRest = async () => {
     if (!hpState) return;
@@ -178,6 +192,26 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
   // Normal rest mode
   const isFullHp = hpState.currentHp >= hpState.maxHp;
 
+  // Percentage-based presets
+  const roundUp10 = (n: number) => Math.ceil(n / 10) * 10;
+  const turnsToFull = healPerTurn && !isFullHp
+    ? roundUp10(Math.ceil((hpState.maxHp - hpState.currentHp) / healPerTurn))
+    : 0;
+  const sliderMax = healPerTurn && turnsToFull > 0
+    ? Math.max(10, Math.min(turnsToFull, availableTurns))
+    : Math.min(1000, availableTurns);
+
+  const missingHp = hpState.maxHp - hpState.currentHp;
+  const presets = healPerTurn && !isFullHp ? [
+    { label: 'Full', pct: 1.0 },
+    { label: '75%', pct: 0.75 },
+    { label: '50%', pct: 0.50 },
+    { label: '25%', pct: 0.25 },
+  ].map(({ label, pct }) => {
+    const rawTurns = roundUp10(Math.ceil((missingHp * pct) / healPerTurn));
+    return { label, turns: Math.min(Math.max(10, rawTurns), availableTurns) };
+  }) : null;
+
   return (
     <div className="space-y-4">
       <PixelCard>
@@ -215,16 +249,28 @@ export function Rest({ onComplete, onTurnsUpdate, onHpUpdate }: RestProps) {
         {!isFullHp && (
           <>
             <div className="mb-4">
-              <label className="block text-sm text-[var(--rpg-text-secondary)] mb-2">
-                Turns to spend: {turns}
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-[var(--rpg-text-secondary)]">Turns to spend</span>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-[var(--rpg-gold)] font-mono">{turns}</div>
+                  <div className="text-xs text-[var(--rpg-text-secondary)]">of {availableTurns.toLocaleString()} available</div>
+                </div>
+              </div>
               <Slider
                 min={10}
-                max={1000}
+                max={sliderMax}
                 step={10}
-                value={[turns]}
+                value={[Math.min(turns, sliderMax)]}
                 onValueChange={(val) => setTurns(val[0])}
               />
+              {presets && (
+                <TurnPresets
+                  presets={presets}
+                  currentValue={turns}
+                  onChange={setTurns}
+                  className="mt-3"
+                />
+              )}
             </div>
 
             {/* Estimate */}

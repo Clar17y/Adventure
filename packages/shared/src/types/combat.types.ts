@@ -34,19 +34,28 @@ export interface SpellAction {
   effects?: SpellEffect[];
 }
 
+export type CombatActor = 'combatantA' | 'combatantB';
+
+export interface Combatant {
+  id: string;
+  name: string;
+  stats: CombatantStats;
+  spells?: SpellAction[];
+}
+
 export interface ActiveEffect {
   name: string;
-  target: 'player' | 'mob';
+  target: CombatActor;
   stat: string;
   modifier: number;
   remainingRounds: number;
 }
 
 export interface CombatState {
-  playerHp: number;
-  playerMaxHp: number;
-  mobHp: number;
-  mobMaxHp: number;
+  combatantAHp: number;
+  combatantAMaxHp: number;
+  combatantBHp: number;
+  combatantBMaxHp: number;
   round: number;
   log: CombatLogEntry[];
   outcome: CombatOutcome | null;
@@ -55,7 +64,8 @@ export interface CombatState {
 
 export interface CombatLogEntry {
   round: number;
-  actor: 'player' | 'mob';
+  actor: CombatActor;
+  actorName: string;
   action: CombatAction;
   roll?: number;
   damage?: number;
@@ -73,19 +83,19 @@ export interface CombatLogEntry {
   magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
-  playerHpAfter?: number;
-  mobHpAfter?: number;
+  combatantAHpAfter?: number;
+  combatantBHpAfter?: number;
   spellName?: string;
   healAmount?: number;
   effectsApplied?: Array<{
     stat: string;
     modifier: number;
     duration: number;
-    target: 'player' | 'mob';
+    target: CombatActor;
   }>;
   effectsExpired?: Array<{
     name: string;
-    target: 'player' | 'mob';
+    target: CombatActor;
   }>;
 }
 
@@ -96,13 +106,10 @@ export type CombatOutcome = 'victory' | 'defeat' | 'fled';
 export interface CombatResult {
   outcome: CombatOutcome;
   log: CombatLogEntry[];
-  playerMaxHp: number;
-  mobMaxHp: number;
-  xpGained: number;
-  loot: LootDrop[];
-  durabilityLost: DurabilityLoss[];
-  turnsSpent: number;
-  playerHpRemaining: number;
+  combatantAMaxHp: number;
+  combatantBMaxHp: number;
+  combatantAHpRemaining: number;
+  combatantBHpRemaining: number;
 }
 
 export interface LootDrop {

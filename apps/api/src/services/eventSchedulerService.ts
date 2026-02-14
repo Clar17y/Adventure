@@ -4,14 +4,12 @@ import {
   WORLD_EVENT_CONSTANTS,
   WORLD_EVENT_TEMPLATES,
   type WorldEventTemplate,
-  type WorldEventType,
 } from '@adventure/shared';
 import { expireStaleEvents, spawnWorldEvent } from './worldEventService';
 import { emitSystemMessage } from './systemMessageService';
 
-// Track last scheduler run to avoid running too frequently
 let lastRunAt = 0;
-const MIN_INTERVAL_MS = 60_000; // at most once per minute
+const MIN_INTERVAL_MS = 60_000;
 
 function pickWeightedTemplate(templates: WorldEventTemplate[]): WorldEventTemplate | null {
   const totalWeight = templates.reduce((sum, t) => sum + t.weight, 0);
@@ -25,9 +23,259 @@ function pickWeightedTemplate(templates: WorldEventTemplate[]): WorldEventTempla
   return templates[templates.length - 1] ?? null;
 }
 
-function getDurationForType(type: WorldEventType): number {
-  if (type === 'resource') return WORLD_EVENT_CONSTANTS.RESOURCE_EVENT_DURATION_HOURS;
+function pickRandom<T>(arr: T[]): T | undefined {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/**
+ * Resolve a targeted template's {target} placeholder from DB data.
+ * If fixedTarget is set, matches that exact name (case-insensitive).
+ * Otherwise picks a random target from the zone (or all zones for world-wide).
+ */
+async function resolveTarget(
+  template: WorldEventTemplate,
+  zoneId: string | null,
+): Promise<{ title: string; description: string; targetFamily?: string; targetResource?: string } | null> {
+  if (template.targeting === 'zone') {
+    return { title: template.title, description: template.description };
+  }
+
+  if (template.targeting === 'family') {
+    const where = zoneId ? { zoneId } : {};
+    const zoneFamilies = await prisma.zoneMobFamily.findMany({
+      where,
+      include: { mobFamily: { select: { id: true, name: true } } },
+    });
+    if (zoneFamilies.length === 0) return null;
+
+    // Fixed target: match by name; random target: pick any
+    let picked;
+    if (template.fixedTarget) {
+      const lower = template.fixedTarget.toLowerCase();
+      picked = zoneFamilies.find((zf) => zf.mobFamily.name.toLowerCase() === lower);
+      if (!picked) return null; // family doesn't exist in game data
+    } else {
+      picked = pickRandom(zoneFamilies);
+      if (!picked) return null;
+    }
+
+    const name = picked.mobFamily.name;
+    return {
+      title: template.title.replace('{target}', name),
+      description: template.description.replace(/\{target\}/g, name),
+      targetFamily: picked.mobFamily.id,
+    };
+  }
+
+  if (template.targeting === 'resource') {
+    const where = zoneId ? { zoneId } : {};
+    const resources = await prisma.resourceNode.findMany({
+      where,
+      select: { resourceType: true },
+      distinct: ['resourceType'],
+    });
+    if (resources.length === 0) return null;
+
+    let picked;
+    if (template.fixedTarget) {
+      const lower = template.fixedTarget.toLowerCase();
+      picked = resources.find((r) => r.resourceType.toLowerCase() === lower);
+      if (!picked) return null; // resource type doesn't exist in game data
+    } else {
+      picked = pickRandom(resources);
+      if (!picked) return null;
+    }
+
+    const name = picked.resourceType;
+    return {
+      title: template.title.replace('{target}', name),
+      description: template.description.replace(/\{target\}/g, name),
+      targetResource: name,
+    };
+  }
+
+  return null;
+}
+
+function getDuration(template: WorldEventTemplate): number {
+  if (template.scope === 'world') return WORLD_EVENT_CONSTANTS.WORLD_WIDE_EVENT_DURATION_HOURS;
+  if (template.type === 'resource') return WORLD_EVENT_CONSTANTS.RESOURCE_EVENT_DURATION_HOURS;
   return WORLD_EVENT_CONSTANTS.MOB_EVENT_DURATION_HOURS;
+}
+
+/**
+ * Get mob family names and resource types present in zones where players
+ * currently are (wild zones only). Returns null sets if nobody is in a
+ * wild zone, signalling the caller to allow any target.
+ */
+async function getRelevantTargets(): Promise<{
+  familyNames: Set<string>;
+  resourceTypes: Set<string>;
+  hasPlayers: boolean;
+}> {
+  // Distinct wild zones with at least one player (null zone = town, skip)
+  const playerZones = await prisma.player.findMany({
+    where: { currentZoneId: { not: null } },
+    select: { currentZone: { select: { id: true, zoneType: true } } },
+    distinct: ['currentZoneId'],
+  });
+  const wildZoneIds: string[] = [];
+  for (const p of playerZones) {
+    if (p.currentZone && p.currentZone.zoneType === 'wild') {
+      wildZoneIds.push(p.currentZone.id);
+    }
+  }
+
+  if (wildZoneIds.length === 0) {
+    return { familyNames: new Set(), resourceTypes: new Set(), hasPlayers: false };
+  }
+
+  const [families, resources] = await Promise.all([
+    prisma.zoneMobFamily.findMany({
+      where: { zoneId: { in: wildZoneIds } },
+      include: { mobFamily: { select: { name: true } } },
+    }),
+    prisma.resourceNode.findMany({
+      where: { zoneId: { in: wildZoneIds } },
+      select: { resourceType: true },
+      distinct: ['resourceType'],
+    }),
+  ]);
+
+  return {
+    familyNames: new Set(families.map((f) => f.mobFamily.name.toLowerCase())),
+    resourceTypes: new Set(resources.map((r) => r.resourceType.toLowerCase())),
+    hasPlayers: true,
+  };
+}
+
+/** Try to spawn a world-wide event (zoneId = null). */
+async function trySpawnWorldWideEvent(io: SocketServer | null): Promise<void> {
+  const activeWorldWide = await prisma.worldEvent.count({
+    where: { zoneId: null, status: 'active' },
+  });
+  if (activeWorldWide >= WORLD_EVENT_CONSTANTS.MAX_WORLD_EVENTS) return;
+
+  const relevant = await getRelevantTargets();
+
+  // Filter templates: if players are in wild zones, only pick templates
+  // whose fixedTarget is relevant (or generic templates that will resolve
+  // to a relevant target). If everyone is in town, allow all templates.
+  const allWorld = WORLD_EVENT_TEMPLATES.filter((t) => t.scope === 'world');
+  let eligible: WorldEventTemplate[];
+
+  if (relevant.hasPlayers) {
+    eligible = allWorld.filter((t) => {
+      if (!t.fixedTarget) return true; // generic, resolved later
+      const lower = t.fixedTarget.toLowerCase();
+      if (t.targeting === 'family') return relevant.familyNames.has(lower);
+      if (t.targeting === 'resource') return relevant.resourceTypes.has(lower);
+      return true;
+    });
+  } else {
+    // Everyone in town — allow any template
+    eligible = allWorld;
+  }
+
+  const template = pickWeightedTemplate(eligible);
+  if (!template) return;
+
+  const resolved = await resolveTarget(template, null);
+  if (!resolved) return;
+
+  const event = await spawnWorldEvent({
+    type: template.type,
+    zoneId: null,
+    title: resolved.title,
+    description: resolved.description,
+    effectType: template.effectType,
+    effectValue: template.effectValue,
+    targetFamily: resolved.targetFamily,
+    targetResource: resolved.targetResource,
+    durationHours: getDuration(template),
+  });
+
+  if (event) {
+    await emitSystemMessage(
+      io,
+      'world',
+      'world',
+      `World event: ${event.title} — ${event.description}`,
+    );
+  }
+}
+
+/** Try to spawn a zone-scoped event. */
+async function trySpawnZoneEvent(io: SocketServer | null): Promise<void> {
+  const activeZoneCount = await prisma.worldEvent.count({
+    where: { zoneId: { not: null }, status: 'active' },
+  });
+  if (activeZoneCount >= WORLD_EVENT_CONSTANTS.MAX_ZONE_EVENTS) return;
+
+  const wildZones = await prisma.zone.findMany({
+    where: { zoneType: 'wild' },
+    select: { id: true, name: true },
+  });
+  if (wildZones.length === 0) return;
+
+  // Get effectTypes already active per zone to prevent duplicates
+  const activeZoneEvents = await prisma.worldEvent.findMany({
+    where: { zoneId: { not: null }, status: 'active' },
+    select: { zoneId: true, effectType: true },
+  });
+  const effectsByZone = new Map<string, Set<string>>();
+  for (const e of activeZoneEvents) {
+    if (!e.zoneId) continue;
+    const set = effectsByZone.get(e.zoneId) ?? new Set();
+    set.add(e.effectType);
+    effectsByZone.set(e.zoneId, set);
+  }
+
+  // Zones without any events get priority; otherwise pick randomly from all wild zones
+  const occupiedZoneIds = new Set(activeZoneEvents.map((e) => e.zoneId));
+  const freeZones = wildZones.filter((z) => !occupiedZoneIds.has(z.id));
+  const candidatePool = freeZones.length > 0 ? freeZones : wildZones;
+  const zone = pickRandom(candidatePool);
+  if (!zone) return;
+
+  const zoneEffects = effectsByZone.get(zone.id) ?? new Set();
+
+  // Pick a template that doesn't conflict with existing effects in this zone
+  const templates = WORLD_EVENT_TEMPLATES.filter(
+    (t) => t.scope === 'zone' && !zoneEffects.has(t.effectType),
+  );
+  const template = pickWeightedTemplate(templates);
+  if (!template) return;
+
+  const resolved = await resolveTarget(template, zone.id);
+  if (!resolved) return;
+
+  const event = await spawnWorldEvent({
+    type: template.type,
+    zoneId: zone.id,
+    title: resolved.title,
+    description: resolved.description,
+    effectType: template.effectType,
+    effectValue: template.effectValue,
+    targetFamily: resolved.targetFamily,
+    targetResource: resolved.targetResource,
+    durationHours: getDuration(template),
+  });
+
+  if (event) {
+    await emitSystemMessage(
+      io,
+      'world',
+      'world',
+      `New event in ${zone.name}: ${event.title} — ${event.description}`,
+    );
+    await emitSystemMessage(
+      io,
+      'zone',
+      `zone:${zone.id}`,
+      `New event: ${event.title} — ${event.description}`,
+    );
+  }
 }
 
 export async function checkAndSpawnEvents(io: SocketServer | null): Promise<void> {
@@ -35,67 +283,29 @@ export async function checkAndSpawnEvents(io: SocketServer | null): Promise<void
   if (now - lastRunAt < MIN_INTERVAL_MS) return;
   lastRunAt = now;
 
-  // Expire stale events and notify
+  // Expire stale events
   const expired = await expireStaleEvents();
   for (const event of expired) {
-    await emitSystemMessage(io, 'zone', event.zoneId, `Event ended: ${event.title}`);
+    const location = event.zoneName ?? 'the world';
+    await emitSystemMessage(io, 'world', 'world', `Event ended: ${event.title} in ${location}`);
+    if (event.zoneId) {
+      await emitSystemMessage(io, 'zone', `zone:${event.zoneId}`, `Event ended: ${event.title}`);
+    }
   }
 
-  // Get wild zones that could host events
-  const wildZones = await prisma.zone.findMany({
-    where: { zoneType: 'wild' },
-    select: { id: true, name: true },
+  // Respawn cooldown (DB-based, survives server restarts)
+  const cooldownMs = WORLD_EVENT_CONSTANTS.EVENT_RESPAWN_DELAY_MINUTES * 60 * 1000;
+  const cooldownCutoff = new Date(now - cooldownMs);
+  const recentEvent = await prisma.worldEvent.findFirst({
+    where: { startedAt: { gte: cooldownCutoff } },
+    select: { id: true },
   });
-  if (wildZones.length === 0) return;
+  if (recentEvent) return;
 
-  // Check which types have empty slots (globally, to limit total events)
-  const activeEventCounts = await prisma.worldEvent.groupBy({
-    by: ['type'],
-    where: { status: 'active' },
-    _count: { _all: true },
-  });
-  const countByType = new Map(activeEventCounts.map((r) => [r.type, r._count._all]));
-
-  // Try to spawn one event per type that has empty slots
-  for (const type of ['resource', 'mob'] as WorldEventType[]) {
-    const currentCount = countByType.get(type) ?? 0;
-    // Cap at roughly 1 event per 3 wild zones
-    const maxForType = Math.max(1, Math.floor(wildZones.length / 3));
-    if (currentCount >= maxForType) continue;
-
-    // Pick a zone without an active event of this type
-    const zonesWithEvent: Array<{ zoneId: string }> = await prisma.worldEvent.findMany({
-      where: { type, status: 'active' },
-      select: { zoneId: true },
-    });
-    const occupiedZoneIds = new Set(zonesWithEvent.map((e) => e.zoneId));
-    const candidates = wildZones.filter((z) => !occupiedZoneIds.has(z.id));
-    if (candidates.length === 0) continue;
-
-    const zone = candidates[Math.floor(Math.random() * candidates.length)]!;
-
-    // Pick a template for this type
-    const templates = WORLD_EVENT_TEMPLATES.filter((t) => t.type === type);
-    const template = pickWeightedTemplate(templates);
-    if (!template) continue;
-
-    const event = await spawnWorldEvent({
-      type,
-      zoneId: zone.id,
-      title: template.title,
-      description: template.description,
-      effectType: template.effectType,
-      effectValue: template.effectValue,
-      durationHours: getDurationForType(type),
-    });
-
-    if (event) {
-      await emitSystemMessage(
-        io,
-        'zone',
-        zone.id,
-        `New event in ${zone.name}: ${event.title} — ${event.description}`,
-      );
-    }
+  // Roll for world-wide or zone event (50/50 chance, but caps enforce limits)
+  if (Math.random() < 0.5) {
+    await trySpawnWorldWideEvent(io);
+  } else {
+    await trySpawnZoneEvent(io);
   }
 }

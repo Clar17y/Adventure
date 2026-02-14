@@ -20,18 +20,21 @@ function formatTimeRemaining(expiresAt: string | null): string {
   return `${minutes}m`;
 }
 
-function effectLabel(effectType: string): string {
+function effectLabel(effectType: string, effectValue: number): string {
+  const sign = effectType.endsWith('_down') ? '-' : '+';
   const labels: Record<string, string> = {
-    damage_up: 'Mob Damage +',
-    damage_down: 'Mob Damage -',
-    hp_up: 'Mob HP +',
-    hp_down: 'Mob HP -',
-    spawn_rate_up: 'Mob Spawns +',
-    spawn_rate_down: 'Mob Spawns -',
-    drop_rate_up: 'Drop Rate +',
-    yield_up: 'Yield +',
+    damage_up: 'Mob Damage',
+    damage_down: 'Mob Damage',
+    hp_up: 'Mob HP',
+    hp_down: 'Mob HP',
+    spawn_rate_up: 'Mob Spawns',
+    spawn_rate_down: 'Mob Spawns',
+    drop_rate_up: 'Drop Rate',
+    drop_rate_down: 'Drop Rate',
+    yield_up: 'Yield',
+    yield_down: 'Yield',
   };
-  return labels[effectType] ?? effectType;
+  return `${labels[effectType] ?? effectType} ${sign}${Math.round(effectValue * 100)}%`;
 }
 
 function eventTypeColor(type: string): string {
@@ -40,11 +43,49 @@ function eventTypeColor(type: string): string {
   return 'var(--rpg-gold)';
 }
 
+function EventCard({ event }: { event: WorldEventResponse }) {
+  const isWorld = event.scope === 'world';
+  return (
+    <PixelCard className="p-3">
+      <div className="flex items-center justify-between mb-1">
+        <span className="font-bold" style={{ color: eventTypeColor(event.type) }}>
+          {event.title}
+        </span>
+        <div className="flex items-center gap-2">
+          {isWorld && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+              style={{ background: 'rgba(147, 130, 255, 0.2)', color: 'var(--rpg-blue-light)' }}
+            >
+              GLOBAL
+            </span>
+          )}
+          <span className="text-xs" style={{ color: eventTypeColor(event.type) }}>
+            {event.type.toUpperCase()}
+          </span>
+        </div>
+      </div>
+      {event.zoneName && (
+        <p className="text-xs opacity-60 mb-1">{event.zoneName}</p>
+      )}
+      <p className="text-xs opacity-80 mb-2">{event.description}</p>
+      <div className="flex justify-between text-xs">
+        <span>{effectLabel(event.effectType, event.effectValue)}</span>
+        <span className="opacity-70">
+          {formatTimeRemaining(event.expiresAt)}
+        </span>
+      </div>
+    </PixelCard>
+  );
+}
+
 interface WorldEventsProps {
+  currentZoneId: string | null;
+  currentZoneName: string | null;
   onNavigate: (screen: string) => void;
 }
 
-export function WorldEvents({ onNavigate }: WorldEventsProps) {
+export function WorldEvents({ currentZoneId, currentZoneName, onNavigate }: WorldEventsProps) {
   const [events, setEvents] = useState<WorldEventResponse[]>([]);
   const [bosses, setBosses] = useState<BossEncounterResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +102,14 @@ export function WorldEvents({ onNavigate }: WorldEventsProps) {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const worldEvents = events.filter((e) => e.scope === 'world');
+  const localEvents = currentZoneId
+    ? events.filter((e) => e.scope === 'zone' && e.zoneId === currentZoneId)
+    : [];
+  const otherZoneEvents = currentZoneId
+    ? events.filter((e) => e.scope === 'zone' && e.zoneId !== currentZoneId)
+    : events.filter((e) => e.scope === 'zone');
 
   return (
     <div className="space-y-4">
@@ -115,38 +164,45 @@ export function WorldEvents({ onNavigate }: WorldEventsProps) {
         </div>
       )}
 
-      {/* Active Events */}
+      {/* No events */}
       {events.length === 0 && bosses.length === 0 && !loading && (
         <PixelCard className="p-4 text-center opacity-70">
           No active world events right now. Explore to discover them!
         </PixelCard>
       )}
 
-      {events.length > 0 && (
+      {/* World-wide events */}
+      {worldEvents.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--rpg-gold)' }}>
-            Zone Events
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--rpg-blue-light)' }}>
+            Global Events
           </h3>
-          {events.map((event) => (
-            <PixelCard key={event.id} className="p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-bold" style={{ color: eventTypeColor(event.type) }}>
-                  {event.title}
-                </span>
-                <span className="text-xs" style={{ color: eventTypeColor(event.type) }}>
-                  {event.type.toUpperCase()}
-                </span>
-              </div>
-              <p className="text-xs opacity-80 mb-2">{event.description}</p>
-              <div className="flex justify-between text-xs">
-                <span>
-                  {effectLabel(event.effectType)} {Math.round(event.effectValue * 100)}%
-                </span>
-                <span className="opacity-70">
-                  {formatTimeRemaining(event.expiresAt)}
-                </span>
-              </div>
-            </PixelCard>
+          {worldEvents.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      )}
+
+      {/* Events in current zone */}
+      {localEvents.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--rpg-green-light)' }}>
+            Active in {currentZoneName ?? 'Your Zone'}
+          </h3>
+          {localEvents.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      )}
+
+      {/* Events in other zones */}
+      {otherZoneEvents.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold opacity-70">
+            Other Zones
+          </h3>
+          {otherZoneEvents.map((event) => (
+            <EventCard key={event.id} event={event} />
           ))}
         </div>
       )}

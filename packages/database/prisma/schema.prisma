@@ -503,7 +503,7 @@ model ChatMessage {
 model WorldEvent {
   id             String   @id @default(uuid())
   type           String   @db.VarChar(16)
-  zoneId         String   @map("zone_id")
+  zoneId         String?  @map("zone_id")
   title          String   @db.VarChar(128)
   description    String   @db.Text
   effectType     String   @map("effect_type") @db.VarChar(32)
@@ -516,7 +516,7 @@ model WorldEvent {
   status         String   @default("active") @db.VarChar(16)
   createdBy      String   @default("system") @map("created_by") @db.VarChar(32)
 
-  zone           Zone            @relation(fields: [zoneId], references: [id])
+  zone           Zone?           @relation(fields: [zoneId], references: [id])
   bossEncounter  BossEncounter?
 
   @@index([status, type])

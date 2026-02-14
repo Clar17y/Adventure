@@ -739,9 +739,9 @@ explorationRouter.post('/start', async (req, res, next) => {
       }
 
       if (outcome.type === 'event_discovery') {
-        // Pick a random event template eligible for wild zones
+        // Pick a random zone-scoped, zone-wide template (no world-wide or targeted)
         const eligible = WORLD_EVENT_TEMPLATES.filter(
-          (t) => t.type !== 'boss' && (!t.zoneType || t.zoneType === zone.zoneType),
+          (t) => t.scope === 'zone' && t.targeting === 'zone',
         );
         if (eligible.length > 0) {
           const template = eligible[randomIntInclusive(0, eligible.length - 1)]!;
@@ -762,9 +762,9 @@ explorationRouter.post('/start', async (req, res, next) => {
           if (spawned) {
             await emitSystemMessage(
               getIo(),
-              'zone',
-              body.zoneId,
-              `Event discovered in ${zone.name}: ${spawned.title} — ${spawned.description}`,
+              'world',
+              'world',
+              `New event in ${zone.name}: ${spawned.title} — ${spawned.description}`,
             );
             events.push({
               turn: outcome.turnOccurred,

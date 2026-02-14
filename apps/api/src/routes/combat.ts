@@ -28,7 +28,7 @@ import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { respawnToHomeTown } from '../services/zoneDiscoveryService';
 import { grantEncounterSiteChestRewardsTx } from '../services/chestService';
-import { getActiveZoneModifiers } from '../services/worldEventService';
+import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
 import {
   persistMobHp,
   checkPersistedMobReencounter,
@@ -545,6 +545,7 @@ combatRouter.post('/start', async (req, res, next) => {
     };
     // Apply world event modifiers to mob stats
     const zoneModifiers = await getActiveZoneModifiers(zoneId);
+    const activeEventEffects = await getActiveEventSummaries(zoneId);
     const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
     const prefixedMob = applyMobPrefix(modifiedMob, mobPrefix);
     mobPrefix = prefixedMob.mobPrefix;
@@ -781,6 +782,7 @@ combatRouter.post('/start', async (req, res, next) => {
             }
           : null,
       },
+      activeEvents: activeEventEffects.length > 0 ? activeEventEffects : undefined,
     });
   } catch (err) {
     next(err);

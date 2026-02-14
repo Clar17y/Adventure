@@ -8,7 +8,7 @@ import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { addStackableItemTx } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
-import { getActiveZoneModifiers } from '../services/worldEventService';
+import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
 import { applyResourceEventModifiers } from '@adventure/game-engine';
 
 export const gatheringRouter = Router();
@@ -287,6 +287,7 @@ gatheringRouter.post('/mine', async (req, res, next) => {
 
     // Apply world event resource modifiers
     const zoneModifiers = await getActiveZoneModifiers(template.zoneId);
+    const activeEventEffects = await getActiveEventSummaries(template.zoneId);
     const yieldPerAction = applyResourceEventModifiers(baseYieldPerAction, zoneModifiers);
 
     // Cap actions by remaining capacity
@@ -413,6 +414,7 @@ gatheringRouter.post('/mine', async (req, res, next) => {
         attributePointsAfter: xpGrant.attributePointsAfter,
         characterLeveledUp: xpGrant.characterLeveledUp,
       },
+      activeEvents: activeEventEffects.length > 0 ? activeEventEffects : undefined,
     });
   } catch (err) {
     next(err);

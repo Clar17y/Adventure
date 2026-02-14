@@ -892,6 +892,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       });
       setPlaybackActive(true);
 
+      if (data.activeEvents?.length) {
+        for (const evt of data.activeEvents) {
+          const sign = evt.effectType.endsWith('_down') ? '-' : '+';
+          pushLog({ timestamp: nowStamp(), type: 'info', message: `World event active: ${evt.title} (${sign}${Math.round(evt.effectValue * 100)}%)` });
+        }
+      }
+
       if (data.rewards.siteCompletion) {
         const chest = data.rewards.siteCompletion;
         const chestLabel = `${chest.chestRarity.charAt(0).toUpperCase()}${chest.chestRarity.slice(1)} Chest`;
@@ -981,6 +988,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           type: 'success',
           message: `${gatheredSkillName} leveled up to ${data.xp.newLevel}!`,
         });
+      }
+
+      if (data.activeEvents?.length) {
+        for (const evt of data.activeEvents) {
+          const sign = evt.effectType.endsWith('_down') ? '-' : '+';
+          newLogs.push({ timestamp: nowStamp(), type: 'info', message: `World event active: ${evt.title} (${sign}${Math.round(evt.effectValue * 100)}%)` });
+        }
       }
 
       if (data.node.nodeDepleted) {

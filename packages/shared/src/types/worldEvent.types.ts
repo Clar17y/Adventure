@@ -10,7 +10,7 @@ export type MobEffectType =
   | 'hp_up'
   | 'hp_down';
 
-export type ResourceEffectType = 'drop_rate_up' | 'yield_up';
+export type ResourceEffectType = 'drop_rate_up' | 'drop_rate_down' | 'yield_up' | 'yield_down';
 
 export type WorldEventEffectType = MobEffectType | ResourceEffectType;
 
@@ -18,10 +18,14 @@ export type BossEncounterStatus = 'waiting' | 'in_progress' | 'defeated' | 'expi
 export type BossParticipantRole = 'attacker' | 'healer';
 export type BossParticipantStatus = 'alive' | 'knocked_out';
 
+export type WorldEventScope = 'zone' | 'world';
+
 export interface WorldEventData {
   id: string;
   type: WorldEventType;
-  zoneId: string;
+  scope: WorldEventScope;
+  zoneId: string | null;
+  zoneName: string | null;
   title: string;
   description: string;
   effectType: WorldEventEffectType;

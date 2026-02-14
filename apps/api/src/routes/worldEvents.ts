@@ -6,9 +6,8 @@ import {
   getAllActiveEvents,
   getActiveEventsForZone,
   getEventById,
+  expireStaleEvents,
 } from '../services/worldEventService';
-import { checkAndSpawnEvents } from '../services/eventSchedulerService';
-import { getIo } from '../socket';
 
 export const worldEventsRouter = Router();
 
@@ -16,11 +15,11 @@ worldEventsRouter.use(authenticate);
 
 /**
  * GET /api/v1/events
- * List all active world events (triggers lazy spawn check).
+ * List all active world events. Expires stale events on read, but does not spawn new ones.
  */
 worldEventsRouter.get('/', async (_req, res, next) => {
   try {
-    await checkAndSpawnEvents(getIo());
+    await expireStaleEvents();
     const events = await getAllActiveEvents();
     res.json({ events });
   } catch (err) {

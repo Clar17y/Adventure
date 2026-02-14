@@ -364,7 +364,7 @@ export async function resolveBossRound(
     await emitSystemMessage(
       io,
       'zone',
-      encounter.event.zoneId,
+      `zone:${encounter.event.zoneId}`,
       `Boss round ${nextRound}: ${totalDmg} damage dealt to ${encounter.mobTemplate.name} (${hpPercent}% HP remaining)`,
     );
   }

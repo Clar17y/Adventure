@@ -40,7 +40,7 @@ bossRouter.get('/active', async (_req, res, next) => {
           mobName: mob?.name ?? 'Unknown',
           mobLevel: mob?.level ?? 1,
           zoneId: event?.zoneId ?? '',
-          zoneName: event?.zone.name ?? 'Unknown',
+          zoneName: event?.zone?.name ?? 'Unknown',
           eventTitle: event?.title ?? '',
         };
       }),

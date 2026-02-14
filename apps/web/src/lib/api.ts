@@ -629,6 +629,7 @@ export interface CombatResponse {
     durabilityLost: Array<{ itemId: string; amount: number; itemName?: string; newDurability?: number; maxDurability?: number; isBroken?: boolean; crossedWarningThreshold?: boolean }>;
     skillXp: SkillXpGrantResponse | null;
   };
+  activeEvents?: Array<{ title: string; effectType: string; effectValue: number }>;
 }
 
 export interface CombatHistoryListItemResponse {
@@ -876,6 +877,7 @@ export async function mine(playerNodeId: string, turns: number, currentZoneId: s
       attributePointsAfter: number;
       characterLeveledUp: boolean;
     };
+    activeEvents?: Array<{ title: string; effectType: string; effectValue: number }>;
   }>('/api/v1/gathering/mine', {
     method: 'POST',
     body: JSON.stringify({ playerNodeId, turns, currentZoneId }),
@@ -1077,11 +1079,15 @@ export async function getChatHistory(channelType: string, channelId: string) {
 export interface WorldEventResponse {
   id: string;
   type: string;
-  zoneId: string;
+  scope: 'zone' | 'world';
+  zoneId: string | null;
+  zoneName: string | null;
   title: string;
   description: string;
   effectType: string;
   effectValue: number;
+  targetFamily: string | null;
+  targetResource: string | null;
   startedAt: string;
   expiresAt: string | null;
   status: string;

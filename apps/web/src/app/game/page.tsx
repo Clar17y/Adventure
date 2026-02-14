@@ -740,7 +740,11 @@ export default function GamePage() {
         );
       case 'worldEvents':
         return (
-          <WorldEvents onNavigate={(s) => setActiveScreen(s as Screen)} />
+          <WorldEvents
+            currentZoneId={activeZoneId}
+            currentZoneName={currentZone?.name ?? null}
+            onNavigate={(s) => setActiveScreen(s as Screen)}
+          />
         );
       default:
         return null;

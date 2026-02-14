@@ -33,6 +33,6 @@ export async function emitSystemMessage(
     createdAt: row.createdAt.toISOString(),
   };
 
-  const room = `${channelType}:${channelId}`;
+  const room = `chat:${channelId}`;
   io.to(room).emit('chat:message', event);
 }

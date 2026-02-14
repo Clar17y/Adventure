@@ -31,6 +31,10 @@ async function cleanTemplateData() {
   await prisma.playerResourceNode.deleteMany({});
   await prisma.playerEquipment.deleteMany({});
   await prisma.item.deleteMany({});
+  await p.bossParticipant.deleteMany({});
+  await p.bossEncounter.deleteMany({});
+  await p.persistedMob.deleteMany({});
+  await p.worldEvent.deleteMany({});
   await p.mobFamily.deleteMany({});
   await prisma.mobTemplate.deleteMany({});
   await prisma.resourceNode.deleteMany({});

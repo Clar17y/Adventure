@@ -211,6 +211,18 @@ export const CRAFTING_CONSTANTS = {
   /** Minimum guaranteed crit bonus value */
   MIN_BONUS_MAGNITUDE: 1,
 
+  // Rare Craft (chance a crit produces rare instead of uncommon)
+  RARE_CRAFT_BASE_CHANCE: 0.005,
+  RARE_CRAFT_CHANCE_PER_LEVEL: 0.001,
+  RARE_CRAFT_LUCK_BONUS_PER_POINT: 0.0005,
+  RARE_CRAFT_MAX_CHANCE: 0.04,
+
+  // Epic Craft (chance a crit produces epic)
+  EPIC_CRAFT_BASE_CHANCE: 0.0005,
+  EPIC_CRAFT_CHANCE_PER_LEVEL: 0.0001,
+  EPIC_CRAFT_LUCK_BONUS_PER_POINT: 0.00005,
+  EPIC_CRAFT_MAX_CHANCE: 0.004,
+
   /** Turn cost to salvage one crafted equipment item */
   SALVAGE_TURN_COST: 50,
 
@@ -358,6 +370,9 @@ export const POTION_CONSTANTS = {
 
   /** HP percentage restored by Greater Recovery Potion */
   GREATER_RECOVERY_PERCENT: 1.0,
+
+  /** Rounds of Potion Sickness cooldown after auto-potion use */
+  AUTO_POTION_SICKNESS_DURATION: 5,
 } as const;
 
 // =============================================================================

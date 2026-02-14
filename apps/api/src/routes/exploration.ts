@@ -16,7 +16,9 @@ import {
   EXPLORATION_CONSTANTS,
   WORLD_EVENT_TEMPLATES,
   WORLD_EVENT_CONSTANTS,
+  type CombatOptions,
   type MobTemplate,
+  type PotionConsumed,
   type SkillType,
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
@@ -35,6 +37,7 @@ import { checkAndSpawnEvents } from '../services/eventSchedulerService';
 import { getIo } from '../socket';
 import { emitSystemMessage } from '../services/systemMessageService';
 import { persistMobHp } from '../services/persistedMobService';
+import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 
 export const explorationRouter = Router();
 
@@ -425,6 +428,17 @@ explorationRouter.post('/start', async (req, res, next) => {
     const hiddenCaches: Array<{ turnOccurred: number }> = [];
     let zoneExitDiscovered = false;
 
+    // Auto-potion setup for exploration ambushes
+    const playerRecord = await prismaAny.player.findUnique({
+      where: { id: playerId },
+      select: { autoPotionThreshold: true },
+    });
+    const autoPotionThreshold = playerRecord?.autoPotionThreshold ?? 0;
+    const potionPool = autoPotionThreshold > 0
+      ? await buildPotionPool(playerId, hpState.maxHp)
+      : [];
+    const allPotionsConsumed: PotionConsumed[] = [];
+
     let currentHp = hpState.currentHp;
     let aborted = false;
     let abortedAtTurn: number | null = null;
@@ -457,7 +471,19 @@ explorationRouter.post('/start', async (req, res, next) => {
           equipmentStats
         );
 
-        const combatResult = runCombat(playerStats, prefixedMob);
+        let combatOptions: CombatOptions | undefined;
+        if (autoPotionThreshold > 0 && potionPool.length > 0) {
+          combatOptions = { autoPotionThreshold, potions: [...potionPool] };
+        }
+
+        const combatResult = runCombat(playerStats, prefixedMob, combatOptions);
+
+        // Remove consumed potions from the shared pool
+        for (const consumed of combatResult.potionsConsumed) {
+          const idx = potionPool.findIndex(p => p.templateId === consumed.templateId);
+          if (idx !== -1) potionPool.splice(idx, 1);
+          allPotionsConsumed.push(consumed);
+        }
 
         const durabilityLost = await degradeEquippedDurability(playerId);
         let loot: Array<{ itemTemplateId: string; quantity: number; rarity?: string }> = [];
@@ -776,6 +802,9 @@ explorationRouter.post('/start', async (req, res, next) => {
         }
       }
     }
+
+    // Deduct all potions consumed across ambushes
+    await deductConsumedPotions(playerId, allPotionsConsumed);
 
     const refundAmount = aborted && abortedAtTurn ? Math.max(0, body.turns - abortedAtTurn) : 0;
     const refundedTurns = refundAmount > 0 ? await refundPlayerTurns(playerId, refundAmount) : null;

@@ -12,7 +12,8 @@
       "Bash(grep:*)",
       "Bash(grepai search:*)",
       "Bash(tasklist:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(git worktree add:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

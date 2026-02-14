@@ -8,12 +8,14 @@ function isMagicDamage(entry: LastCombatLogEntry): boolean {
 }
 
 function getActionIcon(entry: LastCombatLogEntry): string {
+  if (entry.action === 'potion') return '🧪';
   if (entry.effectsExpired && entry.effectsExpired.length > 0) return '✨';
   if (entry.evaded) return '💨';
   if (entry.isCritical) return '💥';
   if (entry.healAmount && entry.healAmount > 0 && !entry.damage) return '💚';
   if (entry.effectsApplied && entry.effectsApplied.length > 0 && !entry.damage) return '🔮';
   if (entry.damage && entry.damage > 0) return isMagicDamage(entry) ? '✨' : '⚔️';
+  if (entry.action === 'spell') return '🔮';
   if (entry.roll && !entry.damage) return '❌';
   return '';
 }
@@ -62,7 +64,7 @@ export function CombatLogEntry({
 }: CombatLogEntryProps) {
   const [expanded, setExpanded] = useState(false);
   const icon = getActionIcon(entry);
-  const hasDetails = entry.attackModifier !== undefined || entry.rawDamage !== undefined;
+  const hasDetails = entry.attackModifier !== undefined || entry.rawDamage !== undefined || entry.spellName !== undefined;
   const hitOutcome = resolveHitOutcome(entry);
 
   const isPlayerAction = entry.actor === 'player';
@@ -96,6 +98,9 @@ export function CombatLogEntry({
               <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">R{entry.round}</span>
               <span className={`shrink-0 ${actorColor}`}>{isPlayerAction ? 'You' : 'Mob'}</span>
               {icon && <span className="shrink-0 text-xs">{icon}</span>}
+              {entry.spellName && (
+                <span className="text-[var(--rpg-blue-light)] text-xs font-semibold">{entry.spellName}</span>
+              )}
               {entry.damage !== undefined && entry.damage > 0 && (
                 <span className="text-[var(--rpg-text-primary)] font-mono font-semibold">{entry.damage} dmg</span>
               )}
@@ -175,6 +180,22 @@ export function CombatLogEntry({
                 );
               })()}
             </div>
+          )}
+          {entry.spellName && !hitOutcome && entry.rawDamage === undefined && (
+            <div>Spell: {entry.spellName}</div>
+          )}
+          {entry.effectsApplied && entry.effectsApplied.length > 0 && (
+            <div>
+              {entry.effectsApplied.map((e, i) => (
+                <span key={i}>
+                  {i > 0 && ', '}
+                  {e.target === 'player' ? 'You' : 'Mob'}: {e.stat} {e.modifier > 0 ? '+' : ''}{e.modifier} ({e.duration} rds)
+                </span>
+              ))}
+            </div>
+          )}
+          {entry.healAmount !== undefined && entry.healAmount > 0 && (
+            <div>Heals {entry.healAmount} HP</div>
           )}
         </div>
       )}

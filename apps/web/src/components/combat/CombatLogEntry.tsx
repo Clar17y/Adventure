@@ -8,6 +8,7 @@ function isMagicDamage(entry: LastCombatLogEntry): boolean {
 }
 
 function getActionIcon(entry: LastCombatLogEntry): string {
+  if (entry.action === 'potion') return '🧪';
   if (entry.effectsExpired && entry.effectsExpired.length > 0) return '✨';
   if (entry.evaded) return '💨';
   if (entry.isCritical) return '💥';

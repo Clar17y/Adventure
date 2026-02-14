@@ -36,6 +36,7 @@ playerRouter.get('/', async (req, res, next) => {
         characterLevel: true,
         attributePoints: true,
         attributes: true,
+        autoPotionThreshold: true,
       },
     });
 
@@ -117,6 +118,30 @@ playerRouter.post('/attributes', async (req, res, next) => {
     const body = allocateAttributesSchema.parse(req.body);
     const progression = await allocateAttributePoints(playerId, body.attribute, body.points);
     res.json(progression);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const settingsSchema = z.object({
+  autoPotionThreshold: z.number().int().min(0).max(100),
+});
+
+/**
+ * PATCH /api/v1/player/settings
+ * Update player settings (e.g. auto-potion threshold).
+ */
+playerRouter.patch('/settings', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = settingsSchema.parse(req.body);
+
+    await prismaAny.player.update({
+      where: { id: playerId },
+      data: { autoPotionThreshold: body.autoPotionThreshold },
+    });
+
+    res.json({ autoPotionThreshold: body.autoPotionThreshold });
   } catch (err) {
     next(err);
   }

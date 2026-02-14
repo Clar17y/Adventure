@@ -205,6 +205,7 @@ export async function getPlayer() {
       characterXp: number;
       characterLevel: number;
       attributePoints: number;
+      autoPotionThreshold: number;
       attributes: {
         vitality: number;
         strength: number;
@@ -215,6 +216,13 @@ export async function getPlayer() {
       };
     };
   }>('/api/v1/player');
+}
+
+export async function updatePlayerSettings(settings: { autoPotionThreshold: number }) {
+  return fetchApi<{ autoPotionThreshold: number }>('/api/v1/player/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  });
 }
 
 export async function getPlayerAttributes() {

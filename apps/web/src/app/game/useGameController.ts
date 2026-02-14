@@ -21,6 +21,7 @@ import {
   repairItem,
   salvage,
   useItem,
+  updatePlayerSettings,
   startCombatFromEncounterSite,
   startExploration,
   travelToZone,
@@ -367,6 +368,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     discovered: boolean;
   }>>([]);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
+  const [autoPotionThreshold, setAutoPotionThreshold] = useState(0);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
     mobDisplayName: string;
@@ -425,6 +427,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         attributePoints: playerRes.data.player.attributePoints,
         attributes: playerRes.data.player.attributes,
       });
+      setAutoPotionThreshold(playerRes.data.player.autoPotionThreshold ?? 0);
     }
     if (skillsRes.data) setSkills(skillsRes.data.skills);
     if (hpRes.data) setHpState(hpRes.data);
@@ -1337,6 +1340,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     });
   };
 
+  const handleSetAutoPotionThreshold = async (value: number) => {
+    const prev = autoPotionThreshold;
+    setAutoPotionThreshold(value);
+    const res = await updatePlayerSettings({ autoPotionThreshold: value });
+    if (!res.data) setAutoPotionThreshold(prev);
+  };
+
   return {
     // Navigation
     activeScreen,
@@ -1392,6 +1402,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     bestiaryPrefixSummary,
     hpState,
     setHpState,
+    autoPotionThreshold,
+    setAutoPotionThreshold,
     playbackActive,
     combatPlaybackData,
     explorationPlaybackData,
@@ -1427,6 +1439,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,
+    handleSetAutoPotionThreshold,
   };
 }
 

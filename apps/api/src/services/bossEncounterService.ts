@@ -209,18 +209,16 @@ export async function resolveBossRound(
   const tierIndex = Math.max(0, Math.min(4, zoneTier - 1));
   const participantCount = signups.length;
 
-  // Boss scales once per attempt based on founding party size (M5: intentional design)
-  if (!encounter.scaledAt) {
-    const scaledMaxHp = WORLD_EVENT_CONSTANTS.BOSS_HP_PER_PLAYER_BY_TIER[tierIndex]! * participantCount;
-    const hpPercent = encounter.maxHp > 0 ? encounter.currentHp / encounter.maxHp : 1;
-    const scaledCurrentHp = Math.round(scaledMaxHp * hpPercent);
-    await prisma.bossEncounter.update({
-      where: { id: encounterId },
-      data: { maxHp: scaledMaxHp, currentHp: scaledCurrentHp, scaledAt: new Date() },
-    });
-    encounter.maxHp = scaledMaxHp;
-    encounter.currentHp = scaledCurrentHp;
-  }
+  // Rescale boss HP every round based on current participants (% preserved)
+  const scaledMaxHp = WORLD_EVENT_CONSTANTS.BOSS_HP_PER_PLAYER_BY_TIER[tierIndex]! * participantCount;
+  const hpPercent = encounter.maxHp > 0 ? encounter.currentHp / encounter.maxHp : 1;
+  const scaledCurrentHp = Math.round(scaledMaxHp * hpPercent);
+  await prisma.bossEncounter.update({
+    where: { id: encounterId },
+    data: { maxHp: scaledMaxHp, currentHp: scaledCurrentHp, scaledAt: new Date() },
+  });
+  encounter.maxHp = scaledMaxHp;
+  encounter.currentHp = scaledCurrentHp;
 
   // Build attacker/healer lists with real stats and compute raid pool
   const attackers: BossRoundAttacker[] = [];

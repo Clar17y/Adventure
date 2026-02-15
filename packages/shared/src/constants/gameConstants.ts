@@ -422,8 +422,9 @@ export const WORLD_EVENT_CONSTANTS = {
   BOSS_AOE_PER_PLAYER_BY_TIER: [15, 30, 50, 80, 120] as readonly number[],
   BOSS_DEFENCE_BY_TIER: [5, 12, 20, 35, 50] as readonly number[],
 
-  // Healer scaling
+  // Participant scaling
   HEALER_MAGIC_SCALING: 0.02,
+  ATTACKER_TURN_SCALING: 0.001,
 
   PERSISTED_MOB_REGEN_PERCENT_PER_MINUTE: 1,
   PERSISTED_MOB_REENCOUNTER_CHANCE: 0.3,

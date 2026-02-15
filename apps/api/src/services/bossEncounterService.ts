@@ -191,7 +191,7 @@ export async function resolveBossRound(
     where: { id: encounterId },
     include: {
       event: { select: { zoneId: true, title: true, zone: { select: { name: true, difficulty: true } } } },
-      mobTemplate: { select: { name: true, level: true } },
+      mobTemplate: { select: { name: true, level: true, defence: true, magicDefence: true, evasion: true, bossAoeDmg: true } },
     },
   });
   if (!encounter || encounter.status === 'defeated' || encounter.status === 'expired') {
@@ -248,6 +248,10 @@ export async function resolveBossRound(
         { attackStyle: attackSkill, skillLevel, attributes: progression.attributes },
         equipStats,
       );
+      // M1: turns invested boost attacker damage
+      const turnMultiplier = 1 + signup.turnsCommitted * WORLD_EVENT_CONSTANTS.ATTACKER_TURN_SCALING;
+      stats.damageMin = Math.round(stats.damageMin * turnMultiplier);
+      stats.damageMax = Math.round(stats.damageMax * turnMultiplier);
       attackers.push({ playerId: signup.playerId, stats });
     } else {
       const magicLevel = await getSkillLevel(signup.playerId, 'magic');
@@ -260,11 +264,14 @@ export async function resolveBossRound(
 
   const avgDefence = signups.length > 0 ? totalDefence / signups.length : 0;
 
+  // M2: use mob-specific stats with tier constants as fallback
+  const tierDefence = WORLD_EVENT_CONSTANTS.BOSS_DEFENCE_BY_TIER[tierIndex]!;
+  const mobAoe = encounter.mobTemplate.bossAoeDmg ?? WORLD_EVENT_CONSTANTS.BOSS_AOE_PER_PLAYER_BY_TIER[tierIndex]!;
   const bossStats: BossStats = {
-    defence: WORLD_EVENT_CONSTANTS.BOSS_DEFENCE_BY_TIER[tierIndex]!,
-    magicDefence: Math.round(WORLD_EVENT_CONSTANTS.BOSS_DEFENCE_BY_TIER[tierIndex]! * 0.7),
-    dodge: Math.round(zoneTier * 3),
-    aoeDamage: WORLD_EVENT_CONSTANTS.BOSS_AOE_PER_PLAYER_BY_TIER[tierIndex]! * participantCount,
+    defence: encounter.mobTemplate.defence ?? tierDefence,
+    magicDefence: encounter.mobTemplate.magicDefence ?? Math.round(tierDefence * 0.7),
+    dodge: encounter.mobTemplate.evasion ?? Math.round(zoneTier * 3),
+    aoeDamage: mobAoe * participantCount,
     avgParticipantDefence: avgDefence,
   };
 
@@ -293,13 +300,30 @@ export async function resolveBossRound(
     ? null
     : new Date(Date.now() + WORLD_EVENT_CONSTANTS.BOSS_ROUND_INTERVAL_MINUTES * 60 * 1000);
 
-  // Find top damage dealer for killedBy
+  // M6: find top cumulative damage dealer across all rounds for killedBy
   let killedBy: string | null = null;
   if (result.bossDefeated) {
-    const topAttacker = result.attackerResults
-      .filter((a) => a.hit)
-      .sort((a, b) => b.damage - a.damage)[0];
-    killedBy = topAttacker?.playerId ?? null;
+    const allParticipantsForKill = await prisma.bossParticipant.findMany({
+      where: { encounterId },
+      select: { playerId: true, totalDamage: true },
+    });
+    const cumulativeDamage = new Map<string, number>();
+    for (const p of allParticipantsForKill) {
+      cumulativeDamage.set(p.playerId, (cumulativeDamage.get(p.playerId) ?? 0) + p.totalDamage);
+    }
+    // Also add this round's damage (not yet persisted to DB)
+    for (const ar of result.attackerResults) {
+      if (ar.damage > 0) {
+        cumulativeDamage.set(ar.playerId, (cumulativeDamage.get(ar.playerId) ?? 0) + ar.damage);
+      }
+    }
+    let topDamage = 0;
+    for (const [playerId, dmg] of cumulativeDamage) {
+      if (dmg > topDamage) {
+        topDamage = dmg;
+        killedBy = playerId;
+      }
+    }
   }
 
   // Optimistic lock: only update if roundNumber hasn't changed (C2 concurrency fix)

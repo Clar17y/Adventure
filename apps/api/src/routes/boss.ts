@@ -7,8 +7,10 @@ import {
   getActiveBossEncounters,
   getBossEncounterStatus,
   signUpForBossRound,
+  checkAndResolveDueBossRounds,
 } from '../services/bossEncounterService';
 import { getHpState } from '../services/hpService';
+import { getIo } from '../socket';
 
 export const bossRouter = Router();
 
@@ -20,6 +22,7 @@ bossRouter.use(authenticate);
  */
 bossRouter.get('/active', async (_req, res, next) => {
   try {
+    await checkAndResolveDueBossRounds(getIo());
     const encounters = await getActiveBossEncounters();
 
     // Enrich with mob template names and zone info
@@ -60,6 +63,7 @@ const encounterIdSchema = z.object({ id: z.string().uuid() });
  */
 bossRouter.get('/:id', async (req, res, next) => {
   try {
+    await checkAndResolveDueBossRounds(getIo());
     const { id } = encounterIdSchema.parse(req.params);
     const data = await getBossEncounterStatus(id);
     if (!data) {
@@ -71,11 +75,22 @@ bossRouter.get('/:id', async (req, res, next) => {
       select: { name: true, level: true },
     });
 
+    // Compute raid pool from next-round signups
+    const nextRound = data.encounter.roundNumber + 1;
+    const currentSignups = data.participants.filter((p) => p.roundNumber === nextRound);
+    let raidPoolMax = 0;
+    for (const p of currentSignups) {
+      const hp = await getHpState(p.playerId);
+      raidPoolMax += hp.maxHp;
+    }
+
     res.json({
       encounter: {
         ...data.encounter,
         mobName: mob?.name ?? 'Unknown',
         mobLevel: mob?.level ?? 1,
+        raidPoolHp: raidPoolMax,
+        raidPoolMax,
       },
       participants: data.participants,
     });
@@ -95,9 +110,32 @@ const signupSchema = z.object({
  */
 bossRouter.post('/:id/signup', async (req, res, next) => {
   try {
+    await checkAndResolveDueBossRounds(getIo());
     const playerId = req.player!.playerId;
     const { id } = encounterIdSchema.parse(req.params);
     const body = signupSchema.parse(req.body);
+
+    // Fetch encounter to get eventId for zone check
+    const encounter = await prisma.bossEncounter.findUnique({
+      where: { id },
+      select: { eventId: true },
+    });
+    if (!encounter) {
+      throw new AppError(404, 'Boss encounter not found', 'NOT_FOUND');
+    }
+
+    // Check player is in the boss zone
+    const event = await prisma.worldEvent.findUnique({
+      where: { id: encounter.eventId },
+      select: { zoneId: true },
+    });
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      select: { currentZoneId: true },
+    });
+    if (event?.zoneId && player?.currentZoneId !== event.zoneId) {
+      throw new AppError(400, 'You must be in the boss zone to sign up', 'WRONG_ZONE');
+    }
 
     const hpState = await getHpState(playerId);
     if (hpState.isRecovering) {

@@ -285,12 +285,11 @@ export async function resolveBossRound(
     avgParticipantDefence: avgDefence,
   };
 
-  // Compute raid pool HP: use persisted percentage applied to current raidPoolMax
+  // Compute raid pool HP: new joiners add full HP, existing damage preserved as absolute
   let currentRaidPool: number;
   if (encounter.raidPoolHp !== null && encounter.raidPoolMax !== null && encounter.raidPoolMax > 0) {
-    // Apply stored percentage to current participant pool
-    const poolPercent = encounter.raidPoolHp / encounter.raidPoolMax;
-    currentRaidPool = Math.round(poolPercent * raidPoolMax);
+    const damageTaken = encounter.raidPoolMax - encounter.raidPoolHp;
+    currentRaidPool = Math.max(0, raidPoolMax - damageTaken);
   } else {
     currentRaidPool = raidPoolMax;
   }

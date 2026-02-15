@@ -1,7 +1,4 @@
-import {
-  WORLD_EVENT_CONSTANTS,
-  type CombatantStats,
-} from '@adventure/shared';
+import { COMBAT_CONSTANTS } from '@adventure/shared';
 import {
   rollD20,
   rollDamage,
@@ -15,18 +12,17 @@ export interface BossStats {
   magicDefence: number;
   dodge: number;
   aoeDamage: number;
+  avgParticipantDefence: number;
 }
 
 export interface BossRoundAttacker {
   playerId: string;
-  stats: CombatantStats;
-  currentHp: number;
+  stats: import('@adventure/shared').CombatantStats;
 }
 
 export interface BossRoundHealer {
   playerId: string;
   healAmount: number;
-  currentHp: number;
 }
 
 export interface BossRoundInput {
@@ -35,6 +31,8 @@ export interface BossRoundInput {
   boss: BossStats;
   attackers: BossRoundAttacker[];
   healers: BossRoundHealer[];
+  raidPool: number;
+  raidPoolMax: number;
 }
 
 export interface AttackerResult {
@@ -46,66 +44,35 @@ export interface AttackerResult {
 
 export interface HealerResult {
   playerId: string;
-  targets: Array<{ playerId: string; healAmount: number }>;
+  healAmount: number;
 }
 
 export interface BossRoundResult {
   bossHpAfter: number;
   bossDefeated: boolean;
   attackerResults: AttackerResult[];
-  aoeDamage: number;
+  poolDamageTaken: number;
   healerResults: HealerResult[];
-  participantHpAfter: Map<string, number>;
-  knockouts: string[];
+  raidPoolAfter: number;
+  raidWiped: boolean;
 }
 
-/**
- * Resolve a single boss round. Pure function.
- *
- * 1. Attackers deal damage to boss
- * 2. Boss AOE damage to all participants
- * 3. Healers heal lowest-HP participants
- */
 export function resolveBossRoundLogic(
   input: BossRoundInput,
   roll?: () => number,
 ): BossRoundResult {
   const rollFn = roll ?? rollD20;
   let bossHp = input.bossHp;
-  const hpMap = new Map<string, number>();
-  const maxHpMap = new Map<string, number>();
+  let raidPool = input.raidPool;
 
-  // Initialize HP tracking for all participants
-  for (const a of input.attackers) {
-    hpMap.set(a.playerId, a.currentHp);
-    maxHpMap.set(a.playerId, a.stats.maxHp);
-  }
-  for (const h of input.healers) {
-    hpMap.set(h.playerId, h.currentHp);
-    // Healers don't have full CombatantStats, so store their current HP as max
-    if (!maxHpMap.has(h.playerId)) {
-      maxHpMap.set(h.playerId, h.currentHp);
-    }
-  }
-
-  // 1. Attackers deal damage
+  // 1. Attack phase: each attacker rolls against boss
   const attackerResults: AttackerResult[] = [];
   for (const attacker of input.attackers) {
     const attackRoll = rollFn();
-    const hits = doesAttackHit(
-      attackRoll,
-      attacker.stats.accuracy,
-      input.boss.dodge,
-      0,
-    );
+    const hits = doesAttackHit(attackRoll, attacker.stats.accuracy, input.boss.dodge, 0);
 
     if (!hits) {
-      attackerResults.push({
-        playerId: attacker.playerId,
-        hit: false,
-        damage: 0,
-        isCritical: false,
-      });
+      attackerResults.push({ playerId: attacker.playerId, hit: false, damage: 0, isCritical: false });
       continue;
     }
 
@@ -117,63 +84,37 @@ export function resolveBossRoundLogic(
     const { damage } = calculateFinalDamage(rawDmg, effectiveDefence, crit, attacker.stats.critDamage ?? 0);
 
     bossHp -= damage;
-    attackerResults.push({
-      playerId: attacker.playerId,
-      hit: true,
-      damage,
-      isCritical: crit,
-    });
+    attackerResults.push({ playerId: attacker.playerId, hit: true, damage, isCritical: crit });
   }
 
   const bossDefeated = bossHp <= 0;
 
-  // 2. Boss AOE damage (only if boss still alive)
-  const aoeDamage = bossDefeated ? 0 : input.boss.aoeDamage;
+  // 2. Boss phase: single hit to raid pool, reduced by avg defence
+  let poolDamageTaken = 0;
   if (!bossDefeated) {
-    for (const [playerId, hp] of hpMap) {
-      hpMap.set(playerId, hp - aoeDamage);
-    }
+    poolDamageTaken = Math.max(COMBAT_CONSTANTS.MIN_DAMAGE, input.boss.aoeDamage - input.boss.avgParticipantDefence);
+    raidPool -= poolDamageTaken;
   }
 
-  // 3. Healers heal lowest-HP participants
+  // 3. Heal phase: healers restore pool HP
   const healerResults: HealerResult[] = [];
   for (const healer of input.healers) {
-    const targets: Array<{ playerId: string; healAmount: number }> = [];
-
-    // Get living participants sorted by HP ascending
-    const living = Array.from(hpMap.entries())
-      .filter(([, hp]) => hp > 0)
-      .sort((a, b) => a[1] - b[1]);
-
-    const maxTargets = WORLD_EVENT_CONSTANTS.HEALER_MAX_TARGETS;
-    for (let i = 0; i < Math.min(maxTargets, living.length); i++) {
-      const [targetId, currentHp] = living[i]!;
-      const maxHp = maxHpMap.get(targetId) ?? currentHp;
-      const healed = Math.min(healer.healAmount, maxHp - currentHp);
-      if (healed > 0) {
-        hpMap.set(targetId, currentHp + healed);
-        targets.push({ playerId: targetId, healAmount: healed });
-        // Update the living array entry for subsequent healer iterations
-        living[i] = [targetId, currentHp + healed];
-      }
+    const healed = Math.min(healer.healAmount, input.raidPoolMax - raidPool);
+    if (healed > 0) {
+      raidPool += healed;
     }
-
-    healerResults.push({ playerId: healer.playerId, targets });
+    healerResults.push({ playerId: healer.playerId, healAmount: Math.max(0, healed) });
   }
 
-  // Determine knockouts
-  const knockouts: string[] = [];
-  for (const [playerId, hp] of hpMap) {
-    if (hp <= 0) knockouts.push(playerId);
-  }
+  const raidWiped = raidPool <= 0;
 
   return {
     bossHpAfter: Math.max(0, bossHp),
     bossDefeated,
     attackerResults,
-    aoeDamage,
+    poolDamageTaken,
     healerResults,
-    participantHpAfter: hpMap,
-    knockouts,
+    raidPoolAfter: Math.max(0, raidPool),
+    raidWiped,
   };
 }

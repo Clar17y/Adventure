@@ -9,7 +9,7 @@ import {
   simulateTravelAmbushes,
   calculateFleeResult,
 } from '@adventure/game-engine';
-import type { MobTemplate, SkillType } from '@adventure/shared';
+import type { MobTemplate } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { spendPlayerTurns, refundPlayerTurns } from '../services/turnBankService';
@@ -25,6 +25,7 @@ import {
   discoverZonesFromTown,
   respawnToHomeTown,
 } from '../services/zoneDiscoveryService';
+import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 
 const db = prisma as unknown as any;
 
@@ -106,30 +107,6 @@ zonesRouter.get('/', async (req, res, next) => {
 const travelSchema = z.object({
   zoneId: z.string().uuid(),
 });
-
-type AttackSkill = 'melee' | 'ranged' | 'magic';
-
-function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
-  if (value === 'melee' || value === 'ranged' || value === 'magic') return value;
-  return null;
-}
-
-async function getMainHandAttackSkill(playerId: string): Promise<AttackSkill | null> {
-  const mainHand = await prisma.playerEquipment.findUnique({
-    where: { playerId_slot: { playerId, slot: 'main_hand' } },
-    include: { item: { include: { template: true } } },
-  });
-  const requiredSkill = mainHand?.item?.template?.requiredSkill as SkillType | null | undefined;
-  return attackSkillFromRequiredSkill(requiredSkill);
-}
-
-async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
-  const skill = await prisma.playerSkill.findUnique({
-    where: { playerId_skillType: { playerId, skillType } },
-    select: { level: true },
-  });
-  return skill?.level ?? 1;
-}
 
 interface TravelEvent {
   turn: number;

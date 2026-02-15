@@ -19,7 +19,6 @@ import {
   type CombatOptions,
   type MobTemplate,
   type PotionConsumed,
-  type SkillType,
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -38,6 +37,7 @@ import { getIo } from '../socket';
 import { emitSystemMessage } from '../services/systemMessageService';
 import { persistMobHp } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
+import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 
 export const explorationRouter = Router();
 
@@ -55,7 +55,6 @@ const startSchema = z.object({
   turns: z.number().int(),
 });
 
-type AttackSkill = 'melee' | 'ranged' | 'magic';
 type EncounterSiteSize = 'small' | 'medium' | 'large';
 type EncounterMobRole = 'trash' | 'elite' | 'boss';
 type EncounterMobStatus = 'alive' | 'defeated' | 'decayed';
@@ -127,30 +126,6 @@ interface PendingEncounterSiteDiscovery {
 interface PendingAmbushCombatLog {
   turnsSpent: number;
   result: Prisma.InputJsonValue;
-}
-
-function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
-  if (value === 'melee' || value === 'ranged' || value === 'magic') return value;
-  return null;
-}
-
-async function getMainHandAttackSkill(playerId: string): Promise<AttackSkill | null> {
-  const mainHand = await prisma.playerEquipment.findUnique({
-    where: { playerId_slot: { playerId, slot: 'main_hand' } },
-    include: { item: { include: { template: true } } },
-  });
-
-  const requiredSkill = mainHand?.item?.template?.requiredSkill as SkillType | null | undefined;
-  return attackSkillFromRequiredSkill(requiredSkill);
-}
-
-async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
-  const skill = await prisma.playerSkill.findUnique({
-    where: { playerId_skillType: { playerId, skillType } },
-    select: { level: true },
-  });
-
-  return skill?.level ?? 1;
 }
 
 function pickWeighted<T>(

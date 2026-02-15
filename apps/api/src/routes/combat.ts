@@ -16,7 +16,6 @@ import {
   type CombatOptions,
   type LootDrop,
   type MobTemplate,
-  type SkillType,
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -36,6 +35,7 @@ import {
   removePersistedMob,
 } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
+import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 
 export const combatRouter = Router();
 
@@ -44,7 +44,6 @@ combatRouter.use(authenticate);
 const prismaAny = prisma as unknown as any;
 
 const attackSkillSchema = z.enum(['melee', 'ranged', 'magic']);
-type AttackSkill = z.infer<typeof attackSkillSchema>;
 type LootDropWithName = LootDrop & { itemName: string | null };
 type EncounterSiteSize = 'small' | 'medium' | 'large';
 
@@ -71,11 +70,6 @@ const listEncounterSitesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
 });
-
-function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
-  if (value === 'melee' || value === 'ranged' || value === 'magic') return value;
-  return null;
-}
 
 function pickWeighted<T extends { encounterWeight: number }>(items: T[]): T | null {
   const totalWeight = items.reduce((sum, item) => sum + item.encounterWeight, 0);
@@ -238,25 +232,6 @@ async function applyEncounterSiteDecayAndPersist(
     state,
     nextMob: getNextEncounterMob(decayed.mobs),
   };
-}
-
-async function getMainHandAttackSkill(playerId: string): Promise<AttackSkill | null> {
-  const mainHand = await prisma.playerEquipment.findUnique({
-    where: { playerId_slot: { playerId, slot: 'main_hand' } },
-    include: { item: { include: { template: true } } },
-  });
-
-  const requiredSkill = mainHand?.item?.template?.requiredSkill as SkillType | null | undefined;
-  return attackSkillFromRequiredSkill(requiredSkill);
-}
-
-async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
-  const skill = await prisma.playerSkill.findUnique({
-    where: { playerId_skillType: { playerId, skillType } },
-    select: { level: true },
-  });
-
-  return skill?.level ?? 1;
 }
 
 /**

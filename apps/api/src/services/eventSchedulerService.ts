@@ -245,8 +245,9 @@ async function trySpawnBoss(io: SocketServer | null, zoneId: string, zoneName: s
     data: { expiresAt: null },
   });
 
-  // Create boss encounter (placeholder HP — scaled dynamically on round 1)
-  await createBossEncounter(event.id, bossMob.id, 1000);
+  // Create boss encounter (base HP from mob template — scaled dynamically on round 1)
+  const bossHp = bossMob.bossBaseHp ?? bossMob.hp;
+  await createBossEncounter(event.id, bossMob.id, bossHp);
 
   await emitSystemMessage(io, 'world', 'world', `A boss has appeared in ${zoneName}: ${bossMob.name}!`);
   await emitSystemMessage(io, 'zone', `zone:${zoneId}`, `A boss has appeared: ${bossMob.name}! Sign up for the raid!`);

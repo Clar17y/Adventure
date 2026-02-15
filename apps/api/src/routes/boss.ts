@@ -133,7 +133,7 @@ bossRouter.post('/:id/signup', async (req, res, next) => {
       where: { id: playerId },
       select: { currentZoneId: true },
     });
-    if (event?.zoneId && player?.currentZoneId !== event.zoneId) {
+    if (!event?.zoneId || player?.currentZoneId !== event.zoneId) {
       throw new AppError(400, 'You must be in the boss zone to sign up', 'WRONG_ZONE');
     }
 

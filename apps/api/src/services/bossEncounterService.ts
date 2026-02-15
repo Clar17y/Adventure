@@ -209,7 +209,7 @@ export async function resolveBossRound(
   const tierIndex = Math.max(0, Math.min(4, zoneTier - 1));
   const participantCount = signups.length;
 
-  // Dynamic scaling on first round of each attempt (scaledAt is null)
+  // Boss scales once per attempt based on founding party size (M5: intentional design)
   if (!encounter.scaledAt) {
     const scaledMaxHp = WORLD_EVENT_CONSTANTS.BOSS_HP_PER_PLAYER_BY_TIER[tierIndex]! * participantCount;
     const hpPercent = encounter.maxHp > 0 ? encounter.currentHp / encounter.maxHp : 1;
@@ -226,39 +226,49 @@ export async function resolveBossRound(
   const attackers: BossRoundAttacker[] = [];
   const healers: BossRoundHealer[] = [];
 
+  // M3: batch all participant stat lookups in parallel
+  const participantData = await Promise.all(
+    signups.map(async (signup) => {
+      const [hpState, equipStats, progression] = await Promise.all([
+        getHpState(signup.playerId),
+        getEquipmentStats(signup.playerId),
+        getPlayerProgressionState(signup.playerId),
+      ]);
+
+      if (signup.role === 'attacker') {
+        const mainHandSkill = await getMainHandAttackSkill(signup.playerId);
+        const attackSkill = mainHandSkill ?? 'melee';
+        const attackSkillLevel = await getSkillLevel(signup.playerId, attackSkill);
+        return { signup, hpState, equipStats, progression, role: 'attacker' as const, attackSkill, attackSkillLevel };
+      } else {
+        const magicLevel = await getSkillLevel(signup.playerId, 'magic');
+        return { signup, hpState, equipStats, progression, role: 'healer' as const, magicLevel };
+      }
+    }),
+  );
+
   let raidPoolMax = 0;
   let totalDefence = 0;
 
-  for (const signup of signups) {
-    const [hpState, equipStats, progression] = await Promise.all([
-      getHpState(signup.playerId),
-      getEquipmentStats(signup.playerId),
-      getPlayerProgressionState(signup.playerId),
-    ]);
+  for (const pd of participantData) {
+    raidPoolMax += pd.hpState.maxHp;
+    totalDefence += pd.equipStats.armor;
 
-    raidPoolMax += hpState.maxHp;
-    totalDefence += equipStats.armor;
-
-    if (signup.role === 'attacker') {
-      const mainHandSkill = await getMainHandAttackSkill(signup.playerId);
-      const attackSkill = mainHandSkill ?? 'melee';
-      const skillLevel = await getSkillLevel(signup.playerId, attackSkill);
+    if (pd.role === 'attacker') {
       const stats = buildPlayerCombatStats(
-        hpState.maxHp, hpState.maxHp,
-        { attackStyle: attackSkill, skillLevel, attributes: progression.attributes },
-        equipStats,
+        pd.hpState.maxHp, pd.hpState.maxHp,
+        { attackStyle: pd.attackSkill, skillLevel: pd.attackSkillLevel, attributes: pd.progression.attributes },
+        pd.equipStats,
       );
-      // M1: turns invested boost attacker damage
-      const turnMultiplier = 1 + signup.turnsCommitted * WORLD_EVENT_CONSTANTS.ATTACKER_TURN_SCALING;
+      const turnMultiplier = 1 + pd.signup.turnsCommitted * WORLD_EVENT_CONSTANTS.ATTACKER_TURN_SCALING;
       stats.damageMin = Math.round(stats.damageMin * turnMultiplier);
       stats.damageMax = Math.round(stats.damageMax * turnMultiplier);
-      attackers.push({ playerId: signup.playerId, stats });
+      attackers.push({ playerId: pd.signup.playerId, stats });
     } else {
-      const magicLevel = await getSkillLevel(signup.playerId, 'magic');
       const healAmount = Math.floor(
-        signup.turnsCommitted * (1 + magicLevel * WORLD_EVENT_CONSTANTS.HEALER_MAGIC_SCALING),
+        pd.signup.turnsCommitted * (1 + pd.magicLevel * WORLD_EVENT_CONSTANTS.HEALER_MAGIC_SCALING),
       );
-      healers.push({ playerId: signup.playerId, healAmount });
+      healers.push({ playerId: pd.signup.playerId, healAmount });
     }
   }
 
@@ -343,43 +353,44 @@ export async function resolveBossRound(
   // Another process already resolved this round — bail out
   if (updated.count === 0) return null;
 
-  // Update participant damage/healing totals
-  for (const ar of result.attackerResults) {
-    if (ar.damage > 0) {
-      await prisma.bossParticipant.updateMany({
-        where: { encounterId, playerId: ar.playerId, roundNumber: nextRound },
-        data: { totalDamage: { increment: ar.damage } },
-      });
-    }
-  }
-  for (const hr of result.healerResults) {
-    if (hr.healAmount > 0) {
-      await prisma.bossParticipant.updateMany({
-        where: { encounterId, playerId: hr.playerId, roundNumber: nextRound },
-        data: { totalHealing: { increment: hr.healAmount } },
-      });
-    }
-  }
+  // M3: batch participant damage/healing updates in parallel
+  await Promise.all([
+    ...result.attackerResults
+      .filter((ar) => ar.damage > 0)
+      .map((ar) =>
+        prisma.bossParticipant.updateMany({
+          where: { encounterId, playerId: ar.playerId, roundNumber: nextRound },
+          data: { totalDamage: { increment: ar.damage } },
+        }),
+      ),
+    ...result.healerResults
+      .filter((hr) => hr.healAmount > 0)
+      .map((hr) =>
+        prisma.bossParticipant.updateMany({
+          where: { encounterId, playerId: hr.playerId, roundNumber: nextRound },
+          data: { totalHealing: { increment: hr.healAmount } },
+        }),
+      ),
+  ]);
 
   // Handle raid wipe
   if (result.raidWiped) {
-    for (const signup of signups) {
-      const [hpState, progression] = await Promise.all([
-        getHpState(signup.playerId),
-        getPlayerProgressionState(signup.playerId),
-      ]);
-      const fleeResult = calculateFleeResult({
-        evasionLevel: progression.attributes.evasion,
-        mobLevel: encounter.mobTemplate.level ?? 1,
-        maxHp: hpState.maxHp,
-        currentGold: 0,
-      });
-      if (fleeResult.outcome === 'knockout') {
-        await enterRecoveringState(signup.playerId, hpState.maxHp);
-      } else {
-        await setHp(signup.playerId, fleeResult.remainingHp);
-      }
-    }
+    // M3: batch flee rolls in parallel (reuse participantData from above)
+    await Promise.all(
+      participantData.map(async (pd) => {
+        const fleeResult = calculateFleeResult({
+          evasionLevel: pd.progression.attributes.evasion,
+          mobLevel: encounter.mobTemplate.level ?? 1,
+          maxHp: pd.hpState.maxHp,
+          currentGold: 0,
+        });
+        if (fleeResult.outcome === 'knockout') {
+          await enterRecoveringState(pd.signup.playerId, pd.hpState.maxHp);
+        } else {
+          await setHp(pd.signup.playerId, fleeResult.remainingHp);
+        }
+      }),
+    );
 
     // Persist boss HP and reset scaling for next attempt (don't reset roundNumber — C1 fix)
     await prisma.bossEncounter.update({

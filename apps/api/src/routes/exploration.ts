@@ -30,8 +30,8 @@ import { degradeEquippedDurability } from '../services/durabilityService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { discoverZone, getUndiscoveredNeighborZones, respawnToHomeTown } from '../services/zoneDiscoveryService';
-import { getActiveZoneModifiers } from '../services/worldEventService';
-import { spawnWorldEvent } from '../services/worldEventService';
+import { getActiveZoneModifiers, spawnWorldEvent } from '../services/worldEventService';
+import { createBossEncounter } from '../services/bossEncounterService';
 import { checkAndSpawnEvents } from '../services/eventSchedulerService';
 import { getIo } from '../socket';
 import { emitSystemMessage } from '../services/systemMessageService';
@@ -740,6 +740,73 @@ explorationRouter.post('/start', async (req, res, next) => {
       }
 
       if (outcome.type === 'event_discovery') {
+        // Roll for boss discovery first
+        if (Math.random() < WORLD_EVENT_CONSTANTS.BOSS_DISCOVERY_CHANCE) {
+          const activeBosses = await prisma.bossEncounter.count({
+            where: { status: { in: ['waiting', 'in_progress'] } },
+          });
+
+          if (activeBosses < WORLD_EVENT_CONSTANTS.MAX_BOSS_ENCOUNTERS) {
+            const familyIds = zoneFamilies.map((f: ZoneFamilyRow) => f.mobFamilyId);
+            const bossMobs = await prisma.mobTemplate.findMany({
+              where: {
+                isBoss: true,
+                familyMembers: { some: { mobFamilyId: { in: familyIds } } },
+              },
+            });
+
+            if (bossMobs.length > 0) {
+              const bossMob = bossMobs[Math.floor(Math.random() * bossMobs.length)]!;
+              const bossHp = bossMob.bossBaseHp ?? bossMob.hp;
+
+              // Create a boss world event with no expiry (lasts until defeated)
+              const bossEvent = await prisma.worldEvent.create({
+                data: {
+                  type: 'boss',
+                  zoneId: body.zoneId,
+                  title: `${bossMob.name} Awakens`,
+                  description: `A powerful ${bossMob.name} has appeared in ${zone.name}!`,
+                  effectType: 'damage_up',
+                  effectValue: 0,
+                  expiresAt: null,
+                  status: 'active',
+                  createdBy: 'player_discovery',
+                },
+                include: { zone: { select: { name: true } } },
+              });
+
+              const bossEncounter = await createBossEncounter(bossEvent.id, bossMob.id, bossHp);
+
+              await emitSystemMessage(
+                getIo(),
+                'world',
+                'world',
+                `A boss has appeared in ${zone.name}: ${bossMob.name} Awakens!`,
+              );
+              await emitSystemMessage(
+                getIo(),
+                'zone',
+                `zone:${body.zoneId}`,
+                `${bossMob.name} has awakened! Rally adventurers to defeat it.`,
+              );
+
+              events.push({
+                turn: outcome.turnOccurred,
+                type: 'event_discovery',
+                description: `You discovered a boss: **${bossMob.name} Awakens** — a powerful ${bossMob.name} has appeared in ${zone.name}!`,
+                details: {
+                  eventId: bossEvent.id,
+                  eventTitle: `${bossMob.name} Awakens`,
+                  bossEncounterId: bossEncounter.id,
+                  bossMobName: bossMob.name,
+                },
+              });
+
+              continue;
+            }
+          }
+        }
+
         // Pick a random zone-scoped, zone-wide template (no world-wide or targeted)
         const eligible = WORLD_EVENT_TEMPLATES.filter(
           (t) => t.scope === 'zone' && t.targeting === 'zone',

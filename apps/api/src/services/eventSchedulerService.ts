@@ -6,6 +6,7 @@ import {
   type WorldEventTemplate,
 } from '@adventure/shared';
 import { expireStaleEvents, spawnWorldEvent } from './worldEventService';
+import { createBossEncounter, checkAndResolveDueBossRounds } from './bossEncounterService';
 import { emitSystemMessage } from './systemMessageService';
 
 let lastRunAt = 0;
@@ -205,6 +206,54 @@ async function trySpawnWorldWideEvent(io: SocketServer | null): Promise<void> {
   }
 }
 
+async function trySpawnBoss(io: SocketServer | null, zoneId: string, zoneName: string): Promise<boolean> {
+  const activeBosses = await prisma.bossEncounter.count({
+    where: { status: { in: ['waiting', 'in_progress'] } },
+  });
+  if (activeBosses >= WORLD_EVENT_CONSTANTS.MAX_BOSS_ENCOUNTERS) return false;
+
+  const zoneFamilies = await prisma.zoneMobFamily.findMany({
+    where: { zoneId },
+    select: { mobFamilyId: true },
+  });
+  const familyIds = zoneFamilies.map(f => f.mobFamilyId);
+
+  const bossMobs = await prisma.mobTemplate.findMany({
+    where: {
+      isBoss: true,
+      familyMembers: { some: { mobFamilyId: { in: familyIds } } },
+    },
+  });
+  if (bossMobs.length === 0) return false;
+
+  const bossMob = bossMobs[Math.floor(Math.random() * bossMobs.length)]!;
+
+  const event = await spawnWorldEvent({
+    type: 'boss',
+    zoneId,
+    title: `${bossMob.name} Appears`,
+    description: `A fearsome ${bossMob.name} has been spotted in ${zoneName}!`,
+    effectType: 'damage_up',
+    effectValue: 0,
+    durationHours: 0,
+  });
+  if (!event) return false;
+
+  // Bosses don't time-expire
+  await prisma.worldEvent.update({
+    where: { id: event.id },
+    data: { expiresAt: null },
+  });
+
+  // Create boss encounter (placeholder HP — scaled dynamically on round 1)
+  await createBossEncounter(event.id, bossMob.id, 1000);
+
+  await emitSystemMessage(io, 'world', 'world', `A boss has appeared in ${zoneName}: ${bossMob.name}!`);
+  await emitSystemMessage(io, 'zone', `zone:${zoneId}`, `A boss has appeared: ${bossMob.name}! Sign up for the raid!`);
+
+  return true;
+}
+
 /** Try to spawn a zone-scoped event. */
 async function trySpawnZoneEvent(io: SocketServer | null): Promise<void> {
   const activeZoneCount = await prisma.worldEvent.count({
@@ -237,6 +286,12 @@ async function trySpawnZoneEvent(io: SocketServer | null): Promise<void> {
   const candidatePool = freeZones.length > 0 ? freeZones : wildZones;
   const zone = pickRandom(candidatePool);
   if (!zone) return;
+
+  // Roll for boss spawn (before regular event)
+  if (Math.random() < WORLD_EVENT_CONSTANTS.BOSS_SPAWN_CHANCE) {
+    const spawned = await trySpawnBoss(io, zone.id, zone.name);
+    if (spawned) return;
+  }
 
   const zoneEffects = effectsByZone.get(zone.id) ?? new Set();
 
@@ -292,6 +347,9 @@ export async function checkAndSpawnEvents(io: SocketServer | null): Promise<void
       await emitSystemMessage(io, 'zone', `zone:${event.zoneId}`, `Event ended: ${event.title}`);
     }
   }
+
+  // Resolve any due boss rounds
+  await checkAndResolveDueBossRounds(io);
 
   // Respawn cooldown (DB-based, survives server restarts)
   const cooldownMs = WORLD_EVENT_CONSTANTS.EVENT_RESPAWN_DELAY_MINUTES * 60 * 1000;

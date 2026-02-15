@@ -46,6 +46,8 @@ export interface BossEncounterData {
   currentHp: number;
   maxHp: number;
   baseHp: number;
+  raidPoolHp: number | null;
+  raidPoolMax: number | null;
   roundNumber: number;
   nextRoundAt: string | null;
   status: BossEncounterStatus;

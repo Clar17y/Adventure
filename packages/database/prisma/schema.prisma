@@ -534,6 +534,8 @@ model BossEncounter {
   currentHp      Int       @map("current_hp")
   maxHp          Int       @map("max_hp")
   baseHp         Int       @map("base_hp")
+  raidPoolHp     Int?      @map("raid_pool_hp")
+  raidPoolMax    Int?      @map("raid_pool_max")
   scaledAt       DateTime? @map("scaled_at")
   roundNumber    Int       @default(0) @map("round_number")
   nextRoundAt    DateTime? @map("next_round_at")
@@ -544,6 +546,7 @@ model BossEncounter {
   mobTemplate   MobTemplate       @relation(fields: [mobTemplateId], references: [id])
   participants  BossParticipant[]
 
+  @@index([status, nextRoundAt])
   @@map("boss_encounters")
 }
 
@@ -563,6 +566,7 @@ model BossParticipant {
   player    Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([encounterId, playerId, roundNumber])
+  @@index([encounterId, roundNumber])
   @@map("boss_participants")
 }
 

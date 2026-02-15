@@ -32,6 +32,8 @@ function toBossEncounterData(row: {
   currentHp: number;
   maxHp: number;
   baseHp: number;
+  raidPoolHp: number | null;
+  raidPoolMax: number | null;
   roundNumber: number;
   nextRoundAt: Date | null;
   status: string;
@@ -44,6 +46,8 @@ function toBossEncounterData(row: {
     currentHp: row.currentHp,
     maxHp: row.maxHp,
     baseHp: row.baseHp,
+    raidPoolHp: row.raidPoolHp,
+    raidPoolMax: row.raidPoolMax,
     roundNumber: row.roundNumber,
     nextRoundAt: row.nextRoundAt?.toISOString() ?? null,
     status: row.status as BossEncounterStatus,
@@ -205,8 +209,8 @@ export async function resolveBossRound(
   const tierIndex = Math.max(0, Math.min(4, zoneTier - 1));
   const participantCount = signups.length;
 
-  // Dynamic scaling on first round transition
-  if (encounter.roundNumber === 0) {
+  // Dynamic scaling on first round of each attempt (scaledAt is null)
+  if (!encounter.scaledAt) {
     const scaledMaxHp = WORLD_EVENT_CONSTANTS.BOSS_HP_PER_PLAYER_BY_TIER[tierIndex]! * participantCount;
     const hpPercent = encounter.maxHp > 0 ? encounter.currentHp / encounter.maxHp : 1;
     const scaledCurrentHp = Math.round(scaledMaxHp * hpPercent);
@@ -264,13 +268,23 @@ export async function resolveBossRound(
     avgParticipantDefence: avgDefence,
   };
 
+  // Compute raid pool HP: use persisted percentage applied to current raidPoolMax
+  let currentRaidPool: number;
+  if (encounter.raidPoolHp !== null && encounter.raidPoolMax !== null && encounter.raidPoolMax > 0) {
+    // Apply stored percentage to current participant pool
+    const poolPercent = encounter.raidPoolHp / encounter.raidPoolMax;
+    currentRaidPool = Math.round(poolPercent * raidPoolMax);
+  } else {
+    currentRaidPool = raidPoolMax;
+  }
+
   const result = resolveBossRoundLogic({
     bossHp: encounter.currentHp,
     bossMaxHp: encounter.maxHp,
     boss: bossStats,
     attackers,
     healers,
-    raidPool: raidPoolMax,
+    raidPool: currentRaidPool,
     raidPoolMax,
   });
 
@@ -288,16 +302,22 @@ export async function resolveBossRound(
     killedBy = topAttacker?.playerId ?? null;
   }
 
-  await prisma.bossEncounter.update({
-    where: { id: encounterId },
+  // Optimistic lock: only update if roundNumber hasn't changed (C2 concurrency fix)
+  const updated = await prisma.bossEncounter.updateMany({
+    where: { id: encounterId, roundNumber: encounter.roundNumber },
     data: {
       currentHp: result.bossHpAfter,
       roundNumber: nextRound,
       nextRoundAt: nextNextRoundAt,
       status: result.bossDefeated ? 'defeated' : 'in_progress',
       killedBy,
+      raidPoolHp: result.raidPoolAfter,
+      raidPoolMax: raidPoolMax,
     },
   });
+
+  // Another process already resolved this round — bail out
+  if (updated.count === 0) return null;
 
   // Update participant damage/healing totals
   for (const ar of result.attackerResults) {
@@ -337,14 +357,16 @@ export async function resolveBossRound(
       }
     }
 
-    // Persist boss HP percentage and reset for next attempt
+    // Persist boss HP and reset scaling for next attempt (don't reset roundNumber — C1 fix)
     await prisma.bossEncounter.update({
       where: { id: encounterId },
       data: {
         currentHp: result.bossHpAfter,
-        roundNumber: 0,
         nextRoundAt: new Date(Date.now() + WORLD_EVENT_CONSTANTS.BOSS_ROUND_INTERVAL_MINUTES * 60 * 1000),
         status: 'waiting',
+        scaledAt: null,
+        raidPoolHp: null,
+        raidPoolMax: null,
       },
     });
 

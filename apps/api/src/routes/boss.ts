@@ -75,22 +75,11 @@ bossRouter.get('/:id', async (req, res, next) => {
       select: { name: true, level: true },
     });
 
-    // Compute raid pool from next-round signups
-    const nextRound = data.encounter.roundNumber + 1;
-    const currentSignups = data.participants.filter((p) => p.roundNumber === nextRound);
-    let raidPoolMax = 0;
-    for (const p of currentSignups) {
-      const hp = await getHpState(p.playerId);
-      raidPoolMax += hp.maxHp;
-    }
-
     res.json({
       encounter: {
         ...data.encounter,
         mobName: mob?.name ?? 'Unknown',
         mobLevel: mob?.level ?? 1,
-        raidPoolHp: raidPoolMax,
-        raidPoolMax,
       },
       participants: data.participants,
     });

@@ -1122,6 +1122,8 @@ export interface BossEncounterResponse {
   mobLevel: number;
   zoneId?: string;
   zoneName?: string;
+  raidPoolHp?: number;
+  raidPoolMax?: number;
 }
 
 export interface BossParticipantResponse {

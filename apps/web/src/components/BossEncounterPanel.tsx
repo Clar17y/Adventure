@@ -89,6 +89,22 @@ export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelP
         </div>
       </div>
 
+      {/* Raid Pool */}
+      {encounter.raidPoolMax != null && encounter.raidPoolMax > 0 && (
+        <div>
+          <div className="flex justify-between text-xs mb-1">
+            <span>Raid Pool</span>
+            <span>{encounter.raidPoolMax.toLocaleString()} HP</span>
+          </div>
+          <div className="w-full h-3 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <div
+              className="h-full rounded-full"
+              style={{ width: '100%', background: 'var(--rpg-green-light)' }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Status */}
       <div className="flex justify-between text-xs">
         <span>

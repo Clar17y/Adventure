@@ -53,9 +53,9 @@ interface DashboardProps {
 
 const ATTRIBUTE_META = {
   vitality: { label: 'Vitality', description: 'HP and regen', icon: Heart, color: 'var(--rpg-green-light)' },
-  strength: { label: 'Strength', description: 'Melee damage', icon: Sword, color: 'var(--rpg-red)' },
-  dexterity: { label: 'Dexterity', description: 'Ranged + accuracy', icon: Crosshair, color: 'var(--rpg-blue-light)' },
-  intelligence: { label: 'Intelligence', description: 'Magic power', icon: Sparkles, color: 'var(--rpg-purple)' },
+  strength: { label: 'Strength', description: 'Melee damage + accuracy', icon: Sword, color: 'var(--rpg-red)' },
+  dexterity: { label: 'Dexterity', description: 'Ranged damage + accuracy', icon: Crosshair, color: 'var(--rpg-blue-light)' },
+  intelligence: { label: 'Intelligence', description: 'Magic damage + accuracy', icon: Sparkles, color: 'var(--rpg-purple)' },
   luck: { label: 'Luck', description: 'Crits and drops', icon: Dice5, color: 'var(--rpg-gold)' },
   evasion: { label: 'Evasion', description: 'Dodge chance', icon: Wind, color: 'var(--rpg-blue-light)' },
 } as const;

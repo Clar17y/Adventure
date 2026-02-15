@@ -129,9 +129,11 @@ export function buildPlayerCombatStats(
       ? input.attributes.intelligence * CHARACTER_CONSTANTS.MAGIC_DAMAGE_PER_INTELLIGENCE
       : input.attributes.strength * CHARACTER_CONSTANTS.MELEE_DAMAGE_PER_STRENGTH;
 
-  const accuracyFromDexterity = input.attackStyle === 'ranged'
-    ? input.attributes.dexterity * CHARACTER_CONSTANTS.ACCURACY_PER_DEXTERITY
-    : 0;
+  const accuracyFromAttribute =
+    input.attackStyle === 'melee'  ? input.attributes.strength * CHARACTER_CONSTANTS.ACCURACY_PER_STRENGTH :
+    input.attackStyle === 'ranged' ? input.attributes.dexterity * CHARACTER_CONSTANTS.ACCURACY_PER_DEXTERITY :
+    input.attackStyle === 'magic'  ? input.attributes.intelligence * CHARACTER_CONSTANTS.ACCURACY_PER_INTELLIGENCE :
+    0;
 
   const totalAttack = input.skillLevel + weaponPower + attributeDamageBonus;
 
@@ -139,7 +141,7 @@ export function buildPlayerCombatStats(
     hp: Math.min(currentHp, maxHp),
     maxHp,
     attack: totalAttack,
-    accuracy: Math.floor(input.skillLevel / 2) + equipmentStats.accuracy + accuracyFromDexterity,
+    accuracy: Math.floor(input.skillLevel / 2) + equipmentStats.accuracy + accuracyFromAttribute,
     defence: equipmentStats.armor,
     magicDefence: equipmentStats.magicDefence,
     dodge: equipmentStats.dodge,

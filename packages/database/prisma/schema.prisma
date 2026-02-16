@@ -17,6 +17,7 @@ model Player {
   email        String    @unique @db.VarChar(255)
   passwordHash String    @map("password_hash") @db.VarChar(255)
   role         String    @default("player") @db.VarChar(16)
+  isBot        Boolean   @default(false) @map("is_bot")
   createdAt    DateTime  @default(now()) @map("created_at")
   lastActiveAt DateTime? @map("last_active_at")
 
@@ -32,6 +33,9 @@ model Player {
   isRecovering  Boolean  @default(false) @map("is_recovering")
   recoveryCost  Int?     @map("recovery_cost")
 
+  // Auto-Potion
+  autoPotionThreshold Int @default(0) @map("auto_potion_threshold")
+
   // Zone / Travel
   currentZoneId          String? @map("current_zone_id")
   lastTravelledFromZoneId String? @map("last_travelled_from_zone_id")
@@ -41,21 +45,23 @@ model Player {
   lastTravelledFromZone  Zone?   @relation("breadcrumb_zone", fields: [lastTravelledFromZoneId], references: [id])
   homeTown               Zone?   @relation("home_town", fields: [homeTownId], references: [id])
 
-  turnBank          TurnBank?
-  skills            PlayerSkill[]
-  equipment         PlayerEquipment[]
-  items             Item[]
-  bestiary          PlayerBestiary[]
-  bestiaryPrefixes  PlayerBestiaryPrefix[]
-  activityLogs      ActivityLog[]
-  encounterSites    EncounterSite[]
-  knownRecipes      PlayerRecipe[]
-  refreshTokens     RefreshToken[]
-  resourceNodes     PlayerResourceNode[]
-  zoneDiscoveries   PlayerZoneDiscovery[]
-  pvpRating         PvpRating?
-  pvpAttacks        PvpMatch[] @relation("PvpAttacker")
-  pvpDefenses       PvpMatch[] @relation("PvpDefender")
+  turnBank           TurnBank?
+  skills             PlayerSkill[]
+  equipment          PlayerEquipment[]
+  items              Item[]
+  bestiary           PlayerBestiary[]
+  bestiaryPrefixes   PlayerBestiaryPrefix[]
+  activityLogs       ActivityLog[]
+  encounterSites     EncounterSite[]
+  knownRecipes       PlayerRecipe[]
+  refreshTokens      RefreshToken[]
+  resourceNodes      PlayerResourceNode[]
+  zoneDiscoveries    PlayerZoneDiscovery[]
+  pvpRating          PvpRating?
+  pvpAttacks         PvpMatch[] @relation("PvpAttacker")
+  pvpDefenses        PvpMatch[] @relation("PvpDefender")
+  bossParticipants   BossParticipant[]
+  persistedMobs      PersistedMob[]
 
   @@map("players")
 }
@@ -191,6 +197,7 @@ model Zone {
   playersHere        Player[]                @relation("current_zone")
   playersBreadcrumb  Player[]                @relation("breadcrumb_zone")
   playersHome        Player[]                @relation("home_town")
+  worldEvents        WorldEvent[]
 
   @@map("zones")
 }
@@ -226,27 +233,32 @@ model PlayerZoneDiscovery {
 // =============================================================================
 
 model MobTemplate {
-  id              String @id @default(uuid())
-  name            String @db.VarChar(64)
-  zoneId          String @map("zone_id")
-  level           Int    @default(1)
+  id              String  @id @default(uuid())
+  name            String  @db.VarChar(64)
+  zoneId          String  @map("zone_id")
+  level           Int     @default(1)
   hp              Int
   accuracy        Int
   defence         Int
-  magicDefence    Int    @default(0) @map("magic_defence")
+  magicDefence    Int     @default(0) @map("magic_defence")
   evasion         Int
-  damageMin       Int    @map("damage_min")
-  damageMax       Int    @map("damage_max")
-  xpReward        Int    @map("xp_reward")
-  encounterWeight Int    @default(100) @map("encounter_weight")
-  spellPattern    Json   @default("[]") @map("spell_pattern")
-  damageType      String @default("physical") @map("damage_type")
+  damageMin       Int     @map("damage_min")
+  damageMax       Int     @map("damage_max")
+  xpReward        Int     @map("xp_reward")
+  encounterWeight Int     @default(100) @map("encounter_weight")
+  spellPattern    Json    @default("[]") @map("spell_pattern")
+  damageType      String  @default("physical") @map("damage_type")
+  isBoss          Boolean @default(false) @map("is_boss")
+  bossAoeDmg      Int?    @map("boss_aoe_dmg")
+  bossBaseHp      Int?    @map("boss_base_hp")
 
-  zone             Zone              @relation(fields: [zoneId], references: [id])
-  dropTables       DropTable[]
-  bestiary         PlayerBestiary[]
-  bestiaryPrefixes PlayerBestiaryPrefix[]
-  familyMembers    MobFamilyMember[]
+  zone              Zone               @relation(fields: [zoneId], references: [id])
+  dropTables        DropTable[]
+  bestiary          PlayerBestiary[]
+  bestiaryPrefixes  PlayerBestiaryPrefix[]
+  familyMembers     MobFamilyMember[]
+  bossEncounters    BossEncounter[]
+  persistedMobs     PersistedMob[]
 
   @@map("mob_templates")
 }
@@ -484,6 +496,7 @@ model ChatMessage {
   playerId    String   @map("player_id")
   username    String   @db.VarChar(32)
   message     String   @db.VarChar(200)
+  messageType String   @default("player") @map("message_type") @db.VarChar(8)
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@index([channelType, channelId, createdAt])
@@ -543,4 +556,96 @@ model PvpCooldown {
 
   @@unique([attackerId, defenderId])
   @@map("pvp_cooldowns")
+}
+
+// =============================================================================
+// WORLD EVENTS
+// =============================================================================
+
+model WorldEvent {
+  id             String   @id @default(uuid())
+  type           String   @db.VarChar(16)
+  zoneId         String?  @map("zone_id")
+  title          String   @db.VarChar(128)
+  description    String   @db.Text
+  effectType     String   @map("effect_type") @db.VarChar(32)
+  effectValue    Float    @map("effect_value")
+  targetMobId    String?  @map("target_mob_id")
+  targetFamily   String?  @map("target_family")
+  targetResource String?  @map("target_resource") @db.VarChar(64)
+  startedAt      DateTime @default(now()) @map("started_at")
+  expiresAt      DateTime? @map("expires_at")
+  status         String   @default("active") @db.VarChar(16)
+  createdBy      String   @default("system") @map("created_by") @db.VarChar(32)
+
+  zone           Zone?           @relation(fields: [zoneId], references: [id])
+  bossEncounter  BossEncounter?
+
+  @@index([status, type])
+  @@index([zoneId, status])
+  @@map("world_events")
+}
+
+model BossEncounter {
+  id             String    @id @default(uuid())
+  eventId        String    @unique @map("event_id")
+  mobTemplateId  String    @map("mob_template_id")
+  currentHp      Int       @map("current_hp")
+  maxHp          Int       @map("max_hp")
+  baseHp         Int       @map("base_hp")
+  raidPoolHp     Int?      @map("raid_pool_hp")
+  raidPoolMax    Int?      @map("raid_pool_max")
+  scaledAt       DateTime? @map("scaled_at")
+  roundNumber    Int       @default(0) @map("round_number")
+  nextRoundAt    DateTime? @map("next_round_at")
+  status         String    @default("waiting") @db.VarChar(16)
+  killedBy       String?   @map("killed_by")
+  roundSummaries Json?     @map("round_summaries")
+
+  event         WorldEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mobTemplate   MobTemplate       @relation(fields: [mobTemplateId], references: [id])
+  participants  BossParticipant[]
+
+  @@index([status, nextRoundAt])
+  @@map("boss_encounters")
+}
+
+model BossParticipant {
+  id              String @id @default(uuid())
+  encounterId     String @map("encounter_id")
+  playerId        String @map("player_id")
+  role            String @db.VarChar(16)
+  roundNumber     Int    @map("round_number")
+  turnsCommitted  Int    @map("turns_committed")
+  totalDamage     Int    @default(0) @map("total_damage")
+  totalHealing    Int    @default(0) @map("total_healing")
+  attacks         Int    @default(0)
+  hits            Int    @default(0)
+  crits           Int    @default(0)
+  autoSignUp      Boolean @default(false) @map("auto_sign_up")
+  currentHp       Int    @map("current_hp")
+  status          String @default("alive") @db.VarChar(16)
+
+  encounter BossEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  player    Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([encounterId, playerId, roundNumber])
+  @@index([encounterId, roundNumber])
+  @@map("boss_participants")
+}
+
+model PersistedMob {
+  id            String   @id @default(uuid())
+  playerId      String   @map("player_id")
+  mobTemplateId String   @map("mob_template_id")
+  zoneId        String   @map("zone_id")
+  currentHp     Int      @map("current_hp")
+  maxHp         Int      @map("max_hp")
+  damagedAt     DateTime @default(now()) @map("damaged_at")
+
+  player      Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  mobTemplate MobTemplate @relation(fields: [mobTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, zoneId])
+  @@map("persisted_mobs")
 }

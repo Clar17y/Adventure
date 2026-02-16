@@ -20,16 +20,16 @@ Turn-based async RPG with real-time turn regeneration. Players explore, fight mo
 
 ```bash
 # Create a worktree with a new branch (-b creates the branch)
-git worktree add -b feature-branch-name ../adventure-feature-name
+git worktree add -b feature-branch-name .worktrees/adventure-feature-name
 
 # Create a worktree for an existing branch
-git worktree add ../adventure-feature-name feature-branch-name
+git worktree add .worktrees/adventure-feature-name feature-branch-name
 
 # List active worktrees
 git worktree list
 
 # Remove a worktree when done
-git worktree remove ../adventure-feature-name
+git worktree remove .worktrees/adventure-feature-name
 ```
 
 ## Project Structure

@@ -9,3 +9,4 @@ export { Bestiary } from './Bestiary';
 export { Crafting } from './Crafting';
 export { Forge } from './Forge';
 export { Gathering } from './Gathering';
+export { WorldEvents } from './WorldEvents';

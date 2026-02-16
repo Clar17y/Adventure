@@ -84,6 +84,46 @@ describe('buildPlayerCombatStats', () => {
     expect(stats.critDamage).toBe(0.35);
   });
 
+  it('adds strength-based accuracy for melee', () => {
+    const stats = buildPlayerCombatStats(
+      80, 100,
+      { attackStyle: 'melee', skillLevel: 10, attributes: { vitality: 0, strength: 8, dexterity: 0, intelligence: 0, luck: 0, evasion: 0 } },
+      { attack: 5, rangedPower: 0, magicPower: 0, accuracy: 3, armor: 0, magicDefence: 0, health: 0, dodge: 0 }
+    );
+    // floor(10/2) + 3 equipAccuracy + 8 strength = 16
+    expect(stats.accuracy).toBe(16);
+  });
+
+  it('adds dexterity-based accuracy for ranged', () => {
+    const stats = buildPlayerCombatStats(
+      80, 100,
+      { attackStyle: 'ranged', skillLevel: 10, attributes: { vitality: 0, strength: 0, dexterity: 8, intelligence: 0, luck: 0, evasion: 0 } },
+      { attack: 0, rangedPower: 5, magicPower: 0, accuracy: 3, armor: 0, magicDefence: 0, health: 0, dodge: 0 }
+    );
+    // floor(10/2) + 3 equipAccuracy + 8 dexterity = 16
+    expect(stats.accuracy).toBe(16);
+  });
+
+  it('adds intelligence-based accuracy for magic', () => {
+    const stats = buildPlayerCombatStats(
+      80, 100,
+      { attackStyle: 'magic', skillLevel: 10, attributes: { vitality: 0, strength: 0, dexterity: 0, intelligence: 8, luck: 0, evasion: 0 } },
+      { attack: 0, rangedPower: 0, magicPower: 5, accuracy: 3, armor: 0, magicDefence: 0, health: 0, dodge: 0 }
+    );
+    // floor(10/2) + 3 equipAccuracy + 8 intelligence = 16
+    expect(stats.accuracy).toBe(16);
+  });
+
+  it('does not use off-attribute for accuracy', () => {
+    const stats = buildPlayerCombatStats(
+      80, 100,
+      { attackStyle: 'melee', skillLevel: 10, attributes: { vitality: 0, strength: 0, dexterity: 10, intelligence: 10, luck: 0, evasion: 0 } },
+      { attack: 5, rangedPower: 0, magicPower: 0, accuracy: 3, armor: 0, magicDefence: 0, health: 0, dodge: 0 }
+    );
+    // floor(10/2) + 3 equipAccuracy + 0 (strength is 0, dex/int ignored) = 8
+    expect(stats.accuracy).toBe(8);
+  });
+
   it('sets damageType to physical for melee attackStyle', () => {
     const stats = buildPlayerCombatStats(
       80, 100,

@@ -3,6 +3,7 @@ import {
   CRIT_STAT_CONSTANTS,
   SLOT_STAT_POOLS,
   type EquipmentSlot,
+  type ItemRarity,
   type ItemStats,
   type ItemType,
 } from '@adventure/shared';
@@ -26,7 +27,10 @@ export interface CraftingCritRolls {
 
 export interface CraftingCritResult {
   isCrit: boolean;
+  rarity: ItemRarity;
   critChance: number;
+  rareCraftChance: number;
+  epicCraftChance: number;
   bonusStat: CraftingCritStat | null;
   bonusValue: number | null;
 }
@@ -58,6 +62,34 @@ export function calculateCritChance(
     CRAFTING_CONSTANTS.MIN_CRIT_CHANCE,
     CRAFTING_CONSTANTS.MAX_CRIT_CHANCE
   );
+}
+
+export function calculateRareCraftChance(
+  skillLevel: number,
+  requiredLevel: number,
+  luckStat: number
+): number {
+  const levelDelta = skillLevel - requiredLevel;
+  const luckBonus = luckStat * CRAFTING_CONSTANTS.RARE_CRAFT_LUCK_BONUS_PER_POINT;
+  const rawChance = CRAFTING_CONSTANTS.RARE_CRAFT_BASE_CHANCE +
+    levelDelta * CRAFTING_CONSTANTS.RARE_CRAFT_CHANCE_PER_LEVEL +
+    luckBonus;
+
+  return clamp(rawChance, 0, CRAFTING_CONSTANTS.RARE_CRAFT_MAX_CHANCE);
+}
+
+export function calculateEpicCraftChance(
+  skillLevel: number,
+  requiredLevel: number,
+  luckStat: number
+): number {
+  const levelDelta = skillLevel - requiredLevel;
+  const luckBonus = luckStat * CRAFTING_CONSTANTS.EPIC_CRAFT_LUCK_BONUS_PER_POINT;
+  const rawChance = CRAFTING_CONSTANTS.EPIC_CRAFT_BASE_CHANCE +
+    levelDelta * CRAFTING_CONSTANTS.EPIC_CRAFT_CHANCE_PER_LEVEL +
+    luckBonus;
+
+  return clamp(rawChance, 0, CRAFTING_CONSTANTS.EPIC_CRAFT_MAX_CHANCE);
 }
 
 function hasPositiveBase(baseStats: ItemStats | null | undefined, stat: string): boolean {
@@ -155,25 +187,29 @@ export function calculateCraftingCrit(
   rolls?: CraftingCritRolls
 ): CraftingCritResult {
   const critChance = calculateCritChance(input.skillLevel, input.requiredLevel, input.luckStat);
+  const rareCraftChance = calculateRareCraftChance(input.skillLevel, input.requiredLevel, input.luckStat);
+  const epicCraftChance = calculateEpicCraftChance(input.skillLevel, input.requiredLevel, input.luckStat);
   const eligibleStats = getEligibleBonusStats(input.itemType, input.baseStats, input.slot);
 
+  const noChances = { critChance, rareCraftChance, epicCraftChance };
+
   if (eligibleStats.length === 0) {
-    return {
-      isCrit: false,
-      critChance,
-      bonusStat: null,
-      bonusValue: null,
-    };
+    return { isCrit: false, rarity: 'common', ...noChances, bonusStat: null, bonusValue: null };
   }
 
   const critRoll = randomUnit(rolls?.critRoll);
   if (critRoll >= critChance) {
-    return {
-      isCrit: false,
-      critChance,
-      bonusStat: null,
-      bonusValue: null,
-    };
+    return { isCrit: false, rarity: 'common', ...noChances, bonusStat: null, bonusValue: null };
+  }
+
+  // Crit succeeded — determine tier (epic < rare < uncommon)
+  let rarity: ItemRarity;
+  if (critRoll < epicCraftChance) {
+    rarity = 'epic';
+  } else if (critRoll < rareCraftChance) {
+    rarity = 'rare';
+  } else {
+    rarity = 'uncommon';
   }
 
   const rolledBonus = rollBonusStat(eligibleStats, input.baseStats, {
@@ -182,17 +218,13 @@ export function calculateCraftingCrit(
   });
 
   if (!rolledBonus) {
-    return {
-      isCrit: false,
-      critChance,
-      bonusStat: null,
-      bonusValue: null,
-    };
+    return { isCrit: false, rarity: 'common', ...noChances, bonusStat: null, bonusValue: null };
   }
 
   return {
     isCrit: true,
-    critChance,
+    rarity,
+    ...noChances,
     bonusStat: rolledBonus.stat,
     bonusValue: rolledBonus.value,
   };

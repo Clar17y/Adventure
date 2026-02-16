@@ -3,9 +3,13 @@ import {
   CombatActor,
   CombatState,
   CombatLogEntry,
+  CombatOptions,
+  CombatPotion,
   CombatResult,
   CombatantStats,
   Combatant,
+  POTION_CONSTANTS,
+  PotionConsumed,
   SpellAction,
 } from '@adventure/shared';
 import {
@@ -78,10 +82,16 @@ function tickEffects(state: CombatState, names: { combatantA: string; combatantB
   }
 
   if (expiredNames.size > 0) {
+    // Derive actor: if all expired effects targeted the player, the actor is player
+    const targets = Array.from(expiredNames.values()).map(e => e.target);
+    const actor = targets.every(t => t === 'player') ? 'player' : 'mob';
+
+    const actor = targets.every(t => t === 'combatantA') ? 'combatantA' as CombatActor : 'combatantB' as CombatActor;
+
     state.log.push({
       round: state.round,
-      actor: 'combatantB',
-      actorName: names.combatantB,
+      actor,
+      actorName: actor === 'combatantA' ? names.combatantA : names.combatantB,
       action: 'spell',
       message: Array.from(expiredNames.keys()).map(n => `${n} wore off.`).join(' '),
       effectsExpired: Array.from(expiredNames.entries()).map(([name, { target }]) => ({ name, target })),
@@ -123,11 +133,98 @@ function getEffectiveStats(baseStats: CombatantStats, activeEffects: ActiveEffec
   return effective;
 }
 
+function tryAutoPotion(
+  state: CombatState,
+  availablePotions: CombatPotion[],
+  potionsConsumed: PotionConsumed[],
+  threshold: number,
+): boolean {
+  if (threshold <= 0 || availablePotions.length === 0) return false;
+
+  const hpPercent = (state.combatantAHp / state.combatantAMaxHp) * 100;
+  if (hpPercent >= threshold) return false;
+
+  // Check for Potion Sickness active effect
+  const hasSickness = state.activeEffects.some(
+    e => e.target === 'combatantA' && e.stat === 'potionSickness'
+  );
+  if (hasSickness) return false;
+
+  // Smart selection: pick weakest potion whose healAmount >= deficit
+  const deficit = Math.floor(state.combatantAMaxHp * (threshold / 100)) - state.combatantAHp;
+  let chosenIndex = -1;
+
+  // Ensure ascending sort for weakest-sufficient selection
+  availablePotions.sort((a, b) => a.healAmount - b.healAmount);
+
+  for (let i = 0; i < availablePotions.length; i++) {
+    if (availablePotions[i].healAmount >= deficit) {
+      chosenIndex = i;
+      break;
+    }
+  }
+
+  // If none fully covers the deficit, pick the strongest available (last one)
+  if (chosenIndex === -1) {
+    chosenIndex = availablePotions.length - 1;
+  }
+
+  const potion = availablePotions[chosenIndex];
+  const hpBefore = state.combatantAHp;
+  state.combatantAHp = Math.min(state.combatantAMaxHp, state.combatantAHp + potion.healAmount);
+  const actualHeal = state.combatantAHp - hpBefore;
+
+  // Remove used potion from pool
+  availablePotions.splice(chosenIndex, 1);
+
+  // Record consumption
+  potionsConsumed.push({
+    templateId: potion.templateId,
+    name: potion.name,
+    healAmount: actualHeal,
+    round: state.round,
+  });
+
+  // Apply Potion Sickness cooldown
+  const sicknessEffect: ActiveEffect = {
+    name: 'Potion Sickness',
+    target: 'combatantA',
+    stat: 'potionSickness',
+    modifier: 0,
+    remainingRounds: POTION_CONSTANTS.AUTO_POTION_SICKNESS_DURATION,
+  };
+  state.activeEffects.push(sicknessEffect);
+
+  // Log the potion use
+  state.log.push({
+    round: state.round,
+    actor: 'combatantA',
+    actorName: '',
+    action: 'potion',
+    spellName: potion.name,
+    healAmount: actualHeal,
+    message: `You drink a ${potion.name}! +${actualHeal} HP`,
+    effectsApplied: [{
+      stat: 'potionSickness',
+      modifier: 0,
+      duration: POTION_CONSTANTS.AUTO_POTION_SICKNESS_DURATION,
+      target: 'combatantA',
+    }],
+    ...hpSnapshot(state),
+  });
+
+  return true;
+}
+
 /**
  * Run a complete combat encounter between two combatants.
  * Pure function — no side effects, fully deterministic given same random seed.
  */
-export function runCombat(combatantA: Combatant, combatantB: Combatant): CombatResult {
+export function runCombat(combatantA: Combatant, combatantB: Combatant, options?: CombatOptions): CombatResult {
+  const availablePotions = options?.potions ? [...options.potions] : [];
+  const threshold = options?.autoPotionThreshold ?? 0;
+  const potionsConsumed: PotionConsumed[] = [];
+
   const state: CombatState = {
     combatantAHp: combatantA.stats.hp,
     combatantAMaxHp: combatantA.stats.maxHp,
@@ -163,13 +260,19 @@ export function runCombat(combatantA: Combatant, combatantB: Combatant): CombatR
     const effectiveB = getEffectiveStats(combatantB.stats, state.activeEffects, 'combatantB');
 
     if (aGoesFirst) {
-      executeAttack(state, 'combatantA', effectiveA, effectiveB, combatantA, combatantB);
+      const usedPotion = tryAutoPotion(state, availablePotions, potionsConsumed, threshold);
+      if (!usedPotion) {
+        executeAttack(state, 'combatantA', effectiveA, effectiveB, combatantA, combatantB);
+      }
       if (state.outcome) break;
       executeAttack(state, 'combatantB', effectiveB, effectiveA, combatantB, combatantA);
     } else {
       executeAttack(state, 'combatantB', effectiveB, effectiveA, combatantB, combatantA);
       if (state.outcome) break;
-      executeAttack(state, 'combatantA', effectiveA, effectiveB, combatantA, combatantB);
+      const usedPotion = tryAutoPotion(state, availablePotions, potionsConsumed, threshold);
+      if (!usedPotion) {
+        executeAttack(state, 'combatantA', effectiveA, effectiveB, combatantA, combatantB);
+      }
     }
 
     tickEffects(state, names);
@@ -194,6 +297,7 @@ export function runCombat(combatantA: Combatant, combatantB: Combatant): CombatR
     combatantBMaxHp: state.combatantBMaxHp,
     combatantAHpRemaining: Math.max(0, state.combatantAHp),
     combatantBHpRemaining: Math.max(0, state.combatantBHp),
+    potionsConsumed,
   };
 }
 

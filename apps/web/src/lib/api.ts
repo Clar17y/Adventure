@@ -205,6 +205,7 @@ export async function getPlayer() {
       characterXp: number;
       characterLevel: number;
       attributePoints: number;
+      autoPotionThreshold: number;
       attributes: {
         vitality: number;
         strength: number;
@@ -215,6 +216,13 @@ export async function getPlayer() {
       };
     };
   }>('/api/v1/player');
+}
+
+export async function updatePlayerSettings(settings: { autoPotionThreshold: number }) {
+  return fetchApi<{ autoPotionThreshold: number }>('/api/v1/player/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  });
 }
 
 export async function getPlayerAttributes() {
@@ -634,6 +642,7 @@ export interface CombatResponse {
     durabilityLost: Array<{ itemId: string; amount: number; itemName?: string; newDurability?: number; maxDurability?: number; isBroken?: boolean; crossedWarningThreshold?: boolean }>;
     skillXp: SkillXpGrantResponse | null;
   };
+  activeEvents?: Array<{ title: string; effectType: string; effectValue: number }>;
 }
 
 export interface CombatHistoryListItemResponse {
@@ -881,6 +890,7 @@ export async function mine(playerNodeId: string, turns: number, currentZoneId: s
       attributePointsAfter: number;
       characterLeveledUp: boolean;
     };
+    activeEvents?: Array<{ title: string; effectType: string; effectValue: number }>;
   }>('/api/v1/gathering/mine', {
     method: 'POST',
     body: JSON.stringify({ playerNodeId, turns, currentZoneId }),
@@ -931,8 +941,7 @@ export async function craft(recipeId: string, quantity: number = 1) {
       id: string;
       isCrit: boolean;
       rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-      bonusStat?: string;
-      bonusValue?: number;
+      bonusStats?: Record<string, number>;
     }>;
     xp: {
       skillType: string;
@@ -1196,7 +1205,122 @@ export async function getChatHistory(channelType: string, channelId: string) {
       playerId: string;
       username: string;
       message: string;
+      messageType?: string;
       createdAt: string;
     }>;
   }>(`/api/v1/chat/history?channelType=${encodeURIComponent(channelType)}&channelId=${encodeURIComponent(channelId)}`);
+}
+
+// World Events
+export interface WorldEventResponse {
+  id: string;
+  type: string;
+  scope: 'zone' | 'world';
+  zoneId: string | null;
+  zoneName: string | null;
+  title: string;
+  description: string;
+  effectType: string;
+  effectValue: number;
+  targetFamily: string | null;
+  targetResource: string | null;
+  startedAt: string;
+  expiresAt: string | null;
+  status: string;
+}
+
+export async function getActiveEvents() {
+  return fetchApi<{ events: WorldEventResponse[] }>('/api/v1/events');
+}
+
+export async function getZoneEvents(zoneId: string) {
+  return fetchApi<{ events: WorldEventResponse[] }>(`/api/v1/events/zone/${zoneId}`);
+}
+
+// Boss Encounters
+export interface BossRoundSummary {
+  round: number;
+  bossDamage: number;
+  totalPlayerDamage: number;
+  bossHpPercent: number;
+  raidPoolPercent: number;
+}
+
+export interface BossEncounterResponse {
+  id: string;
+  eventId: string;
+  mobTemplateId: string;
+  currentHp: number;
+  maxHp: number;
+  baseHp: number;
+  roundNumber: number;
+  nextRoundAt: string | null;
+  status: string;
+  killedBy: string | null;
+  killedByUsername?: string | null;
+  mobName: string;
+  mobLevel: number;
+  zoneId?: string;
+  zoneName?: string;
+  raidPoolHp?: number;
+  raidPoolMax?: number;
+  roundSummaries?: BossRoundSummary[] | null;
+}
+
+export interface BossParticipantResponse {
+  id: string;
+  playerId: string;
+  username?: string | null;
+  role: string;
+  roundNumber: number;
+  turnsCommitted: number;
+  totalDamage: number;
+  totalHealing: number;
+  attacks: number;
+  hits: number;
+  crits: number;
+  autoSignUp: boolean;
+  currentHp: number;
+  status: string;
+}
+
+export interface BossHistoryEntry {
+  encounter: BossEncounterResponse;
+  mobName: string;
+  mobLevel: number;
+  zoneName: string;
+  killedByUsername: string | null;
+  playerStats: {
+    totalDamage: number;
+    totalHealing: number;
+    attacks: number;
+    hits: number;
+    crits: number;
+    roundsParticipated: number;
+  };
+}
+
+export async function getActiveBossEncounters() {
+  return fetchApi<{ encounters: BossEncounterResponse[] }>('/api/v1/boss/active');
+}
+
+export async function getBossEncounter(id: string) {
+  return fetchApi<{
+    encounter: BossEncounterResponse;
+    participants: BossParticipantResponse[];
+  }>(`/api/v1/boss/${id}`);
+}
+
+export async function signUpForBoss(id: string, role: 'attacker' | 'healer', autoSignUp = false) {
+  return fetchApi<{ participant: BossParticipantResponse }>(`/api/v1/boss/${id}/signup`, {
+    method: 'POST',
+    body: JSON.stringify({ role, autoSignUp }),
+  });
+}
+
+export async function getBossHistory(page = 1, pageSize = 10) {
+  return fetchApi<{
+    entries: BossHistoryEntry[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  }>(`/api/v1/boss/history?page=${page}&pageSize=${pageSize}`);
 }

@@ -1,6 +1,6 @@
 import { prisma } from '@adventure/database';
 import { CHAT_CONSTANTS } from '@adventure/shared';
-import type { ChatChannelType, ChatMessageEvent } from '@adventure/shared';
+import type { ChatChannelType, ChatMessageEvent, ChatMessageType } from '@adventure/shared';
 
 // In-memory rate limiter: key = "playerId:channelType" → last send timestamp
 const lastSendTimes = new Map<string, number>();
@@ -27,6 +27,7 @@ export async function saveMessage(params: {
   playerId: string;
   username: string;
   message: string;
+  messageType?: ChatMessageType;
 }): Promise<{ id: string; createdAt: Date }> {
   const truncated = params.message.slice(0, CHAT_CONSTANTS.MAX_MESSAGE_LENGTH);
 
@@ -37,6 +38,7 @@ export async function saveMessage(params: {
       playerId: params.playerId,
       username: params.username,
       message: truncated,
+      messageType: params.messageType ?? 'player',
     },
     select: { id: true, createdAt: true },
   });
@@ -62,6 +64,7 @@ export async function getChannelHistory(
     playerId: r.playerId,
     username: r.username,
     message: r.message,
+    messageType: (r.messageType ?? 'player') as ChatMessageType,
     createdAt: r.createdAt.toISOString(),
   }));
 }

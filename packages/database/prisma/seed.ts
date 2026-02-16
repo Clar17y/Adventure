@@ -10,6 +10,7 @@ import { getAllResourceNodes } from './seed-data/resources';
 import { getAllDropTables } from './seed-data/drops';
 import { getAllRecipes } from './seed-data/recipes';
 import { getAllChestDropTables } from './seed-data/chests';
+import { generateBotPlayers } from './seed-data/bots';
 
 const prisma = new PrismaClient();
 
@@ -21,6 +22,19 @@ async function cleanTemplateData() {
   console.log('  Cleaning template data...');
   const p = prisma as any;
 
+  // Clean bot players and their related data first (before items/equipment)
+  const botPlayers = await prisma.player.findMany({ where: { isBot: true }, select: { id: true } });
+  if (botPlayers.length > 0) {
+    const botIds = botPlayers.map((b) => b.id);
+    await p.pvpMatch.deleteMany({ where: { OR: [{ attackerId: { in: botIds } }, { defenderId: { in: botIds } }] } });
+    await p.pvpCooldown.deleteMany({ where: { OR: [{ attackerId: { in: botIds } }, { defenderId: { in: botIds } }] } });
+    await p.pvpRating.deleteMany({ where: { playerId: { in: botIds } } });
+    await prisma.playerEquipment.deleteMany({ where: { playerId: { in: botIds } } });
+    await prisma.item.deleteMany({ where: { ownerId: { in: botIds } } });
+    await prisma.player.deleteMany({ where: { isBot: true } });
+    console.log(`  ${botPlayers.length} bot players cleaned.`);
+  }
+
   await p.playerRecipe.deleteMany({});
   await p.chestDropTable.deleteMany({});
   await prisma.dropTable.deleteMany({});
@@ -31,6 +45,10 @@ async function cleanTemplateData() {
   await prisma.playerResourceNode.deleteMany({});
   await prisma.playerEquipment.deleteMany({});
   await prisma.item.deleteMany({});
+  await p.bossParticipant.deleteMany({});
+  await p.bossEncounter.deleteMany({});
+  await p.persistedMob.deleteMany({});
+  await p.worldEvent.deleteMany({});
   await p.mobFamily.deleteMany({});
   await prisma.mobTemplate.deleteMany({});
   await prisma.resourceNode.deleteMany({});
@@ -190,6 +208,105 @@ async function seedChestDropTables() {
 }
 
 // ============================================================================
+// PvP Arena Bots
+// ============================================================================
+
+async function seedBots() {
+  console.log('  Seeding PvP arena bots...');
+  const p = prisma as any;
+
+  const starterZone = await prisma.zone.findFirst({ where: { isStarter: true } });
+  if (!starterZone) {
+    console.log('  No starter zone found — skipping bots.');
+    return;
+  }
+
+  const bots = generateBotPlayers();
+  const now = new Date();
+
+  for (const bot of bots) {
+    // Create player with nested turnBank and skills
+    const player = await prisma.player.create({
+      data: {
+        id: bot.player.id,
+        username: bot.player.username,
+        email: bot.player.email,
+        passwordHash: bot.player.passwordHash,
+        isBot: true,
+        characterLevel: bot.player.characterLevel,
+        attributes: bot.player.attributes,
+        currentHp: bot.player.currentHp,
+        currentZoneId: starterZone.id,
+        homeTownId: starterZone.id,
+        turnBank: {
+          create: { currentTurns: 0, lastRegenAt: now },
+        },
+        skills: {
+          create: bot.skills.map((s) => ({
+            skillType: s.skillType,
+            level: s.level,
+            xp: s.xp,
+          })),
+        },
+      },
+    });
+
+    // Create items (weapon + armor)
+    const itemsToCreate: Array<{ id: string; templateId: string; slot: string }> = [];
+
+    const weaponItemId = randomUUID();
+    await prisma.item.create({
+      data: {
+        id: weaponItemId,
+        templateId: bot.weaponTemplateId,
+        ownerId: player.id,
+        rarity: bot.rarity,
+        currentDurability: 100,
+        maxDurability: 100,
+      },
+    });
+    itemsToCreate.push({ id: weaponItemId, templateId: bot.weaponTemplateId, slot: 'main_hand' });
+
+    for (const armor of bot.armorTemplateIds) {
+      const armorItemId = randomUUID();
+      await prisma.item.create({
+        data: {
+          id: armorItemId,
+          templateId: armor.templateId,
+          ownerId: player.id,
+          rarity: bot.rarity,
+          currentDurability: 100,
+          maxDurability: 100,
+        },
+      });
+      itemsToCreate.push({ id: armorItemId, templateId: armor.templateId, slot: armor.slot });
+    }
+
+    // Create equipment slots for all items
+    for (const item of itemsToCreate) {
+      await prisma.playerEquipment.create({
+        data: {
+          playerId: player.id,
+          slot: item.slot,
+          itemId: item.id,
+        },
+      });
+    }
+
+    // Create PvP rating
+    await p.pvpRating.create({
+      data: {
+        playerId: player.id,
+        rating: bot.pvpRating,
+        bestRating: bot.pvpRating,
+      },
+    });
+  }
+
+  console.log(`  ${bots.length} PvP arena bots created.`);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -214,6 +331,9 @@ async function main() {
 
   // Batch 4: Advanced loot
   await seedChestDropTables();
+
+  // Batch 5: PvP Arena bots
+  await seedBots();
 
   console.log('Seed complete.');
 }

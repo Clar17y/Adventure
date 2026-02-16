@@ -1,0 +1,127 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { getBossHistory, type BossHistoryEntry } from '@/lib/api';
+import { Pagination } from '@/components/common/Pagination';
+
+const PAGE_SIZE = 10;
+
+function statusBadge(status: string) {
+  if (status === 'defeated') return { label: 'Defeated', color: 'var(--rpg-green-light)' };
+  if (status === 'expired') return { label: 'Expired', color: 'var(--rpg-text-secondary)' };
+  if (status === 'in_progress') return { label: 'In Progress', color: 'var(--rpg-gold)' };
+  return { label: 'Waiting', color: 'var(--rpg-blue-light)' };
+}
+
+export function BossHistory() {
+  const [entries, setEntries] = useState<BossHistoryEntry[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const fetchHistory = useCallback(async (p: number) => {
+    setLoading(true);
+    const res = await getBossHistory(p, PAGE_SIZE);
+    if (res.data) {
+      setEntries(res.data.entries);
+      setTotalPages(res.data.pagination.totalPages);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchHistory(page); }, [page, fetchHistory]);
+
+  if (loading && entries.length === 0) {
+    return <div className="text-sm text-[var(--rpg-text-secondary)]">Loading boss history...</div>;
+  }
+
+  if (entries.length === 0) {
+    return <div className="text-sm text-[var(--rpg-text-secondary)]">No boss encounters yet.</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Boss History</h2>
+
+      <div className="space-y-2">
+        {entries.map((entry) => {
+          const badge = statusBadge(entry.encounter.status);
+          const isExpanded = expandedId === entry.encounter.id;
+          const stats = entry.playerStats;
+
+          return (
+            <div
+              key={entry.encounter.id}
+              className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3"
+            >
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => setExpandedId(isExpanded ? null : entry.encounter.id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[var(--rpg-text-primary)] font-semibold">
+                      {entry.mobName} (Lv.{entry.mobLevel})
+                    </span>
+                    <span className="text-xs ml-2 text-[var(--rpg-text-secondary)]">
+                      {entry.zoneName}
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold" style={{ color: badge.color }}>
+                    {badge.label}
+                  </span>
+                </div>
+                <div className="flex gap-4 text-xs text-[var(--rpg-text-secondary)] mt-1">
+                  <span>{stats.roundsParticipated} round{stats.roundsParticipated !== 1 ? 's' : ''}</span>
+                  <span>{stats.totalDamage.toLocaleString()} dmg</span>
+                  {stats.totalHealing > 0 && <span>{stats.totalHealing.toLocaleString()} healed</span>}
+                  {stats.attacks > 0 && (
+                    <span>
+                      {stats.hits}/{stats.attacks} hit
+                      {stats.crits > 0 && `, ${stats.crits} crit`}
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="mt-3 pt-2 border-t border-[var(--rpg-border)] text-xs space-y-2">
+                  {entry.killedByUsername && (
+                    <p style={{ color: 'var(--rpg-gold)' }}>
+                      Kill credit: {entry.killedByUsername}
+                    </p>
+                  )}
+                  <p>Total boss rounds: {entry.encounter.roundNumber}</p>
+
+                  {entry.encounter.roundSummaries && entry.encounter.roundSummaries.length > 0 && (
+                    <div>
+                      <p className="font-semibold mb-1">Round breakdown:</p>
+                      <div className="space-y-1">
+                        {entry.encounter.roundSummaries.map((rs) => (
+                          <div key={rs.round} className="flex justify-between">
+                            <span>Round {rs.round}</span>
+                            <span>
+                              Players: {rs.totalPlayerDamage.toLocaleString()} dmg |
+                              Boss: {rs.bossDamage.toLocaleString()} dmg |
+                              HP: {rs.bossHpPercent}% | Pool: {rs.raidPoolPercent}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {totalPages > 1 && (
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+      )}
+    </div>
+  );
+}

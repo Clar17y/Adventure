@@ -17,8 +17,10 @@ import { Crafting } from '@/components/screens/Crafting';
 import { Forge } from '@/components/screens/Forge';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
+import { WorldEvents } from '@/components/screens/WorldEvents';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
+import { Slider } from '@/components/ui/Slider';
 import { rarityFromTier } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
@@ -242,6 +244,9 @@ export default function GamePage() {
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,
+    handleSetAutoPotionThreshold,
+    autoPotionThreshold,
+    setAutoPotionThreshold,
     zoneCraftingLevel,
     zoneCraftingName,
     loadTurnsAndHp,
@@ -744,6 +749,27 @@ export default function GamePage() {
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Profile</h2>
             <p className="text-[var(--rpg-text-secondary)]">Username: {player?.username}</p>
+
+            <PixelCard>
+              <h3 className="text-sm font-bold text-[var(--rpg-text-primary)] mb-2">Auto-Potion</h3>
+              <p className="text-xs text-[var(--rpg-text-secondary)] mb-3">
+                Drink a health potion when HP drops below threshold. Uses your turn instead of attacking.
+              </p>
+              <div className="flex items-center gap-3">
+                <Slider
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={[autoPotionThreshold]}
+                  onValueChange={(val) => setAutoPotionThreshold(val[0])}
+                  onValueCommit={(val) => handleSetAutoPotionThreshold(val[0])}
+                />
+                <span className="text-sm font-mono text-[var(--rpg-text-primary)] w-16 text-right shrink-0">
+                  {autoPotionThreshold === 0 ? 'Off' : `${autoPotionThreshold}%`}
+                </span>
+              </div>
+            </PixelCard>
+
             <button
               onClick={() => { logout(); router.push('/'); }}
               className="px-4 py-2 bg-[var(--rpg-red)] rounded text-white"
@@ -751,6 +777,15 @@ export default function GamePage() {
               Logout
             </button>
           </div>
+        );
+      case 'worldEvents':
+        return (
+          <WorldEvents
+            currentZoneId={activeZoneId}
+            currentZoneName={currentZone?.name ?? null}
+            playerId={player?.id ?? null}
+            onNavigate={(s) => setActiveScreen(s as Screen)}
+          />
         );
       default:
         return null;
@@ -779,6 +814,7 @@ export default function GamePage() {
               { id: 'skills', label: 'Skills' },
               { id: 'zones', label: 'Map' },
               { id: 'bestiary', label: 'Bestiary' },
+              { id: 'worldEvents', label: 'Events' },
             ].map((tab) => (
               <button
                 key={tab.id}

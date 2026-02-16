@@ -104,7 +104,9 @@ export const CHARACTER_CONSTANTS = {
   MELEE_DAMAGE_PER_STRENGTH: 1,
   RANGED_DAMAGE_PER_DEXTERITY: 1,
   MAGIC_DAMAGE_PER_INTELLIGENCE: 1,
+  ACCURACY_PER_STRENGTH: 1,
   ACCURACY_PER_DEXTERITY: 1,
+  ACCURACY_PER_INTELLIGENCE: 1,
   EVASION_TO_SPEED_DIVISOR: 10,
 } as const;
 
@@ -210,6 +212,18 @@ export const CRAFTING_CONSTANTS = {
 
   /** Minimum guaranteed crit bonus value */
   MIN_BONUS_MAGNITUDE: 1,
+
+  // Rare Craft (chance a crit produces rare instead of uncommon)
+  RARE_CRAFT_BASE_CHANCE: 0.005,
+  RARE_CRAFT_CHANCE_PER_LEVEL: 0.001,
+  RARE_CRAFT_LUCK_BONUS_PER_POINT: 0.0005,
+  RARE_CRAFT_MAX_CHANCE: 0.04,
+
+  // Epic Craft (chance a crit produces epic)
+  EPIC_CRAFT_BASE_CHANCE: 0.0005,
+  EPIC_CRAFT_CHANCE_PER_LEVEL: 0.0001,
+  EPIC_CRAFT_LUCK_BONUS_PER_POINT: 0.00005,
+  EPIC_CRAFT_MAX_CHANCE: 0.004,
 
   /** Turn cost to salvage one crafted equipment item */
   SALVAGE_TURN_COST: 50,
@@ -358,6 +372,9 @@ export const POTION_CONSTANTS = {
 
   /** HP percentage restored by Greater Recovery Potion */
   GREATER_RECOVERY_PERCENT: 1.0,
+
+  /** Rounds of Potion Sickness cooldown after auto-potion use */
+  AUTO_POTION_SICKNESS_DURATION: 5,
 } as const;
 
 // =============================================================================
@@ -397,4 +414,39 @@ export const PVP_CONSTANTS = {
   COOLDOWN_HOURS: 24,
   MIN_OPPONENTS_SHOWN: 10,
   MIN_CHARACTER_LEVEL: 10,
+} as const;
+
+// =============================================================================
+// WORLD EVENTS
+// =============================================================================
+
+export const WORLD_EVENT_CONSTANTS = {
+  RESOURCE_EVENT_DURATION_HOURS: 6,
+  MOB_EVENT_DURATION_HOURS: 6,
+  WORLD_WIDE_EVENT_DURATION_HOURS: 6,
+  MAX_ZONE_EVENTS: 2,
+  MAX_WORLD_EVENTS: 1,
+  EVENT_RESPAWN_DELAY_MINUTES: 30,
+  EVENT_DISCOVERY_CHANCE_PER_TURN: 0.0001,
+  BOSS_INITIAL_WAIT_MINUTES: 15,
+  BOSS_ROUND_INTERVAL_MINUTES: 5,
+  BOSS_SIGNUP_TURN_COST: 200,
+
+  // Boss spawning
+  BOSS_SPAWN_CHANCE: 0.10,
+  BOSS_DISCOVERY_CHANCE: 0.05,
+  MAX_BOSS_ENCOUNTERS: 1,
+
+  // Dynamic scaling by zone tier (index 0 = tier 1, through tier 5)
+  BOSS_HP_PER_PLAYER_BY_TIER: [200, 500, 1000, 2000, 4000] as readonly number[],
+  BOSS_AOE_PER_PLAYER_BY_TIER: [15, 30, 50, 80, 120] as readonly number[],
+  BOSS_DEFENCE_BY_TIER: [5, 12, 20, 35, 50] as readonly number[],
+
+  // Participant scaling
+  HEALER_MAGIC_SCALING: 0.02,
+  ATTACKER_TURN_SCALING: 0.001,
+
+  PERSISTED_MOB_REGEN_PERCENT_PER_MINUTE: 1,
+  PERSISTED_MOB_REENCOUNTER_CHANCE: 0.3,
+  PERSISTED_MOB_MAX_AGE_MINUTES: 120,
 } as const;

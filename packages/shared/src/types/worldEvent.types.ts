@@ -42,8 +42,6 @@ export interface WorldEventData {
 export interface BossRoundSummary {
   round: number;
   bossDamage: number;
-  bossHits: number;
-  bossMisses: number;
   totalPlayerDamage: number;
   bossHpPercent: number;
   raidPoolPercent: number;

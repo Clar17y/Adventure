@@ -107,13 +107,20 @@ bossRouter.get('/:id', async (req, res, next) => {
       throw new AppError(404, 'Boss encounter not found', 'NOT_FOUND');
     }
 
-    const [mob, killedByUsername] = await Promise.all([
+    // Resolve mob info, killer username, and participant usernames in parallel
+    const participantPlayerIds = [...new Set(data.participants.map((p) => p.playerId))];
+    const [mob, killedByUsername, players] = await Promise.all([
       prisma.mobTemplate.findUnique({
         where: { id: data.encounter.mobTemplateId },
         select: { name: true, level: true },
       }),
       resolveKilledByUsername(data.encounter.killedBy),
+      prisma.player.findMany({
+        where: { id: { in: participantPlayerIds } },
+        select: { id: true, username: true },
+      }),
     ]);
+    const usernameMap = new Map(players.map((p) => [p.id, p.username]));
 
     res.json({
       encounter: {
@@ -122,7 +129,10 @@ bossRouter.get('/:id', async (req, res, next) => {
         mobLevel: mob?.level ?? 1,
         killedByUsername,
       },
-      participants: data.participants,
+      participants: data.participants.map((p) => ({
+        ...p,
+        username: usernameMap.get(p.playerId) ?? null,
+      })),
     });
   } catch (err) {
     next(err);
@@ -131,7 +141,6 @@ bossRouter.get('/:id', async (req, res, next) => {
 
 const signupSchema = z.object({
   role: z.enum(['attacker', 'healer']),
-  turnsCommitted: z.number().int().min(50).max(5000),
   autoSignUp: z.boolean().optional(),
 });
 
@@ -174,7 +183,6 @@ bossRouter.post('/:id/signup', async (req, res, next) => {
       id,
       playerId,
       body.role,
-      body.turnsCommitted,
       hpState.maxHp,
       body.autoSignUp ?? false,
     );

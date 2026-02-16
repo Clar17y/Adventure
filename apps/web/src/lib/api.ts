@@ -1112,8 +1112,6 @@ export async function getZoneEvents(zoneId: string) {
 export interface BossRoundSummary {
   round: number;
   bossDamage: number;
-  bossHits: number;
-  bossMisses: number;
   totalPlayerDamage: number;
   bossHpPercent: number;
   raidPoolPercent: number;
@@ -1143,6 +1141,7 @@ export interface BossEncounterResponse {
 export interface BossParticipantResponse {
   id: string;
   playerId: string;
+  username?: string | null;
   role: string;
   roundNumber: number;
   turnsCommitted: number;
@@ -1183,10 +1182,10 @@ export async function getBossEncounter(id: string) {
   }>(`/api/v1/boss/${id}`);
 }
 
-export async function signUpForBoss(id: string, role: 'attacker' | 'healer', turnsCommitted: number, autoSignUp = false) {
+export async function signUpForBoss(id: string, role: 'attacker' | 'healer', autoSignUp = false) {
   return fetchApi<{ participant: BossParticipantResponse }>(`/api/v1/boss/${id}/signup`, {
     method: 'POST',
-    body: JSON.stringify({ role, turnsCommitted, autoSignUp }),
+    body: JSON.stringify({ role, autoSignUp }),
   });
 }
 

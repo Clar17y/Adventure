@@ -125,10 +125,11 @@ export async function signUpForBossRound(
   encounterId: string,
   playerId: string,
   role: BossParticipantRole,
-  turnsCommitted: number,
   playerMaxHp: number,
   autoSignUp = false,
 ): Promise<BossParticipantData> {
+  const turnCost = WORLD_EVENT_CONSTANTS.BOSS_SIGNUP_TURN_COST;
+
   const encounter = await prisma.bossEncounter.findUnique({
     where: { id: encounterId },
   });
@@ -152,21 +153,14 @@ export async function signUpForBossRound(
 
   let row;
   if (existing) {
-    // Update existing signup instead of throwing
-    row = await prisma.$transaction(async (tx) => {
-      const turnDiff = turnsCommitted - existing.turnsCommitted;
-      if (turnDiff > 0) {
-        await spendPlayerTurnsTx(tx, playerId, turnDiff);
-      }
-      return tx.bossParticipant.update({
-        where: { id: existing.id },
-        data: { role, turnsCommitted, autoSignUp },
-      });
+    // Update role/autoSignUp on existing signup — no additional turn cost
+    row = await prisma.bossParticipant.update({
+      where: { id: existing.id },
+      data: { role, autoSignUp },
     });
   } else {
-    // Deduct turns in transaction
     row = await prisma.$transaction(async (tx) => {
-      await spendPlayerTurnsTx(tx, playerId, turnsCommitted);
+      await spendPlayerTurnsTx(tx, playerId, turnCost);
 
       return tx.bossParticipant.create({
         data: {
@@ -174,7 +168,7 @@ export async function signUpForBossRound(
           playerId,
           role,
           roundNumber: nextRound,
-          turnsCommitted,
+          turnsCommitted: turnCost,
           currentHp: playerMaxHp,
           status: 'alive',
           autoSignUp,
@@ -335,12 +329,9 @@ export async function resolveBossRound(
 
   // Compute round summary
   const totalPlayerDmg = result.attackerResults.reduce((s, a) => s + a.damage, 0);
-  const bossHitsCount = result.poolDamageTaken > 0 ? 1 : 0;
   const roundSummary: BossRoundSummary = {
     round: nextRound,
     bossDamage: result.poolDamageTaken,
-    bossHits: bossHitsCount,
-    bossMisses: bossHitsCount ? 0 : 1,
     totalPlayerDamage: totalPlayerDmg,
     bossHpPercent: encounter.maxHp > 0 ? Math.round((result.bossHpAfter / encounter.maxHp) * 100) : 0,
     raidPoolPercent: raidPoolMax > 0 ? Math.round((result.raidPoolAfter / raidPoolMax) * 100) : 100,
@@ -420,23 +411,45 @@ export async function resolveBossRound(
       ),
   ]);
 
-  // Auto-signup: re-enroll auto-signup participants for the next round (if boss still alive and no wipe)
+  // Auto-signup: re-enroll auto-signup participants for the next round (batched)
   if (!result.bossDefeated && !result.raidWiped) {
     const autoSignupParticipants = signups.filter((s) => s.autoSignUp);
-    for (const participant of autoSignupParticipants) {
-      try {
-        const hpCheck = await getHpState(participant.playerId);
-        if (hpCheck.isRecovering) continue;
-        await signUpForBossRound(
-          encounterId,
-          participant.playerId,
-          participant.role as BossParticipantRole,
-          WORLD_EVENT_CONSTANTS.BOSS_SIGNUP_TURN_COST,
-          hpCheck.maxHp,
-          true,
-        );
-      } catch {
-        // Skip players who can't auto-signup (insufficient turns, etc.)
+    if (autoSignupParticipants.length > 0) {
+      const turnCost = WORLD_EVENT_CONSTANTS.BOSS_SIGNUP_TURN_COST;
+      const autoNextRound = nextRound + 1;
+
+      // Check HP states in parallel to filter out recovering players
+      const hpChecks = await Promise.all(
+        autoSignupParticipants.map(async (p) => {
+          const hpState = await getHpState(p.playerId);
+          return { participant: p, hpState };
+        }),
+      );
+      const eligible = hpChecks.filter((c) => !c.hpState.isRecovering);
+
+      if (eligible.length > 0) {
+        // Batch: deduct turns and create participants in a single transaction
+        await prisma.$transaction(async (tx) => {
+          for (const { participant, hpState } of eligible) {
+            try {
+              await spendPlayerTurnsTx(tx, participant.playerId, turnCost);
+              await tx.bossParticipant.create({
+                data: {
+                  encounterId,
+                  playerId: participant.playerId,
+                  role: participant.role,
+                  roundNumber: autoNextRound,
+                  turnsCommitted: turnCost,
+                  currentHp: hpState.maxHp,
+                  status: 'alive',
+                  autoSignUp: true,
+                },
+              });
+            } catch {
+              // Skip players who can't auto-signup (insufficient turns, etc.)
+            }
+          }
+        });
       }
     }
   }
@@ -591,30 +604,33 @@ export async function getBossHistory(
   }>;
   total: number;
 }> {
-  // Find distinct encounter IDs this player has participated in
-  const allParticipations = await prisma.bossParticipant.findMany({
+  // Count distinct encounters at DB level
+  const distinctEncounters = await prisma.bossParticipant.findMany({
     where: { playerId },
     select: { encounterId: true },
     distinct: ['encounterId'],
+    orderBy: { encounterId: 'desc' },
   });
+  const total = distinctEncounters.length;
 
-  const encounterIds = allParticipations.map((p) => p.encounterId);
-  const total = encounterIds.length;
-
-  // Paginate encounter IDs
-  const paginatedIds = encounterIds.slice((page - 1) * pageSize, page * pageSize);
+  // Paginate at DB level using skip/take on the encounter IDs
+  const paginatedIds = distinctEncounters
+    .slice((page - 1) * pageSize, page * pageSize)
+    .map((p) => p.encounterId);
 
   if (paginatedIds.length === 0) return { entries: [], total };
 
-  // Fetch encounters with relations
+  // Fetch encounters with relations, ordered newest first
   const encounters = await prisma.bossEncounter.findMany({
     where: { id: { in: paginatedIds } },
     include: {
       event: { select: { zone: { select: { name: true } } } },
       mobTemplate: { select: { name: true, level: true } },
     },
-    orderBy: { nextRoundAt: 'desc' },
   });
+  // Sort by the paginated order (newest first, matching distinctEncounters order)
+  const idOrder = new Map(paginatedIds.map((id, i) => [id, i]));
+  encounters.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
 
   // Fetch player's participation rows for these encounters
   const participations = await prisma.bossParticipant.findMany({

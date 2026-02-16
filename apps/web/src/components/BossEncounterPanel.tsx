@@ -13,17 +13,18 @@ import {
 
 interface BossEncounterPanelProps {
   encounterId: string;
+  playerId?: string;
   onClose?: () => void;
 }
 
-export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelProps) {
+export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncounterPanelProps) {
   const [encounter, setEncounter] = useState<BossEncounterResponse | null>(null);
   const [participants, setParticipants] = useState<BossParticipantResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
   const [role, setRole] = useState<'attacker' | 'healer'>('attacker');
-  const [turns, setTurns] = useState(100);
   const [autoSignUp, setAutoSignUp] = useState(false);
+  const [autoSignUpInitialized, setAutoSignUpInitialized] = useState(false);
   const [signupError, setSignupError] = useState('');
 
   const refresh = useCallback(async () => {
@@ -32,16 +33,29 @@ export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelP
     if (res.data) {
       setEncounter(res.data.encounter);
       setParticipants(res.data.participants);
+
+      // Initialize auto-signup from player's current signup (once)
+      if (playerId && !autoSignUpInitialized) {
+        const nextRound = (res.data.encounter.roundNumber ?? 0) + 1;
+        const mySignup = res.data.participants.find(
+          (p) => p.playerId === playerId && p.roundNumber === nextRound,
+        );
+        if (mySignup) {
+          setAutoSignUp(mySignup.autoSignUp);
+          setRole(mySignup.role as 'attacker' | 'healer');
+        }
+        setAutoSignUpInitialized(true);
+      }
     }
     setLoading(false);
-  }, [encounterId]);
+  }, [encounterId, playerId, autoSignUpInitialized]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
   async function handleSignup() {
     setSigning(true);
     setSignupError('');
-    const res = await signUpForBoss(encounterId, role, turns, autoSignUp);
+    const res = await signUpForBoss(encounterId, role, autoSignUp);
     if (res.error) {
       setSignupError(res.error.message);
     } else {
@@ -60,6 +74,19 @@ export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelP
     }
     return Array.from(groups.entries()).sort(([a], [b]) => b - a);
   }, [participants]);
+
+  // Build playerId → username lookup
+  const usernameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of participants) {
+      if (p.username && !map.has(p.playerId)) {
+        map.set(p.playerId, p.username);
+      }
+    }
+    return map;
+  }, [participants]);
+
+  const displayName = (playerId: string) => usernameMap.get(playerId) ?? playerId.slice(0, 8) + '...';
 
   // Compute top contributors for defeated summary
   const topContributors = useMemo(() => {
@@ -176,19 +203,6 @@ export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelP
             </PixelButton>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs">Turns:</label>
-            <input
-              type="range"
-              min={50}
-              max={2000}
-              step={50}
-              value={turns}
-              onChange={(e) => setTurns(Number(e.target.value))}
-              className="flex-1"
-            />
-            <span className="text-xs w-12 text-right">{turns}</span>
-          </div>
-          <div className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-xs cursor-pointer">
               <input
                 type="checkbox"
@@ -196,11 +210,11 @@ export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelP
                 onChange={(e) => setAutoSignUp(e.target.checked)}
                 className="rounded"
               />
-              Auto re-signup (200 turns/round)
+              Auto re-signup each round
             </label>
           </div>
           <PixelButton onClick={handleSignup} disabled={signing} size="sm">
-            {signing ? 'Signing up...' : `Sign Up (${turns} turns)`}
+            {signing ? 'Signing up...' : 'Sign Up (200 turns)'}
           </PixelButton>
           {signupError && (
             <p className="text-xs" style={{ color: 'var(--rpg-red)' }}>{signupError}</p>
@@ -228,7 +242,7 @@ export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelP
                 <p className="font-semibold mb-1">Top contributors:</p>
                 {topContributors.map(([playerId, contribution], i) => (
                   <div key={playerId} className="flex justify-between">
-                    <span>{i + 1}. {playerId.slice(0, 8)}...</span>
+                    <span>{i + 1}. {displayName(playerId)}</span>
                     <span>{contribution.toLocaleString()} total</span>
                   </div>
                 ))}
@@ -261,7 +275,7 @@ export function BossEncounterPanel({ encounterId, onClose }: BossEncounterPanelP
                     {roundParticipants.map((p) => (
                       <div key={p.id} className="flex justify-between text-xs">
                         <span className="truncate">
-                          {p.role === 'healer' ? '💚' : '⚔'} {p.playerId.slice(0, 8)}...
+                          {p.role === 'healer' ? '💚' : '⚔'} {displayName(p.playerId)}
                           {p.autoSignUp && <span className="ml-1 opacity-60">(auto)</span>}
                         </span>
                         <span>

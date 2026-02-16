@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import {
   getActiveBossEncounters,
   getBossEncounterStatus,
+  getBossHistory,
   signUpForBossRound,
   checkAndResolveDueBossRounds,
 } from '../services/bossEncounterService';
@@ -16,19 +17,26 @@ export const bossRouter = Router();
 
 bossRouter.use(authenticate);
 
+async function resolveKilledByUsername(killedBy: string | null): Promise<string | null> {
+  if (!killedBy) return null;
+  const player = await prisma.player.findUnique({
+    where: { id: killedBy },
+    select: { username: true },
+  });
+  return player?.username ?? null;
+}
+
 /**
  * GET /api/v1/boss/active
- * List active boss encounters.
  */
 bossRouter.get('/active', async (_req, res, next) => {
   try {
     await checkAndResolveDueBossRounds(getIo());
     const encounters = await getActiveBossEncounters();
 
-    // Enrich with mob template names and zone info
     const enriched = await Promise.all(
       encounters.map(async (enc) => {
-        const [mob, event] = await Promise.all([
+        const [mob, event, killedByUsername] = await Promise.all([
           prisma.mobTemplate.findUnique({
             where: { id: enc.mobTemplateId },
             select: { name: true, level: true },
@@ -37,6 +45,7 @@ bossRouter.get('/active', async (_req, res, next) => {
             where: { id: enc.eventId },
             select: { zoneId: true, title: true, zone: { select: { name: true } } },
           }),
+          resolveKilledByUsername(enc.killedBy),
         ]);
         return {
           ...enc,
@@ -45,6 +54,7 @@ bossRouter.get('/active', async (_req, res, next) => {
           zoneId: event?.zoneId ?? '',
           zoneName: event?.zone?.name ?? 'Unknown',
           eventTitle: event?.title ?? '',
+          killedByUsername,
         };
       }),
     );
@@ -55,11 +65,38 @@ bossRouter.get('/active', async (_req, res, next) => {
   }
 });
 
+const historyQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+/**
+ * GET /api/v1/boss/history
+ * Must be registered before /:id to avoid param capture.
+ */
+bossRouter.get('/history', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const { page, pageSize } = historyQuerySchema.parse(req.query);
+    const result = await getBossHistory(playerId, page, pageSize);
+    res.json({
+      entries: result.entries,
+      pagination: {
+        page,
+        pageSize,
+        total: result.total,
+        totalPages: Math.ceil(result.total / pageSize),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const encounterIdSchema = z.object({ id: z.string().uuid() });
 
 /**
  * GET /api/v1/boss/:id
- * Encounter detail + participants.
  */
 bossRouter.get('/:id', async (req, res, next) => {
   try {
@@ -70,16 +107,20 @@ bossRouter.get('/:id', async (req, res, next) => {
       throw new AppError(404, 'Boss encounter not found', 'NOT_FOUND');
     }
 
-    const mob = await prisma.mobTemplate.findUnique({
-      where: { id: data.encounter.mobTemplateId },
-      select: { name: true, level: true },
-    });
+    const [mob, killedByUsername] = await Promise.all([
+      prisma.mobTemplate.findUnique({
+        where: { id: data.encounter.mobTemplateId },
+        select: { name: true, level: true },
+      }),
+      resolveKilledByUsername(data.encounter.killedBy),
+    ]);
 
     res.json({
       encounter: {
         ...data.encounter,
         mobName: mob?.name ?? 'Unknown',
         mobLevel: mob?.level ?? 1,
+        killedByUsername,
       },
       participants: data.participants,
     });
@@ -91,11 +132,11 @@ bossRouter.get('/:id', async (req, res, next) => {
 const signupSchema = z.object({
   role: z.enum(['attacker', 'healer']),
   turnsCommitted: z.number().int().min(50).max(5000),
+  autoSignUp: z.boolean().optional(),
 });
 
 /**
  * POST /api/v1/boss/:id/signup
- * Sign up for the next boss round.
  */
 bossRouter.post('/:id/signup', async (req, res, next) => {
   try {
@@ -104,7 +145,6 @@ bossRouter.post('/:id/signup', async (req, res, next) => {
     const { id } = encounterIdSchema.parse(req.params);
     const body = signupSchema.parse(req.body);
 
-    // Fetch encounter to get eventId for zone check
     const encounter = await prisma.bossEncounter.findUnique({
       where: { id },
       select: { eventId: true },
@@ -113,7 +153,6 @@ bossRouter.post('/:id/signup', async (req, res, next) => {
       throw new AppError(404, 'Boss encounter not found', 'NOT_FOUND');
     }
 
-    // Check player is in the boss zone
     const event = await prisma.worldEvent.findUnique({
       where: { id: encounter.eventId },
       select: { zoneId: true },
@@ -137,13 +176,11 @@ bossRouter.post('/:id/signup', async (req, res, next) => {
       body.role,
       body.turnsCommitted,
       hpState.maxHp,
+      body.autoSignUp ?? false,
     );
 
     res.json({ participant });
   } catch (err) {
-    if (err instanceof Error && err.message.includes('Already signed up')) {
-      return next(new AppError(409, err.message, 'ALREADY_SIGNED_UP'));
-    }
     if (err instanceof Error && err.message.includes('not found')) {
       return next(new AppError(404, err.message, 'NOT_FOUND'));
     }
@@ -161,7 +198,6 @@ const roundParamsSchema = z.object({
 
 /**
  * GET /api/v1/boss/:id/round/:num
- * Round results for a specific round.
  */
 bossRouter.get('/:id/round/:num', async (req, res, next) => {
   try {
@@ -184,6 +220,9 @@ bossRouter.get('/:id/round/:num', async (req, res, next) => {
         turnsCommitted: p.turnsCommitted,
         totalDamage: p.totalDamage,
         totalHealing: p.totalHealing,
+        attacks: p.attacks,
+        hits: p.hits,
+        crits: p.crits,
         currentHp: p.currentHp,
         status: p.status,
       })),

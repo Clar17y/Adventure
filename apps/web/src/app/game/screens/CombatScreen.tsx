@@ -6,6 +6,7 @@ import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
 import { CombatPlayback } from '@/components/combat/CombatPlayback';
 import { CombatRewardsSummary } from '@/components/combat/CombatRewardsSummary';
 import { CombatHistory } from '@/components/screens/CombatHistory';
+import { BossHistory } from '@/components/screens/BossHistory';
 import { Pagination } from '@/components/common/Pagination';
 import { formatCombatShareText, resolveMobMaxHp } from '@/lib/combatShare';
 import { getMobPrefixDefinition } from '@adventure/shared';
@@ -78,7 +79,7 @@ export function CombatScreen({
   combatPlaybackData,
   onCombatPlaybackComplete,
 }: CombatScreenProps) {
-  const [activeView, setActiveView] = useState<'encounters' | 'history'>('encounters');
+  const [activeView, setActiveView] = useState<'encounters' | 'history' | 'bossHistory'>('encounters');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
 
   // Player max HP should be the player's real max HP.
@@ -159,9 +160,22 @@ export function CombatScreen({
         >
           History
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveView('bossHistory')}
+          className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+            activeView === 'bossHistory'
+              ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+              : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)]'
+          }`}
+        >
+          Boss History
+        </button>
       </div>
 
-      {activeView === 'encounters' ? (
+      {activeView === 'bossHistory' ? (
+        <BossHistory />
+      ) : activeView === 'encounters' ? (
         <>
           <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 space-y-3">
             <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Encounter Sites</h2>

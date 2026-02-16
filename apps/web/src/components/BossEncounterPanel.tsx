@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import {
@@ -24,8 +24,8 @@ export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncou
   const [signing, setSigning] = useState(false);
   const [role, setRole] = useState<'attacker' | 'healer'>('attacker');
   const [autoSignUp, setAutoSignUp] = useState(false);
-  const [autoSignUpInitialized, setAutoSignUpInitialized] = useState(false);
   const [signupError, setSignupError] = useState('');
+  const autoSignUpInitRef = useRef(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -33,24 +33,25 @@ export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncou
     if (res.data) {
       setEncounter(res.data.encounter);
       setParticipants(res.data.participants);
-
-      // Initialize auto-signup from player's current signup (once)
-      if (playerId && !autoSignUpInitialized) {
-        const nextRound = (res.data.encounter.roundNumber ?? 0) + 1;
-        const mySignup = res.data.participants.find(
-          (p) => p.playerId === playerId && p.roundNumber === nextRound,
-        );
-        if (mySignup) {
-          setAutoSignUp(mySignup.autoSignUp);
-          setRole(mySignup.role as 'attacker' | 'healer');
-        }
-        setAutoSignUpInitialized(true);
-      }
     }
     setLoading(false);
-  }, [encounterId, playerId, autoSignUpInitialized]);
+  }, [encounterId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Initialize auto-signup and role from player's existing signup (once)
+  useEffect(() => {
+    if (!playerId || !encounter || autoSignUpInitRef.current) return;
+    autoSignUpInitRef.current = true;
+    const nextRound = encounter.roundNumber + 1;
+    const mySignup = participants.find(
+      (p) => p.playerId === playerId && p.roundNumber === nextRound,
+    );
+    if (mySignup) {
+      setAutoSignUp(mySignup.autoSignUp);
+      setRole(mySignup.role as 'attacker' | 'healer');
+    }
+  }, [playerId, encounter, participants]);
 
   async function handleSignup() {
     setSigning(true);

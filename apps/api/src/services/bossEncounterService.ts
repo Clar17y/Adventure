@@ -427,29 +427,31 @@ export async function resolveBossRound(
       );
       const eligible = hpChecks.filter((c) => !c.hpState.isRecovering);
 
+      // Each player gets its own transaction so one failure doesn't affect others
       if (eligible.length > 0) {
-        // Batch: deduct turns and create participants in a single transaction
-        await prisma.$transaction(async (tx) => {
-          for (const { participant, hpState } of eligible) {
+        await Promise.all(
+          eligible.map(async ({ participant, hpState }) => {
             try {
-              await spendPlayerTurnsTx(tx, participant.playerId, turnCost);
-              await tx.bossParticipant.create({
-                data: {
-                  encounterId,
-                  playerId: participant.playerId,
-                  role: participant.role,
-                  roundNumber: autoNextRound,
-                  turnsCommitted: turnCost,
-                  currentHp: hpState.maxHp,
-                  status: 'alive',
-                  autoSignUp: true,
-                },
+              await prisma.$transaction(async (tx) => {
+                await spendPlayerTurnsTx(tx, participant.playerId, turnCost);
+                await tx.bossParticipant.create({
+                  data: {
+                    encounterId,
+                    playerId: participant.playerId,
+                    role: participant.role,
+                    roundNumber: autoNextRound,
+                    turnsCommitted: turnCost,
+                    currentHp: hpState.maxHp,
+                    status: 'alive',
+                    autoSignUp: true,
+                  },
+                });
               });
             } catch {
               // Skip players who can't auto-signup (insufficient turns, etc.)
             }
-          }
-        });
+          }),
+        );
       }
     }
   }

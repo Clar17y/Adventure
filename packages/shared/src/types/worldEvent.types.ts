@@ -39,6 +39,14 @@ export interface WorldEventData {
   createdBy: WorldEventSource;
 }
 
+export interface BossRoundSummary {
+  round: number;
+  bossDamage: number;
+  totalPlayerDamage: number;
+  bossHpPercent: number;
+  raidPoolPercent: number;
+}
+
 export interface BossEncounterData {
   id: string;
   eventId: string;
@@ -52,6 +60,7 @@ export interface BossEncounterData {
   nextRoundAt: string | null;
   status: BossEncounterStatus;
   killedBy: string | null;
+  roundSummaries: BossRoundSummary[] | null;
 }
 
 export interface BossParticipantData {
@@ -63,6 +72,10 @@ export interface BossParticipantData {
   turnsCommitted: number;
   totalDamage: number;
   totalHealing: number;
+  attacks: number;
+  hits: number;
+  crits: number;
+  autoSignUp: boolean;
   currentHp: number;
   status: BossParticipantStatus;
 }

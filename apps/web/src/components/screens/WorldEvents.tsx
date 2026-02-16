@@ -9,6 +9,7 @@ import {
   type WorldEventResponse,
   type BossEncounterResponse,
 } from '@/lib/api';
+import { BossEncounterPanel } from '@/components/BossEncounterPanel';
 
 function formatTimeRemaining(expiresAt: string | null): string {
   if (!expiresAt) return 'Permanent';
@@ -82,13 +83,15 @@ function EventCard({ event }: { event: WorldEventResponse }) {
 interface WorldEventsProps {
   currentZoneId: string | null;
   currentZoneName: string | null;
+  playerId?: string | null;
   onNavigate: (screen: string) => void;
 }
 
-export function WorldEvents({ currentZoneId, currentZoneName, onNavigate }: WorldEventsProps) {
+export function WorldEvents({ currentZoneId, currentZoneName, playerId, onNavigate }: WorldEventsProps) {
   const [events, setEvents] = useState<WorldEventResponse[]>([]);
   const [bosses, setBosses] = useState<BossEncounterResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedBossId, setSelectedBossId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -122,45 +125,61 @@ export function WorldEvents({ currentZoneId, currentZoneName, onNavigate }: Worl
         </PixelButton>
       </div>
 
+      {/* Boss Encounter Detail Panel */}
+      {selectedBossId && (
+        <BossEncounterPanel
+          encounterId={selectedBossId}
+          playerId={playerId ?? undefined}
+          onClose={() => setSelectedBossId(null)}
+        />
+      )}
+
       {/* Boss Encounters */}
-      {bosses.length > 0 && (
+      {bosses.length > 0 && !selectedBossId && (
         <div className="space-y-2">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--rpg-red)' }}>
             Active Boss Encounters
           </h3>
-          {bosses.map((boss) => (
-            <PixelCard key={boss.id} className="p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold" style={{ color: 'var(--rpg-red)' }}>
-                  {boss.mobName} (Lv.{boss.mobLevel})
-                </span>
-                <span className="text-xs opacity-70">
-                  {boss.zoneName ?? 'Unknown Zone'}
-                </span>
-              </div>
-              <div className="mb-2">
-                <div className="flex justify-between text-xs mb-1">
-                  <span>HP</span>
-                  <span>{boss.currentHp} / {boss.maxHp}</span>
+          {bosses.map((boss) => {
+            const hpPercent = boss.maxHp > 0 ? Math.max(0, Math.min(100, (boss.currentHp / boss.maxHp) * 100)) : 0;
+            return (
+              <PixelCard
+                key={boss.id}
+                className="p-3 cursor-pointer hover:brightness-110 transition-all"
+                onClick={() => setSelectedBossId(boss.id)}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold" style={{ color: 'var(--rpg-red)' }}>
+                    {boss.mobName} (Lv.{boss.mobLevel})
+                  </span>
+                  <span className="text-xs opacity-70">
+                    {boss.zoneName ?? 'Unknown Zone'}
+                  </span>
                 </div>
-                <div className="w-full h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.max(0, Math.min(100, (boss.currentHp / boss.maxHp) * 100))}%`,
-                      background: 'var(--rpg-red)',
-                    }}
-                  />
+                <div className="mb-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>HP</span>
+                    <span>{Math.round(hpPercent)}%</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${hpPercent}%`,
+                        background: 'var(--rpg-red)',
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span>Round {boss.roundNumber} — {boss.status}</span>
-                {boss.nextRoundAt && (
-                  <span>Next round: {formatTimeRemaining(boss.nextRoundAt)}</span>
-                )}
-              </div>
-            </PixelCard>
-          ))}
+                <div className="flex justify-between text-xs">
+                  <span>Round {boss.roundNumber} — {boss.status}</span>
+                  {boss.nextRoundAt && (
+                    <span>Next round: {formatTimeRemaining(boss.nextRoundAt)}</span>
+                  )}
+                </div>
+              </PixelCard>
+            );
+          })}
         </div>
       )}
 

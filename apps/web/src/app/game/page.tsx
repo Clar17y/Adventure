@@ -768,6 +768,7 @@ export default function GamePage() {
           <WorldEvents
             currentZoneId={activeZoneId}
             currentZoneName={currentZone?.name ?? null}
+            playerId={player?.id ?? null}
             onNavigate={(s) => setActiveScreen(s as Screen)}
           />
         );

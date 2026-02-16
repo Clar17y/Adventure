@@ -541,6 +541,7 @@ model BossEncounter {
   nextRoundAt    DateTime? @map("next_round_at")
   status         String    @default("waiting") @db.VarChar(16)
   killedBy       String?   @map("killed_by")
+  roundSummaries Json?     @map("round_summaries")
 
   event         WorldEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   mobTemplate   MobTemplate       @relation(fields: [mobTemplateId], references: [id])
@@ -559,6 +560,10 @@ model BossParticipant {
   turnsCommitted  Int    @map("turns_committed")
   totalDamage     Int    @default(0) @map("total_damage")
   totalHealing    Int    @default(0) @map("total_healing")
+  attacks         Int    @default(0)
+  hits            Int    @default(0)
+  crits           Int    @default(0)
+  autoSignUp      Boolean @default(false) @map("auto_sign_up")
   currentHp       Int    @map("current_hp")
   status          String @default("alive") @db.VarChar(16)
 

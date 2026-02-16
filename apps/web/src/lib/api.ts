@@ -1109,33 +1109,66 @@ export async function getZoneEvents(zoneId: string) {
 }
 
 // Boss Encounters
+export interface BossRoundSummary {
+  round: number;
+  bossDamage: number;
+  totalPlayerDamage: number;
+  bossHpPercent: number;
+  raidPoolPercent: number;
+}
+
 export interface BossEncounterResponse {
   id: string;
   eventId: string;
   mobTemplateId: string;
   currentHp: number;
   maxHp: number;
+  baseHp: number;
   roundNumber: number;
   nextRoundAt: string | null;
   status: string;
+  killedBy: string | null;
+  killedByUsername?: string | null;
   mobName: string;
   mobLevel: number;
   zoneId?: string;
   zoneName?: string;
   raidPoolHp?: number;
   raidPoolMax?: number;
+  roundSummaries?: BossRoundSummary[] | null;
 }
 
 export interface BossParticipantResponse {
   id: string;
   playerId: string;
+  username?: string | null;
   role: string;
   roundNumber: number;
   turnsCommitted: number;
   totalDamage: number;
   totalHealing: number;
+  attacks: number;
+  hits: number;
+  crits: number;
+  autoSignUp: boolean;
   currentHp: number;
   status: string;
+}
+
+export interface BossHistoryEntry {
+  encounter: BossEncounterResponse;
+  mobName: string;
+  mobLevel: number;
+  zoneName: string;
+  killedByUsername: string | null;
+  playerStats: {
+    totalDamage: number;
+    totalHealing: number;
+    attacks: number;
+    hits: number;
+    crits: number;
+    roundsParticipated: number;
+  };
 }
 
 export async function getActiveBossEncounters() {
@@ -1149,9 +1182,16 @@ export async function getBossEncounter(id: string) {
   }>(`/api/v1/boss/${id}`);
 }
 
-export async function signUpForBoss(id: string, role: 'attacker' | 'healer', turnsCommitted: number) {
+export async function signUpForBoss(id: string, role: 'attacker' | 'healer', autoSignUp = false) {
   return fetchApi<{ participant: BossParticipantResponse }>(`/api/v1/boss/${id}/signup`, {
     method: 'POST',
-    body: JSON.stringify({ role, turnsCommitted }),
+    body: JSON.stringify({ role, autoSignUp }),
   });
+}
+
+export async function getBossHistory(page = 1, pageSize = 10) {
+  return fetchApi<{
+    entries: BossHistoryEntry[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  }>(`/api/v1/boss/history?page=${page}&pageSize=${pageSize}`);
 }

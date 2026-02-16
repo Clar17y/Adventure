@@ -103,6 +103,7 @@ export interface CombatResult {
   durabilityLost: DurabilityLoss[];
   turnsSpent: number;
   playerHpRemaining: number;
+  mobHpRemaining: number;
   potionsConsumed: PotionConsumed[];
 }
 

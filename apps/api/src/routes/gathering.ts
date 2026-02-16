@@ -8,6 +8,8 @@ import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { addStackableItemTx } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
+import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
+import { applyResourceEventModifiers } from '@adventure/game-engine';
 
 export const gatheringRouter = Router();
 
@@ -281,7 +283,12 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     const levelsAbove = Math.max(0, level - template.levelRequired);
     const yieldMultiplier = 1 + levelsAbove * GATHERING_CONSTANTS.YIELD_MULTIPLIER_PER_LEVEL;
     const baseYield = Math.max(template.baseYield, GATHERING_CONSTANTS.BASE_YIELD);
-    const yieldPerAction = Math.floor(baseYield * yieldMultiplier);
+    const baseYieldPerAction = Math.floor(baseYield * yieldMultiplier);
+
+    // Apply world event resource modifiers
+    const zoneModifiers = await getActiveZoneModifiers(template.zoneId);
+    const activeEventEffects = await getActiveEventSummaries(template.zoneId);
+    const yieldPerAction = applyResourceEventModifiers(baseYieldPerAction, zoneModifiers);
 
     // Cap actions by remaining capacity
     const maxActionsByCapacity = Math.ceil(effectiveCapacity / yieldPerAction);
@@ -407,6 +414,7 @@ gatheringRouter.post('/mine', async (req, res, next) => {
         attributePointsAfter: xpGrant.attributePointsAfter,
         characterLeveledUp: xpGrant.characterLeveledUp,
       },
+      activeEvents: activeEventEffects.length > 0 ? activeEventEffects : undefined,
     });
   } catch (err) {
     next(err);

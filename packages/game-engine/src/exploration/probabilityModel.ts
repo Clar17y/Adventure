@@ -1,11 +1,12 @@
-import { EXPLORATION_CONSTANTS } from '@adventure/shared';
+import { EXPLORATION_CONSTANTS, WORLD_EVENT_CONSTANTS } from '@adventure/shared';
 
 export type ExplorationOutcomeType =
   | 'ambush'
   | 'encounter_site'
   | 'resource_node'
   | 'hidden_cache'
-  | 'zone_exit';
+  | 'zone_exit'
+  | 'event_discovery';
 
 export interface ExplorationOutcome {
   type: ExplorationOutcomeType;
@@ -77,6 +78,7 @@ export function simulateExploration(
 ): ExplorationOutcome[] {
   const outcomes: ExplorationOutcome[] = [];
   let canDiscoverZoneExit = zoneExitChance != null && zoneExitChance > 0;
+  let canDiscoverEvent = true; // max 1 event discovery per run
 
   for (let t = 1; t <= turns; t++) {
     if (Math.random() < EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN) {
@@ -98,6 +100,11 @@ export function simulateExploration(
     if (canDiscoverZoneExit && Math.random() < zoneExitChance!) {
       outcomes.push({ type: 'zone_exit', turnOccurred: t });
       canDiscoverZoneExit = false;
+    }
+
+    if (canDiscoverEvent && Math.random() < WORLD_EVENT_CONSTANTS.EVENT_DISCOVERY_CHANCE_PER_TURN) {
+      outcomes.push({ type: 'event_discovery', turnOccurred: t });
+      canDiscoverEvent = false;
     }
   }
 

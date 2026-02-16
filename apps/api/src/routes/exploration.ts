@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
 import {
+  applyMobEventModifiers,
   applyMobPrefix,
   buildPlayerCombatStats,
   calculateFleeResult,
@@ -13,10 +14,11 @@ import {
 } from '@adventure/game-engine';
 import {
   EXPLORATION_CONSTANTS,
+  WORLD_EVENT_TEMPLATES,
+  WORLD_EVENT_CONSTANTS,
   type CombatOptions,
   type MobTemplate,
   type PotionConsumed,
-  type SkillType,
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -28,7 +30,14 @@ import { degradeEquippedDurability } from '../services/durabilityService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { discoverZone, getUndiscoveredNeighborZones, respawnToHomeTown } from '../services/zoneDiscoveryService';
+import { getActiveZoneModifiers, spawnWorldEvent } from '../services/worldEventService';
+import { createBossEncounter } from '../services/bossEncounterService';
+import { checkAndSpawnEvents } from '../services/eventSchedulerService';
+import { getIo } from '../socket';
+import { emitSystemMessage } from '../services/systemMessageService';
+import { persistMobHp } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
+import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 
 export const explorationRouter = Router();
 
@@ -46,7 +55,6 @@ const startSchema = z.object({
   turns: z.number().int(),
 });
 
-type AttackSkill = 'melee' | 'ranged' | 'magic';
 type EncounterSiteSize = 'small' | 'medium' | 'large';
 type EncounterMobRole = 'trash' | 'elite' | 'boss';
 type EncounterMobStatus = 'alive' | 'defeated' | 'decayed';
@@ -56,7 +64,8 @@ type NarrativeEventType =
   | 'encounter_site'
   | 'resource_node'
   | 'hidden_cache'
-  | 'zone_exit';
+  | 'zone_exit'
+  | 'event_discovery';
 
 interface EncounterMobSlot {
   slot: number;
@@ -117,30 +126,6 @@ interface PendingEncounterSiteDiscovery {
 interface PendingAmbushCombatLog {
   turnsSpent: number;
   result: Prisma.InputJsonValue;
-}
-
-function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
-  if (value === 'melee' || value === 'ranged' || value === 'magic') return value;
-  return null;
-}
-
-async function getMainHandAttackSkill(playerId: string): Promise<AttackSkill | null> {
-  const mainHand = await prisma.playerEquipment.findUnique({
-    where: { playerId_slot: { playerId, slot: 'main_hand' } },
-    include: { item: { include: { template: true } } },
-  });
-
-  const requiredSkill = mainHand?.item?.template?.requiredSkill as SkillType | null | undefined;
-  return attackSkillFromRequiredSkill(requiredSkill);
-}
-
-async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
-  const skill = await prisma.playerSkill.findUnique({
-    where: { playerId_skillType: { playerId, skillType } },
-    select: { level: true },
-  });
-
-  return skill?.level ?? 1;
 }
 
 function pickWeighted<T>(
@@ -400,6 +385,12 @@ explorationRouter.post('/start', async (req, res, next) => {
     const undiscoveredNeighbors = await getUndiscoveredNeighborZones(playerId, body.zoneId);
     const effectiveExitChance = undiscoveredNeighbors.length > 0 ? zone.zoneExitChance : null;
 
+    // Trigger lazy event scheduler
+    await checkAndSpawnEvents(getIo());
+
+    // Fetch zone modifiers from active world events
+    const zoneModifiers = await getActiveZoneModifiers(body.zoneId);
+
     const turnSpend = await spendPlayerTurns(playerId, body.turns);
 
     const outcomes = simulateExploration(body.turns, effectiveExitChance);
@@ -442,7 +433,8 @@ explorationRouter.post('/start', async (req, res, next) => {
             : [],
         };
 
-        const prefixedMob = applyMobPrefix(baseMob, rollMobPrefix());
+        const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
+        const prefixedMob = applyMobPrefix(modifiedMob, rollMobPrefix());
         const playerStats = buildPlayerCombatStats(
           currentHp,
           hpState.maxHp,
@@ -585,6 +577,11 @@ explorationRouter.post('/start', async (req, res, next) => {
           } else {
             currentHp = fleeResult.remainingHp;
             await setHp(playerId, currentHp);
+          }
+
+          // Persist the mob's remaining HP for potential reencounter
+          if (combatResult.mobHpRemaining > 0) {
+            await persistMobHp(playerId, prefixedMob.id, body.zoneId, combatResult.mobHpRemaining, prefixedMob.hp);
           }
 
           const defeatDescription = fleeResult.outcome === 'knockout'
@@ -740,6 +737,111 @@ explorationRouter.post('/start', async (req, res, next) => {
             discoveredZoneName: neighbor.name,
           },
         });
+      }
+
+      if (outcome.type === 'event_discovery') {
+        // Roll for boss discovery first
+        if (Math.random() < WORLD_EVENT_CONSTANTS.BOSS_DISCOVERY_CHANCE) {
+          const activeBosses = await prisma.bossEncounter.count({
+            where: { status: { in: ['waiting', 'in_progress'] } },
+          });
+
+          if (activeBosses < WORLD_EVENT_CONSTANTS.MAX_BOSS_ENCOUNTERS) {
+            const familyIds = zoneFamilies.map((f: ZoneFamilyRow) => f.mobFamilyId);
+            const bossMobs = await prisma.mobTemplate.findMany({
+              where: {
+                isBoss: true,
+                familyMembers: { some: { mobFamilyId: { in: familyIds } } },
+              },
+            });
+
+            if (bossMobs.length > 0) {
+              const bossMob = bossMobs[Math.floor(Math.random() * bossMobs.length)]!;
+              const bossHp = bossMob.bossBaseHp ?? bossMob.hp;
+
+              // Create a boss world event with no expiry (lasts until defeated)
+              const bossEvent = await prisma.worldEvent.create({
+                data: {
+                  type: 'boss',
+                  zoneId: body.zoneId,
+                  title: `${bossMob.name} Awakens`,
+                  description: `A powerful ${bossMob.name} has appeared in ${zone.name}!`,
+                  effectType: 'damage_up',
+                  effectValue: 0,
+                  expiresAt: null,
+                  status: 'active',
+                  createdBy: 'player_discovery',
+                },
+                include: { zone: { select: { name: true } } },
+              });
+
+              const bossEncounter = await createBossEncounter(bossEvent.id, bossMob.id, bossHp);
+
+              await emitSystemMessage(
+                getIo(),
+                'world',
+                'world',
+                `A boss has appeared in ${zone.name}: ${bossMob.name} Awakens!`,
+              );
+              await emitSystemMessage(
+                getIo(),
+                'zone',
+                `zone:${body.zoneId}`,
+                `${bossMob.name} has awakened! Rally adventurers to defeat it.`,
+              );
+
+              events.push({
+                turn: outcome.turnOccurred,
+                type: 'event_discovery',
+                description: `You discovered a boss: **${bossMob.name} Awakens** — a powerful ${bossMob.name} has appeared in ${zone.name}!`,
+                details: {
+                  eventId: bossEvent.id,
+                  eventTitle: `${bossMob.name} Awakens`,
+                  bossEncounterId: bossEncounter.id,
+                  bossMobName: bossMob.name,
+                },
+              });
+
+              continue;
+            }
+          }
+        }
+
+        // Pick a random zone-scoped, zone-wide template (no world-wide or targeted)
+        const eligible = WORLD_EVENT_TEMPLATES.filter(
+          (t) => t.scope === 'zone' && t.targeting === 'zone',
+        );
+        if (eligible.length > 0) {
+          const template = eligible[randomIntInclusive(0, eligible.length - 1)]!;
+          const durationHours = template.type === 'resource'
+            ? WORLD_EVENT_CONSTANTS.RESOURCE_EVENT_DURATION_HOURS
+            : WORLD_EVENT_CONSTANTS.MOB_EVENT_DURATION_HOURS;
+          const spawned = await spawnWorldEvent({
+            type: template.type,
+            zoneId: body.zoneId,
+            title: template.title,
+            description: template.description,
+            effectType: template.effectType,
+            effectValue: template.effectValue,
+            durationHours,
+            createdBy: 'player_discovery',
+          });
+
+          if (spawned) {
+            await emitSystemMessage(
+              getIo(),
+              'world',
+              'world',
+              `New event in ${zone.name}: ${spawned.title} — ${spawned.description}`,
+            );
+            events.push({
+              turn: outcome.turnOccurred,
+              type: 'event_discovery',
+              description: `You triggered a world event: **${spawned.title}** — ${spawned.description}`,
+              details: { eventId: spawned.id, eventTitle: spawned.title },
+            });
+          }
+        }
       }
     }
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
 import {
+  applyMobEventModifiers,
   applyMobPrefix,
   buildPlayerCombatStats,
   runCombat,
@@ -15,7 +16,6 @@ import {
   type CombatOptions,
   type LootDrop,
   type MobTemplate,
-  type SkillType,
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -28,7 +28,14 @@ import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { respawnToHomeTown } from '../services/zoneDiscoveryService';
 import { grantEncounterSiteChestRewardsTx } from '../services/chestService';
+import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
+import {
+  persistMobHp,
+  checkPersistedMobReencounter,
+  removePersistedMob,
+} from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
+import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 
 export const combatRouter = Router();
 
@@ -37,7 +44,6 @@ combatRouter.use(authenticate);
 const prismaAny = prisma as unknown as any;
 
 const attackSkillSchema = z.enum(['melee', 'ranged', 'magic']);
-type AttackSkill = z.infer<typeof attackSkillSchema>;
 type LootDropWithName = LootDrop & { itemName: string | null };
 type EncounterSiteSize = 'small' | 'medium' | 'large';
 
@@ -64,11 +70,6 @@ const listEncounterSitesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
 });
-
-function attackSkillFromRequiredSkill(value: SkillType | null | undefined): AttackSkill | null {
-  if (value === 'melee' || value === 'ranged' || value === 'magic') return value;
-  return null;
-}
 
 function pickWeighted<T extends { encounterWeight: number }>(items: T[]): T | null {
   const totalWeight = items.reduce((sum, item) => sum + item.encounterWeight, 0);
@@ -231,25 +232,6 @@ async function applyEncounterSiteDecayAndPersist(
     state,
     nextMob: getNextEncounterMob(decayed.mobs),
   };
-}
-
-async function getMainHandAttackSkill(playerId: string): Promise<AttackSkill | null> {
-  const mainHand = await prisma.playerEquipment.findUnique({
-    where: { playerId_slot: { playerId, slot: 'main_hand' } },
-    include: { item: { include: { template: true } } },
-  });
-
-  const requiredSkill = mainHand?.item?.template?.requiredSkill as SkillType | null | undefined;
-  return attackSkillFromRequiredSkill(requiredSkill);
-}
-
-async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
-  const skill = await prisma.playerSkill.findUnique({
-    where: { playerId_skillType: { playerId, skillType } },
-    select: { level: true },
-  });
-
-  return skill?.level ?? 1;
 }
 
 /**
@@ -538,8 +520,23 @@ combatRouter.post('/start', async (req, res, next) => {
       ...mob,
       spellPattern: Array.isArray(mob.spellPattern) ? (mob.spellPattern as MobTemplate['spellPattern']) : [],
     };
-    const prefixedMob = applyMobPrefix(baseMob, mobPrefix);
+    // Apply world event modifiers to mob stats
+    const zoneModifiers = await getActiveZoneModifiers(zoneId);
+    const activeEventEffects = await getActiveEventSummaries(zoneId);
+    const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
+    const prefixedMob = applyMobPrefix(modifiedMob, mobPrefix);
     mobPrefix = prefixedMob.mobPrefix;
+
+    // Check for persisted mob reencounter (damaged mob from a previous fight)
+    let persistedMobId: string | null = null;
+    let mobHpOverride: { currentHp: number; maxHp: number } | null = null;
+    if (!body.encounterSiteId) {
+      const persisted = await checkPersistedMobReencounter(playerId, zoneId, prefixedMob.id);
+      if (persisted) {
+        persistedMobId = persisted.id;
+        mobHpOverride = { currentHp: persisted.currentHp, maxHp: persisted.maxHp };
+      }
+    }
 
     // Auto-potion setup
     const playerRecord = await prismaAny.player.findUnique({
@@ -554,7 +551,8 @@ combatRouter.post('/start', async (req, res, next) => {
       combatOptions = { autoPotionThreshold, potions };
     }
 
-    const combatResult = runCombat(playerStats, prefixedMob, combatOptions);
+    const finalMob = mobHpOverride ? { ...prefixedMob, ...mobHpOverride } : prefixedMob;
+    const combatResult = runCombat(playerStats, finalMob, combatOptions);
     const turnSpend = await prisma.$transaction(async (tx) => {
       const txAny = tx as unknown as any;
       const spent = await spendPlayerTurnsTx(tx, playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
@@ -634,6 +632,13 @@ combatRouter.post('/start', async (req, res, next) => {
       } else {
         await setHp(playerId, fleeResult.remainingHp);
       }
+    }
+
+    // Handle persisted mob HP
+    if (combatResult.outcome === 'victory' && persistedMobId) {
+      await removePersistedMob(persistedMobId);
+    } else if (combatResult.outcome === 'defeat' && combatResult.mobHpRemaining > 0 && !body.encounterSiteId) {
+      await persistMobHp(playerId, prefixedMob.id, zoneId, combatResult.mobHpRemaining, prefixedMob.hp);
     }
 
     const lootWithNames = await enrichLootWithNames(loot);
@@ -769,6 +774,7 @@ combatRouter.post('/start', async (req, res, next) => {
             }
           : null,
       },
+      activeEvents: activeEventEffects.length > 0 ? activeEventEffects : undefined,
     });
   } catch (err) {
     next(err);

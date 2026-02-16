@@ -17,6 +17,7 @@ import {
   getSkills,
   getTurns,
   getZones,
+  getZoneEvents,
   mine,
   repairItem,
   salvage,
@@ -26,6 +27,7 @@ import {
   startExploration,
   travelToZone,
   unequip,
+  type WorldEventResponse,
 } from '@/lib/api';
 
 export type Screen =
@@ -41,7 +43,8 @@ export type Screen =
   | 'crafting'
   | 'forge'
   | 'gathering'
-  | 'rest';
+  | 'rest'
+  | 'worldEvents';
 
 export interface PendingEncounter {
   encounterSiteId: string;
@@ -368,6 +371,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     discovered: boolean;
   }>>([]);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
+  const [activeEvents, setActiveEvents] = useState<WorldEventResponse[]>([]);
   const [autoPotionThreshold, setAutoPotionThreshold] = useState(0);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
@@ -435,6 +439,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setZones(zonesRes.data.zones);
       setZoneConnections(zonesRes.data.connections);
       setActiveZoneId(zonesRes.data.currentZoneId);
+      if (zonesRes.data.currentZoneId) {
+        getZoneEvents(zonesRes.data.currentZoneId).then((res) => {
+          if (res.data) setActiveEvents(res.data.events);
+        });
+      }
     }
     if (invRes.data) setInventory(invRes.data.items);
     if (equipRes.data) {
@@ -651,7 +660,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }, []);
 
   const getActiveTab = () => {
-    if (['home', 'skills', 'zones', 'bestiary', 'rest'].includes(activeScreen)) return 'home';
+    if (['home', 'skills', 'zones', 'bestiary', 'rest', 'worldEvents'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
     if (['combat'].includes(activeScreen)) return 'combat';
@@ -886,6 +895,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       });
       setPlaybackActive(true);
 
+      if (data.activeEvents?.length) {
+        for (const evt of data.activeEvents) {
+          const sign = evt.effectType.endsWith('_down') ? '-' : '+';
+          pushLog({ timestamp: nowStamp(), type: 'info', message: `World event active: ${evt.title} (${sign}${Math.round(evt.effectValue * 100)}%)` });
+        }
+      }
+
       if (data.rewards.siteCompletion) {
         const chest = data.rewards.siteCompletion;
         const chestLabel = `${chest.chestRarity.charAt(0).toUpperCase()}${chest.chestRarity.slice(1)} Chest`;
@@ -975,6 +991,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           type: 'success',
           message: `${gatheredSkillName} leveled up to ${data.xp.newLevel}!`,
         });
+      }
+
+      if (data.activeEvents?.length) {
+        for (const evt of data.activeEvents) {
+          const sign = evt.effectType.endsWith('_down') ? '-' : '+';
+          newLogs.push({ timestamp: nowStamp(), type: 'info', message: `World event active: ${evt.title} (${sign}${Math.round(evt.effectValue * 100)}%)` });
+        }
       }
 
       if (data.node.nodeDepleted) {
@@ -1408,6 +1431,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     combatPlaybackData,
     explorationPlaybackData,
     travelPlaybackData,
+
+    // World Events
+    activeEvents,
 
     // Derived
     currentZone,

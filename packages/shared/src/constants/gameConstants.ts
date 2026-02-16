@@ -399,3 +399,36 @@ export const CHAT_CONSTANTS = {
   WORLD_RATE_LIMIT_MS: 2000,
   ZONE_RATE_LIMIT_MS: 1000,
 } as const;
+
+// =============================================================================
+// WORLD EVENTS
+// =============================================================================
+
+export const WORLD_EVENT_CONSTANTS = {
+  RESOURCE_EVENT_DURATION_HOURS: 6,
+  MOB_EVENT_DURATION_HOURS: 6,
+  WORLD_WIDE_EVENT_DURATION_HOURS: 6,
+  MAX_ZONE_EVENTS: 2,
+  MAX_WORLD_EVENTS: 1,
+  EVENT_RESPAWN_DELAY_MINUTES: 30,
+  EVENT_DISCOVERY_CHANCE_PER_TURN: 0.0001,
+  BOSS_ROUND_INTERVAL_MINUTES: 30,
+
+  // Boss spawning
+  BOSS_SPAWN_CHANCE: 0.10,
+  BOSS_DISCOVERY_CHANCE: 0.05,
+  MAX_BOSS_ENCOUNTERS: 1,
+
+  // Dynamic scaling by zone tier (index 0 = tier 1, through tier 5)
+  BOSS_HP_PER_PLAYER_BY_TIER: [200, 500, 1000, 2000, 4000] as readonly number[],
+  BOSS_AOE_PER_PLAYER_BY_TIER: [15, 30, 50, 80, 120] as readonly number[],
+  BOSS_DEFENCE_BY_TIER: [5, 12, 20, 35, 50] as readonly number[],
+
+  // Participant scaling
+  HEALER_MAGIC_SCALING: 0.02,
+  ATTACKER_TURN_SCALING: 0.001,
+
+  PERSISTED_MOB_REGEN_PERCENT_PER_MINUTE: 1,
+  PERSISTED_MOB_REENCOUNTER_CHANCE: 0.3,
+  PERSISTED_MOB_MAX_AGE_MINUTES: 120,
+} as const;

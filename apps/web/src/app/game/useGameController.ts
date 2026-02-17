@@ -14,6 +14,7 @@ import {
   getInventory,
   getPlayer,
   getEncounterSites,
+  getPvpNotificationCount,
   getSkills,
   getTurns,
   getZones,
@@ -44,6 +45,7 @@ export type Screen =
   | 'forge'
   | 'gathering'
   | 'rest'
+  | 'arena'
   | 'worldEvents';
 
 export interface PendingEncounter {
@@ -67,7 +69,8 @@ export interface PendingEncounter {
 
 export interface LastCombatLogEntry {
   round: number;
-  actor: 'player' | 'mob';
+  actor: 'combatantA' | 'combatantB';
+  actorName?: string;
   action: string;
   message: string;
   roll?: number;
@@ -84,19 +87,19 @@ export interface LastCombatLogEntry {
   magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
-  playerHpAfter?: number;
-  mobHpAfter?: number;
+  combatantAHpAfter?: number;
+  combatantBHpAfter?: number;
   spellName?: string;
   healAmount?: number;
   effectsApplied?: Array<{
     stat: string;
     modifier: number;
     duration: number;
-    target: 'player' | 'mob';
+    target: 'combatantA' | 'combatantB';
   }>;
   effectsExpired?: Array<{
     name: string;
-    target: 'player' | 'mob';
+    target: 'combatantA' | 'combatantB';
   }>;
 }
 
@@ -105,8 +108,8 @@ export interface LastCombat {
   mobPrefix: string | null;
   mobDisplayName: string;
   outcome: string;
-  playerMaxHp: number;
-  mobMaxHp: number;
+  combatantAMaxHp: number;
+  combatantBMaxHp: number;
   log: LastCombatLogEntry[];
   rewards: {
     xp: number;
@@ -371,15 +374,16 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     discovered: boolean;
   }>>([]);
   const [hpState, setHpState] = useState<HpState>({ currentHp: 100, maxHp: 100, regenPerSecond: 0.4, isRecovering: false, recoveryCost: null });
+  const [pvpNotificationCount, setPvpNotificationCount] = useState(0);
   const [activeEvents, setActiveEvents] = useState<WorldEventResponse[]>([]);
   const [autoPotionThreshold, setAutoPotionThreshold] = useState(0);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
     mobDisplayName: string;
     outcome: string;
-    playerMaxHp: number;
+    combatantAMaxHp: number;
     playerStartHp: number;
-    mobMaxHp: number;
+    combatantBMaxHp: number;
     log: LastCombatLogEntry[];
     rewards: LastCombat['rewards'];
   } | null>(null);
@@ -407,6 +411,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     const [turnRes, hpRes] = await Promise.all([getTurns(), getHpState()]);
     if (turnRes.data) setTurns(turnRes.data.currentTurns);
     if (hpRes.data) setHpState(hpRes.data);
+  }, []);
+
+  const loadPvpNotificationCount = useCallback(async () => {
+    const result = await getPvpNotificationCount();
+    if (result.data) {
+      setPvpNotificationCount(result.data.count);
+    }
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -474,10 +485,13 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   useEffect(() => {
     if (isAuthenticated) {
       void loadAll();
+      void loadPvpNotificationCount();
       const interval = setInterval(() => void loadTurnsAndHp(), 10000);
-      return () => clearInterval(interval);
+      // Poll PvP notifications less frequently (60s)
+      const pvpInterval = setInterval(() => void loadPvpNotificationCount(), 60000);
+      return () => { clearInterval(interval); clearInterval(pvpInterval); };
     }
-  }, [isAuthenticated, loadAll, loadTurnsAndHp]);
+  }, [isAuthenticated, loadAll, loadTurnsAndHp, loadPvpNotificationCount]);
 
   const refreshPendingEncounters = useCallback(async (options?: { background?: boolean }) => {
     if (!isAuthenticated) return;
@@ -663,7 +677,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (['home', 'skills', 'zones', 'bestiary', 'rest', 'worldEvents'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
-    if (['combat'].includes(activeScreen)) return 'combat';
+    if (['combat', 'arena'].includes(activeScreen)) return 'combat';
     return 'profile';
   };
 
@@ -887,9 +901,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setCombatPlaybackData({
         mobDisplayName: data.combat.mobDisplayName,
         outcome: data.combat.outcome,
-        playerMaxHp: data.combat.playerMaxHp,
+        combatantAMaxHp: data.combat.playerMaxHp,
         playerStartHp: hpBefore,
-        mobMaxHp: data.combat.mobMaxHp,
+        combatantBMaxHp: data.combat.mobMaxHp,
         log: data.combat.log,
         rewards,
       });
@@ -941,8 +955,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         mobPrefix: null,
         mobDisplayName: combatPlaybackData.mobDisplayName,
         outcome: combatPlaybackData.outcome,
-        playerMaxHp: combatPlaybackData.playerMaxHp,
-        mobMaxHp: combatPlaybackData.mobMaxHp,
+        combatantAMaxHp: combatPlaybackData.combatantAMaxHp,
+        combatantBMaxHp: combatPlaybackData.combatantBMaxHp,
         log: combatPlaybackData.log,
         rewards: combatPlaybackData.rewards,
       });
@@ -1425,6 +1439,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     bestiaryPrefixSummary,
     hpState,
     setHpState,
+    pvpNotificationCount,
     autoPotionThreshold,
     setAutoPotionThreshold,
     playbackActive,
@@ -1465,6 +1480,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,
+    loadTurnsAndHp,
+    loadPvpNotificationCount,
     handleSetAutoPotionThreshold,
   };
 }

@@ -22,9 +22,9 @@ describe('resolvePlayerMaxHp', () => {
 
   it('extracts max from log entries when no explicit', () => {
     const log: ShareCombatLogEntry[] = [
-      { round: 1, actor: 'player', playerHpAfter: 80 },
-      { round: 2, actor: 'mob', playerHpAfter: 100 },
-      { round: 3, actor: 'player', playerHpAfter: 60 },
+      { round: 1, actor: 'combatantA', combatantAHpAfter: 80 },
+      { round: 2, actor: 'combatantB', combatantAHpAfter: 100 },
+      { round: 3, actor: 'combatantA', combatantAHpAfter: 60 },
     ];
     expect(resolvePlayerMaxHp(log)).toBe(100);
   });
@@ -35,7 +35,7 @@ describe('resolvePlayerMaxHp', () => {
 
   it('returns undefined when log has no playerHpAfter values', () => {
     const log: ShareCombatLogEntry[] = [
-      { round: 1, actor: 'player' },
+      { round: 1, actor: 'combatantA' },
     ];
     expect(resolvePlayerMaxHp(log)).toBeUndefined();
   });
@@ -48,8 +48,8 @@ describe('resolveMobMaxHp', () => {
 
   it('extracts max from log entries', () => {
     const log: ShareCombatLogEntry[] = [
-      { round: 1, actor: 'player', mobHpAfter: 40 },
-      { round: 2, actor: 'mob', mobHpAfter: 50 },
+      { round: 1, actor: 'combatantA', combatantBHpAfter: 40 },
+      { round: 2, actor: 'combatantB', combatantBHpAfter: 50 },
     ];
     expect(resolveMobMaxHp(log)).toBe(50);
   });
@@ -66,8 +66,8 @@ describe('formatCombatShareText', () => {
       mobName: 'Goblin',
       zoneName: 'Dark Forest',
       log: [
-        { round: 1, actor: 'player', damage: 10, playerHpAfter: 90, mobHpAfter: 40 },
-        { round: 1, actor: 'mob', damage: 5, playerHpAfter: 85, mobHpAfter: 40 },
+        { round: 1, actor: 'combatantA', damage: 10, combatantAHpAfter: 90, combatantBHpAfter: 40 },
+        { round: 1, actor: 'combatantB', damage: 5, combatantAHpAfter: 85, combatantBHpAfter: 40 },
       ],
       rewards: {
         xp: 100,
@@ -93,7 +93,7 @@ describe('formatCombatShareText', () => {
     const input: CombatShareInput = {
       outcome: 'victory',
       log: [
-        { round: 1, actor: 'mob', evaded: true, playerHpAfter: 100, mobHpAfter: 30 },
+        { round: 1, actor: 'combatantB', evaded: true, combatantAHpAfter: 100, combatantBHpAfter: 30 },
       ],
       rewards: { xp: 50, loot: [] },
     };
@@ -106,7 +106,7 @@ describe('formatCombatShareText', () => {
     const input: CombatShareInput = {
       outcome: 'victory',
       log: [
-        { round: 1, actor: 'player', roll: 3, playerHpAfter: 100, mobHpAfter: 50 },
+        { round: 1, actor: 'combatantA', roll: 3, combatantAHpAfter: 100, combatantBHpAfter: 50 },
       ],
       rewards: { xp: 50, loot: [] },
     };

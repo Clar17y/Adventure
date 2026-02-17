@@ -17,6 +17,7 @@ model Player {
   email        String    @unique @db.VarChar(255)
   passwordHash String    @map("password_hash") @db.VarChar(255)
   role         String    @default("player") @db.VarChar(16)
+  isBot        Boolean   @default(false) @map("is_bot")
   createdAt    DateTime  @default(now()) @map("created_at")
   lastActiveAt DateTime? @map("last_active_at")
 
@@ -56,6 +57,9 @@ model Player {
   refreshTokens      RefreshToken[]
   resourceNodes      PlayerResourceNode[]
   zoneDiscoveries    PlayerZoneDiscovery[]
+  pvpRating          PvpRating?
+  pvpAttacks         PvpMatch[] @relation("PvpAttacker")
+  pvpDefenses        PvpMatch[] @relation("PvpDefender")
   bossParticipants   BossParticipant[]
   persistedMobs      PersistedMob[]
 
@@ -497,6 +501,62 @@ model ChatMessage {
 
   @@index([channelType, channelId, createdAt])
   @@map("chat_messages")
+}
+
+// =============================================================================
+// PVP ARENA
+// =============================================================================
+
+model PvpRating {
+  id           String    @id @default(uuid())
+  playerId     String    @unique @map("player_id")
+  player       Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  rating       Int       @default(1000)
+  wins         Int       @default(0)
+  losses       Int       @default(0)
+  draws        Int       @default(0)
+  winStreak    Int       @default(0) @map("win_streak")
+  bestRating   Int       @default(1000) @map("best_rating")
+  lastFoughtAt DateTime? @map("last_fought_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("pvp_ratings")
+}
+
+model PvpMatch {
+  id                   String   @id @default(uuid())
+  attackerId           String   @map("attacker_id")
+  attacker             Player   @relation("PvpAttacker", fields: [attackerId], references: [id])
+  defenderId           String   @map("defender_id")
+  defender             Player   @relation("PvpDefender", fields: [defenderId], references: [id])
+  attackerRating       Int      @map("attacker_rating")
+  defenderRating       Int      @map("defender_rating")
+  attackerRatingChange Int      @map("attacker_rating_change")
+  defenderRatingChange Int      @map("defender_rating_change")
+  winnerId             String?  @map("winner_id")
+  combatLog            Json     @map("combat_log")
+  attackerStyle        String   @map("attacker_style") @db.VarChar(16)
+  defenderStyle        String   @map("defender_style") @db.VarChar(16)
+  turnsSpent           Int      @map("turns_spent")
+  isRevenge            Boolean  @default(false) @map("is_revenge")
+  attackerRead         Boolean  @default(true) @map("attacker_read")
+  defenderRead         Boolean  @default(false) @map("defender_read")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([attackerId, createdAt])
+  @@index([defenderId, createdAt])
+  @@map("pvp_matches")
+}
+
+model PvpCooldown {
+  id         String   @id @default(uuid())
+  attackerId String   @map("attacker_id")
+  defenderId String   @map("defender_id")
+  expiresAt  DateTime @map("expires_at")
+
+  @@unique([attackerId, defenderId])
+  @@map("pvp_cooldowns")
 }
 
 // =============================================================================

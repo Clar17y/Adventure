@@ -31,6 +31,8 @@ interface CombatLogEntryProps {
   playerMaxHp?: number;
   mobMaxHp?: number;
   showDetailedBreakdown?: boolean;
+  playerLabel?: string;
+  opponentLabel?: string;
 }
 
 function resolveHitOutcome(entry: LastCombatLogEntry): {
@@ -61,13 +63,15 @@ export function CombatLogEntry({
   playerMaxHp,
   mobMaxHp,
   showDetailedBreakdown = true,
+  playerLabel = 'You',
+  opponentLabel = 'Mob',
 }: CombatLogEntryProps) {
   const [expanded, setExpanded] = useState(false);
   const icon = getActionIcon(entry);
   const hasDetails = entry.attackModifier !== undefined || entry.rawDamage !== undefined || entry.spellName !== undefined;
   const hitOutcome = resolveHitOutcome(entry);
 
-  const isPlayerAction = entry.actor === 'player';
+  const isPlayerAction = entry.actor === 'combatantA';
   const actorColor = isPlayerAction ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]';
 
   return (
@@ -81,7 +85,7 @@ export function CombatLogEntry({
           <>
             <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">Init</span>
             <span className="text-[var(--rpg-text-primary)] text-xs">
-              {isPlayerAction ? 'You go first' : 'Mob goes first'}
+              {isPlayerAction ? `${playerLabel} go${playerLabel === 'You' ? '' : 'es'} first` : `${opponentLabel} goes first`}
             </span>
           </>
         ) : (
@@ -96,7 +100,7 @@ export function CombatLogEntry({
           ) : (
             <>
               <span className="text-[var(--rpg-gold)] font-mono w-7 shrink-0">R{entry.round}</span>
-              <span className={`shrink-0 ${actorColor}`}>{isPlayerAction ? 'You' : 'Mob'}</span>
+              <span className={`shrink-0 ${actorColor}`}>{isPlayerAction ? playerLabel : opponentLabel}</span>
               {icon && <span className="shrink-0 text-xs">{icon}</span>}
               {entry.spellName && (
                 <span className="text-[var(--rpg-blue-light)] text-xs font-semibold">{entry.spellName}</span>
@@ -123,11 +127,11 @@ export function CombatLogEntry({
           )}</>
         )}
         <span className="ml-auto flex gap-2 text-xs font-mono text-[var(--rpg-text-secondary)]">
-          {entry.playerHpAfter !== undefined && (
-            <span className="text-[var(--rpg-green-light)]">{formatHp(entry.playerHpAfter, playerMaxHp)}</span>
+          {entry.combatantAHpAfter !== undefined && (
+            <span className="text-[var(--rpg-green-light)]">{formatHp(entry.combatantAHpAfter, playerMaxHp)}</span>
           )}
-          {entry.mobHpAfter !== undefined && (
-            <span className="text-[var(--rpg-red)]">{formatHp(entry.mobHpAfter, mobMaxHp)}</span>
+          {entry.combatantBHpAfter !== undefined && (
+            <span className="text-[var(--rpg-red)]">{formatHp(entry.combatantBHpAfter, mobMaxHp)}</span>
           )}
         </span>
         {hasDetails && (
@@ -189,7 +193,7 @@ export function CombatLogEntry({
               {entry.effectsApplied.map((e, i) => (
                 <span key={i}>
                   {i > 0 && ', '}
-                  {e.target === 'player' ? 'You' : 'Mob'}: {e.stat} {e.modifier > 0 ? '+' : ''}{e.modifier} ({e.duration} rds)
+                  {e.target === 'combatantA' ? playerLabel : opponentLabel}: {e.stat} {e.modifier > 0 ? '+' : ''}{e.modifier} ({e.duration} rds)
                 </span>
               ))}
             </div>

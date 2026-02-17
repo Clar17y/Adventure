@@ -7,6 +7,7 @@ import {
   buildPlayerCombatStats,
   calculateFleeResult,
   estimateExploration,
+  mobToCombatantStats,
   rollMobPrefix,
   runCombat,
   simulateExploration,
@@ -16,6 +17,7 @@ import {
   EXPLORATION_CONSTANTS,
   WORLD_EVENT_TEMPLATES,
   WORLD_EVENT_CONSTANTS,
+  type Combatant,
   type CombatOptions,
   type MobTemplate,
   type PotionConsumed,
@@ -451,7 +453,18 @@ explorationRouter.post('/start', async (req, res, next) => {
           combatOptions = { autoPotionThreshold, potions: [...potionPool] };
         }
 
-        const combatResult = runCombat(playerStats, prefixedMob, combatOptions);
+        const combatantA: Combatant = {
+          id: playerId,
+          name: req.player!.username,
+          stats: playerStats,
+        };
+        const combatantB: Combatant = {
+          id: prefixedMob.id,
+          name: prefixedMob.mobDisplayName ?? prefixedMob.name,
+          stats: mobToCombatantStats(prefixedMob),
+          spells: prefixedMob.spellPattern,
+        };
+        const combatResult = runCombat(combatantA, combatantB, combatOptions);
 
         // Remove consumed potions from the shared pool
         for (const consumed of combatResult.potionsConsumed) {
@@ -466,11 +479,11 @@ explorationRouter.post('/start', async (req, res, next) => {
         let xpGrant: Awaited<ReturnType<typeof grantSkillXp>> | null = null;
 
         if (combatResult.outcome === 'victory') {
-          currentHp = combatResult.playerHpRemaining;
+          currentHp = combatResult.combatantAHpRemaining;
           await setHp(playerId, currentHp);
 
           loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
-          xpGrant = await grantSkillXp(playerId, attackSkill, combatResult.xpGained);
+          xpGrant = await grantSkillXp(playerId, attackSkill, prefixedMob.xpReward);
           xpGain = xpGrant.xpResult.xpAfterEfficiency;
 
           await prisma.playerBestiary.upsert({
@@ -530,12 +543,12 @@ explorationRouter.post('/start', async (req, res, next) => {
               encounterSiteId: null,
               attackSkill,
               outcome: combatResult.outcome,
-              playerMaxHp: combatResult.playerMaxHp,
-              mobMaxHp: combatResult.mobMaxHp,
+              playerMaxHp: combatResult.combatantAMaxHp,
+              mobMaxHp: combatResult.combatantBMaxHp,
               log: combatResult.log,
               rewards: {
-                xp: combatResult.xpGained,
-                baseXp: combatResult.xpGained,
+                xp: prefixedMob.xpReward,
+                baseXp: prefixedMob.xpReward,
                 loot,
                 durabilityLost,
                 skillXp: skillXpReward,
@@ -553,8 +566,8 @@ explorationRouter.post('/start', async (req, res, next) => {
               mobPrefix: prefixedMob.mobPrefix,
               mobDisplayName: prefixedMob.mobDisplayName,
               outcome: combatResult.outcome,
-              playerMaxHp: combatResult.playerMaxHp,
-              mobMaxHp: combatResult.mobMaxHp,
+              playerMaxHp: combatResult.combatantAMaxHp,
+              mobMaxHp: combatResult.combatantBMaxHp,
               log: combatResult.log,
               playerHpRemaining: currentHp,
               xp: xpGain,
@@ -580,8 +593,8 @@ explorationRouter.post('/start', async (req, res, next) => {
           }
 
           // Persist the mob's remaining HP for potential reencounter
-          if (combatResult.mobHpRemaining > 0) {
-            await persistMobHp(playerId, prefixedMob.id, body.zoneId, combatResult.mobHpRemaining, prefixedMob.hp);
+          if (combatResult.combatantBHpRemaining > 0) {
+            await persistMobHp(playerId, prefixedMob.id, body.zoneId, combatResult.combatantBHpRemaining, prefixedMob.hp);
           }
 
           const defeatDescription = fleeResult.outcome === 'knockout'
@@ -601,8 +614,8 @@ explorationRouter.post('/start', async (req, res, next) => {
               encounterSiteId: null,
               attackSkill,
               outcome: combatResult.outcome,
-              playerMaxHp: combatResult.playerMaxHp,
-              mobMaxHp: combatResult.mobMaxHp,
+              playerMaxHp: combatResult.combatantAMaxHp,
+              mobMaxHp: combatResult.combatantBMaxHp,
               log: combatResult.log,
               rewards: {
                 xp: 0,
@@ -624,8 +637,8 @@ explorationRouter.post('/start', async (req, res, next) => {
               mobPrefix: prefixedMob.mobPrefix,
               mobDisplayName: prefixedMob.mobDisplayName,
               outcome: combatResult.outcome,
-              playerMaxHp: combatResult.playerMaxHp,
-              mobMaxHp: combatResult.mobMaxHp,
+              playerMaxHp: combatResult.combatantAMaxHp,
+              mobMaxHp: combatResult.combatantBMaxHp,
               log: combatResult.log,
               playerHpRemaining: currentHp,
               fleeResult: {

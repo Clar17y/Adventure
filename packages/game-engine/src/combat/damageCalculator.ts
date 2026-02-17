@@ -1,4 +1,4 @@
-import { CHARACTER_CONSTANTS, COMBAT_CONSTANTS, CombatantStats, type PlayerAttributes } from '@adventure/shared';
+import { CHARACTER_CONSTANTS, COMBAT_CONSTANTS, CombatantStats, MobTemplate, type PlayerAttributes } from '@adventure/shared';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -37,7 +37,7 @@ export function doesAttackHit(
   if (attackRoll === 1) return false;
 
   const totalAttack = attackRoll + accuracyBonus;
-  const hitThreshold = 10 + targetDodge + Math.floor(Math.max(0, targetEvasion) / 2);
+  const hitThreshold = 10 + targetDodge + Math.max(0, targetEvasion);
   return totalAttack >= hitThreshold;
 }
 
@@ -95,6 +95,29 @@ export function rollInitiative(speed: number): number {
 export function calculateDefenceReduction(defence: number): number {
   const safeDefence = Math.max(0, Number.isFinite(defence) ? defence : 0);
   return safeDefence / (safeDefence + 100);
+}
+
+/**
+ * Convert a MobTemplate into CombatantStats.
+ * Accepts optional currentHp/maxHp overrides for wounded or variant mobs.
+ */
+export function mobToCombatantStats(
+  mob: MobTemplate & { currentHp?: number; maxHp?: number }
+): CombatantStats {
+  return {
+    hp: mob.currentHp ?? mob.hp,
+    maxHp: mob.maxHp ?? mob.hp,
+    attack: mob.accuracy,
+    accuracy: mob.accuracy,
+    defence: mob.defence,
+    magicDefence: mob.magicDefence,
+    dodge: mob.evasion,
+    evasion: 0,
+    damageMin: mob.damageMin,
+    damageMax: mob.damageMax,
+    speed: 0,
+    damageType: mob.damageType,
+  };
 }
 
 /**

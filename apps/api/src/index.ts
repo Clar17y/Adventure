@@ -16,6 +16,7 @@ import { craftingRouter } from './routes/crafting';
 import { bestiaryRouter } from './routes/bestiary';
 import { hpRouter } from './routes/hp';
 import { chatRouter } from './routes/chat';
+import { pvpRouter } from './routes/pvp';
 import { worldEventsRouter } from './routes/worldEvents';
 import { bossRouter } from './routes/boss';
 import { errorHandler } from './middleware/errorHandler';
@@ -90,6 +91,7 @@ app.use('/api/v1/crafting', craftingRouter);
 app.use('/api/v1/bestiary', bestiaryRouter);
 app.use('/api/v1/hp', hpRouter);
 app.use('/api/v1/chat', chatRouter);
+app.use('/api/v1/pvp', pvpRouter);
 app.use('/api/v1/events', worldEventsRouter);
 app.use('/api/v1/boss', bossRouter);
 

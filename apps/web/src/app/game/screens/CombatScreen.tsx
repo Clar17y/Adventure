@@ -46,9 +46,9 @@ interface CombatScreenProps {
   combatPlaybackData?: {
     mobDisplayName: string;
     outcome: string;
-    playerMaxHp: number;
+    combatantAMaxHp: number;
     playerStartHp: number;
-    mobMaxHp: number;
+    combatantBMaxHp: number;
     log: LastCombatLogEntry[];
     rewards: LastCombat['rewards'];
   } | null;
@@ -85,7 +85,7 @@ export function CombatScreen({
   // Player max HP should be the player's real max HP.
   // Mob max HP comes from combat payload (supports wounded monster starts later).
   const playerMaxHp = hpState.maxHp;
-  const mobMaxHp = lastCombat ? resolveMobMaxHp(lastCombat.log, lastCombat.mobMaxHp) : undefined;
+  const mobMaxHp = lastCombat ? resolveMobMaxHp(lastCombat.log, lastCombat.combatantBMaxHp) : undefined;
   const isLastCombatMobDiscovered = lastCombat
     ? bestiaryMobs.find((mob) => mob.id === lastCombat.mobTemplateId)?.isDiscovered ?? false
     : false;
@@ -109,7 +109,7 @@ export function CombatScreen({
     return formatCombatShareText({
       outcome: outcomeLabel ?? 'Unknown',
       playerMaxHp,
-      mobMaxHp: lastCombat.mobMaxHp,
+      mobMaxHp: lastCombat.combatantBMaxHp,
       mobName: lastCombat.mobDisplayName,
       log: lastCombat.log,
       rewards: lastCombat.rewards,
@@ -298,9 +298,9 @@ export function CombatScreen({
               <CombatPlayback
                 mobDisplayName={combatPlaybackData.mobDisplayName}
                 outcome={combatPlaybackData.outcome}
-                playerMaxHp={combatPlaybackData.playerMaxHp}
+                playerMaxHp={combatPlaybackData.combatantAMaxHp}
                 playerStartHp={combatPlaybackData.playerStartHp}
-                mobMaxHp={combatPlaybackData.mobMaxHp}
+                mobMaxHp={combatPlaybackData.combatantBMaxHp}
                 log={combatPlaybackData.log}
                 rewards={combatPlaybackData.rewards}
                 onComplete={onCombatPlaybackComplete ?? (() => {})}

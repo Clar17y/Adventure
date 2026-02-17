@@ -26,6 +26,7 @@ import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
 import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
 import { Sword, Shield, Crosshair, Sparkles, Pickaxe, Hammer, Leaf, FlaskConical, Axe, Scissors, Anvil } from 'lucide-react';
+import { ArenaScreen } from './screens/ArenaScreen';
 import { CombatScreen } from './screens/CombatScreen';
 import { useGameController, type Screen } from './useGameController';
 import { useChat } from '@/hooks/useChat';
@@ -211,6 +212,7 @@ export default function GamePage() {
     bestiaryPrefixSummary,
     hpState,
     setHpState,
+    pvpNotificationCount,
     playbackActive,
     combatPlaybackData,
     explorationPlaybackData,
@@ -247,6 +249,8 @@ export default function GamePage() {
     setAutoPotionThreshold,
     zoneCraftingLevel,
     zoneCraftingName,
+    loadTurnsAndHp,
+    loadPvpNotificationCount,
   } = useGameController({ isAuthenticated });
 
   const chat = useChat({ isAuthenticated, currentZoneId: activeZoneId });
@@ -720,6 +724,20 @@ export default function GamePage() {
             onCombatPlaybackComplete={handleCombatPlaybackComplete}
           />
         );
+      case 'arena':
+        return (
+          <ArenaScreen
+            characterLevel={characterProgression.characterLevel}
+            busyAction={busyAction}
+            currentTurns={turns}
+            playerId={player?.id ?? null}
+            isInTown={currentZone?.zoneType === 'town'}
+            onTurnsChanged={() => void loadTurnsAndHp()}
+            onNotificationsChanged={() => void loadPvpNotificationCount()}
+            onHpChanged={() => void loadTurnsAndHp()}
+            onNavigate={(s) => setActiveScreen(s as Screen)}
+          />
+        );
       case 'rest':
         return (
           <Rest
@@ -855,6 +873,32 @@ export default function GamePage() {
                 }`}
               >
                 {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {getActiveTab() === 'combat' && (
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+            {[
+              { id: 'combat', label: 'Combat', badge: 0 },
+              { id: 'arena', label: 'Arena', badge: pvpNotificationCount },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveScreen(tab.id as Screen)}
+                className={`relative px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                  activeScreen === tab.id
+                    ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                    : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)]'
+                }`}
+              >
+                {tab.label}
+                {tab.badge > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-[var(--rpg-red)] text-white font-bold">
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>

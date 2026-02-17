@@ -216,10 +216,10 @@ export function CombatPlayback({
       {phase !== 'playing' && (
         <div className="text-center mt-4 space-y-3">
           <div className={`text-xl font-bold ${outcome === 'victory' ? 'text-[var(--rpg-gold)]'
-              : outcome === 'fled' ? 'text-[var(--rpg-gold)]'
+              : outcome === 'fled' || outcome === 'draw' ? 'text-[var(--rpg-gold)]'
                 : 'text-[var(--rpg-red)]'
             }`}>
-            {outcome === 'victory' ? 'Victory!' : outcome === 'fled' ? 'Fled!' : 'Defeated!'}
+            {outcome === 'victory' ? 'Victory!' : outcome === 'fled' ? 'Fled!' : outcome === 'draw' ? 'Draw!' : 'Defeated!'}
           </div>
 
           {outcome === 'victory' && rewards && (

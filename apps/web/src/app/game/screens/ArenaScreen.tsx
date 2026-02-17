@@ -221,6 +221,10 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
             <span className="text-[var(--rpg-green-light)]">{rating.wins}</span>
             <span className="text-[var(--rpg-text-secondary)]"> / </span>
             <span className="text-[var(--rpg-red)]">{rating.losses}</span>
+            {rating.draws > 0 && <>
+              <span className="text-[var(--rpg-text-secondary)]"> / </span>
+              <span className="text-[var(--rpg-gold)]">{rating.draws}</span>
+            </>}
           </div>
         </div>
         <div className="bg-[var(--rpg-background)] rounded-lg p-2 text-center">
@@ -240,7 +244,7 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
     pvpPlaybackActive ? (
       <CombatPlayback
         mobDisplayName={lastResult.defenderName}
-        outcome={lastResult.isDraw ? 'defeat' : lastResult.winnerId === playerId ? 'victory' : 'defeat'}
+        outcome={lastResult.isDraw ? 'draw' : lastResult.winnerId === playerId ? 'victory' : 'defeat'}
         playerMaxHp={lastResult.combat.combatantAMaxHp}
         playerStartHp={lastResult.attackerStartHp}
         mobMaxHp={lastResult.combat.combatantBMaxHp}
@@ -263,14 +267,12 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
             {lastResult.attackerName} vs {lastResult.defenderName}
             {lastResult.isDraw && ' — 100 rounds, no winner'}
           </p>
-          {!lastResult.isDraw && (
-            <p className="text-sm font-mono mt-1">
-              Rating:{' '}
-              <span className={lastResult.attackerRatingChange >= 0 ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}>
-                {lastResult.attackerRatingChange >= 0 ? '+' : ''}{lastResult.attackerRatingChange}
-              </span>
-            </p>
-          )}
+          <p className="text-sm font-mono mt-1">
+            Rating:{' '}
+            <span className={lastResult.attackerRatingChange >= 0 ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}>
+              {lastResult.attackerRatingChange >= 0 ? '+' : ''}{lastResult.attackerRatingChange}
+            </span>
+          </p>
           {lastResult.fleeOutcome === 'knockout' && (
             <p className="text-sm text-[var(--rpg-red)] mt-1 font-semibold">
               Knocked out! You need to recover.

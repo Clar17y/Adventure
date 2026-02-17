@@ -565,7 +565,7 @@ export interface SkillXpGrantResponse {
   characterLeveledUp: boolean;
 }
 
-export type CombatOutcomeResponse = 'victory' | 'defeat' | 'fled';
+export type CombatOutcomeResponse = 'victory' | 'defeat' | 'fled' | 'draw';
 export type CombatSourceResponse = 'zone_combat' | 'encounter_site' | 'exploration_ambush' | 'travel_ambush';
 
 export interface CombatResultResponse {
@@ -1089,6 +1089,7 @@ export interface PvpRatingResponse {
   rating: number;
   wins: number;
   losses: number;
+  draws: number;
   winStreak: number;
   bestRating: number;
 }
@@ -1148,14 +1149,13 @@ export interface PvpChallengeResponse {
   attackerStyle: string;
   defenderStyle: string;
   combat: {
-    outcome: 'victory' | 'defeat';
-    combatantA: { id: string; name: string };
-    combatantB: { id: string; name: string };
+    outcome: CombatOutcomeResponse;
     combatantAMaxHp: number;
     combatantBMaxHp: number;
     combatantAHpRemaining: number;
+    combatantBHpRemaining: number;
     log: CombatLogEntryResponse[];
-    totalRounds: number;
+    potionsConsumed: Array<{ tier: number; healAmount: number; round: number }>;
   };
   attackerStartHp: number;
   attackerKnockedOut: boolean;
@@ -1195,13 +1195,13 @@ export async function challengePvpOpponent(targetId: string) {
 
 export interface PvpMatchDetailResponse extends PvpMatchResponse {
   combatLog: {
-    outcome: 'victory' | 'defeat';
-    combatantA: { id: string; name: string };
-    combatantB: { id: string; name: string };
+    outcome: CombatOutcomeResponse;
     combatantAMaxHp: number;
     combatantBMaxHp: number;
+    combatantAHpRemaining: number;
+    combatantBHpRemaining: number;
     log: CombatLogEntryResponse[];
-    totalRounds: number;
+    potionsConsumed: Array<{ tier: number; healAmount: number; round: number }>;
   };
 }
 

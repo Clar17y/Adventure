@@ -24,6 +24,10 @@ const challengeSchema = z.object({
   targetId: z.string().uuid(),
 });
 
+const matchIdSchema = z.object({
+  matchId: z.string().uuid(),
+});
+
 const historyQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(10),
@@ -59,6 +63,7 @@ pvpRouter.get('/rating', async (req, res, next) => {
       rating: rating.rating,
       wins: rating.wins,
       losses: rating.losses,
+      draws: rating.draws,
       winStreak: rating.winStreak,
       bestRating: rating.bestRating,
     });
@@ -122,7 +127,8 @@ pvpRouter.get('/history', async (req, res, next) => {
 pvpRouter.get('/history/:matchId', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
-    const result = await getMatchDetail(playerId, req.params.matchId);
+    const { matchId } = matchIdSchema.parse(req.params);
+    const result = await getMatchDetail(playerId, matchId);
     res.json(result);
   } catch (err) {
     next(err);

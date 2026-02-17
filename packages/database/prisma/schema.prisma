@@ -510,10 +510,11 @@ model ChatMessage {
 model PvpRating {
   id           String    @id @default(uuid())
   playerId     String    @unique @map("player_id")
-  player       Player    @relation(fields: [playerId], references: [id])
+  player       Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   rating       Int       @default(1000)
   wins         Int       @default(0)
   losses       Int       @default(0)
+  draws        Int       @default(0)
   winStreak    Int       @default(0) @map("win_streak")
   bestRating   Int       @default(1000) @map("best_rating")
   lastFoughtAt DateTime? @map("last_fought_at")

@@ -276,13 +276,17 @@ export function runCombat(combatantA: Combatant, combatantB: Combatant, options?
   }
 
   if (state.outcome === null) {
-    state.outcome = 'defeat';
+    // Both alive at round limit = draw; one dead = defeat
+    const bothAlive = state.combatantAHp > 0 && state.combatantBHp > 0;
+    state.outcome = bothAlive ? 'draw' : 'defeat';
     state.log.push({
       round: state.round,
       actor: 'combatantB',
       actorName: combatantB.name,
       action: 'attack',
-      message: 'Combat timed out. The fight ends in exhaustion.',
+      message: bothAlive
+        ? 'Combat timed out. The fight ends in a draw.'
+        : 'Combat timed out. The fight ends in exhaustion.',
       ...hpSnapshot(state),
     });
   }

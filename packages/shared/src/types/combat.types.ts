@@ -101,7 +101,7 @@ export interface CombatLogEntry {
 
 export type CombatAction = 'attack' | 'spell' | 'defend' | 'flee' | 'potion';
 
-export type CombatOutcome = 'victory' | 'defeat' | 'fled';
+export type CombatOutcome = 'victory' | 'defeat' | 'fled' | 'draw';
 
 export interface CombatResult {
   outcome: CombatOutcome;

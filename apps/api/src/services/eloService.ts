@@ -6,6 +6,6 @@ export function calculateEloChange(
 ): { deltaA: number; deltaB: number } {
   const expectedA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
   const deltaA = Math.round(kFactor * (scoreA - expectedA));
-  const deltaB = Math.max(-ratingB, -deltaA);
+  const deltaB = Math.max(-ratingB, -deltaA) || 0;
   return { deltaA, deltaB };
 }

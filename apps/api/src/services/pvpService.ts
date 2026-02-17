@@ -72,6 +72,7 @@ export async function getLadder(playerId: string) {
       rating: myRating.rating,
       wins: myRating.wins,
       losses: myRating.losses,
+      draws: myRating.draws,
       winStreak: myRating.winStreak,
       bestRating: myRating.bestRating,
     },
@@ -99,11 +100,6 @@ export async function scoutOpponent(attackerId: string, targetId: string) {
     throw new AppError(400, 'Must be in a town to scout', 'NOT_IN_TOWN');
   }
 
-  // Spend turns for scouting
-  await prisma.$transaction(async (tx) => {
-    await spendPlayerTurnsTx(tx, attackerId, PVP_CONSTANTS.SCOUT_TURN_COST);
-  });
-
   const target = await prisma.player.findUnique({
     where: { id: targetId },
     select: {
@@ -115,6 +111,11 @@ export async function scoutOpponent(attackerId: string, targetId: string) {
   if (!target) {
     throw new AppError(404, 'Target player not found', 'NOT_FOUND');
   }
+
+  // Spend turns for scouting (after validation so turns aren't lost on bad targetId)
+  await prisma.$transaction(async (tx) => {
+    await spendPlayerTurnsTx(tx, attackerId, PVP_CONSTANTS.SCOUT_TURN_COST);
+  });
 
   const targetEquipment = await prisma.playerEquipment.findMany({
     where: { playerId: targetId, itemId: { not: null } },
@@ -325,11 +326,8 @@ export async function challenge(
 
   const combatResult: CombatResult = runCombat(combatantA, combatantB);
 
-  // Detect draw: engine says "defeat" but both combatants alive (round limit hit)
-  const isDraw = combatResult.outcome === 'defeat'
-    && combatResult.combatantAHpRemaining > 0
-    && combatResult.combatantBHpRemaining > 0;
-  const attackerWon = !isDraw && combatResult.outcome === 'victory';
+  const isDraw = combatResult.outcome === 'draw';
+  const attackerWon = combatResult.outcome === 'victory';
   const winnerId = isDraw ? null : attackerWon ? attackerId : targetId;
 
   // Calculate Elo changes — scoreA: 1 = win, 0.5 = draw, 0 = loss (from attacker perspective)
@@ -363,6 +361,7 @@ export async function challenge(
         rating: newAttackerRating,
         wins: attackerWon ? { increment: 1 } : undefined,
         losses: !isDraw && !attackerWon ? { increment: 1 } : undefined,
+        draws: isDraw ? { increment: 1 } : undefined,
         winStreak: isDraw ? undefined : attackerWon ? { increment: 1 } : 0,
         bestRating: Math.max(attackerRating.bestRating, newAttackerRating),
         lastFoughtAt: now,
@@ -377,6 +376,7 @@ export async function challenge(
         rating: newDefenderRating,
         wins: !isDraw && !attackerWon ? { increment: 1 } : undefined,
         losses: !isDraw && attackerWon ? { increment: 1 } : undefined,
+        draws: isDraw ? { increment: 1 } : undefined,
         winStreak: isDraw ? undefined : attackerWon ? 0 : { increment: 1 },
         bestRating: Math.max(defenderRating.bestRating, newDefenderRating),
         lastFoughtAt: now,
@@ -393,7 +393,7 @@ export async function challenge(
         attackerRatingChange,
         defenderRatingChange,
         winnerId,
-        combatLog: combatResult as unknown as Prisma.InputJsonValue,
+        combatLog: JSON.parse(JSON.stringify(combatResult)) as Prisma.InputJsonValue,
         attackerStyle: attackStyle,
         defenderStyle,
         turnsSpent: turnCost,

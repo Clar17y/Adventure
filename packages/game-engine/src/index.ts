@@ -14,6 +14,7 @@ export * from './skills/xpCalculator';
 // Exploration
 export * from './exploration/probabilityModel';
 export * from './exploration/encounterChest';
+export * from './exploration/mobTierFilter';
 
 // HP
 export * from './hp/hpCalculator';

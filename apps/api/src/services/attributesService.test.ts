@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PLAYER_ATTRIBUTES } from '@adventure/shared';
 
-vi.mock('@adventure/database', () => import('../__mocks__/database'));
+vi.mock('@adventure/database', () => import('../__mocks__/database.js'));
 
 import { prisma } from '@adventure/database';
 import {

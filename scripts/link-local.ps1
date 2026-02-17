@@ -65,18 +65,20 @@ function New-FileLink([string]$worktreePath, [string]$canonicalPath) {
     return
   }
 
-  # Prefer symlink, fall back to hardlink (works without admin/dev mode, but must be same drive)
+  # Prefer symlink (works cross-drive), fall back to hardlink (same drive only), then copy
   try {
     New-Item -ItemType SymbolicLink -Path $worktreePath -Target $canonicalPath | Out-Null
     Write-Info "Linked (symlink): $worktreePath -> $canonicalPath"
   } catch {
-    Write-Warn "Symlink failed for $worktreePath. Trying hardlink (same drive required)."
-    try {
-      cmd /c mklink /H "$worktreePath" "$canonicalPath" | Out-Null
+    Write-Warn "Symlink failed for $worktreePath. Trying hardlink (same drive only)."
+    cmd /c mklink /H "$worktreePath" "$canonicalPath" 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warn "Hardlink failed (likely cross-drive). Falling back to file copy."
+      Copy-Item -Path $canonicalPath -Destination $worktreePath -Force
+      Write-Warn "Copied (NOT linked): $worktreePath <- $canonicalPath"
+      Write-Warn "  Edits in the worktree copy will NOT propagate back. Edit the canonical file directly."
+    } else {
       Write-Info "Linked (hardlink): $worktreePath -> $canonicalPath"
-    } catch {
-      Write-Err "Failed to create link for $worktreePath. Error: $($_.Exception.Message)"
-      throw
     }
   }
 }

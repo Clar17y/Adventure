@@ -509,7 +509,8 @@ export async function startExploration(zoneId: string, turns: number) {
 
 export interface CombatLogEntryResponse {
   round: number;
-  actor: 'player' | 'mob';
+  actor: 'combatantA' | 'combatantB';
+  actorName?: string;
   action: string;
   message: string;
   roll?: number;
@@ -526,7 +527,23 @@ export interface CombatLogEntryResponse {
   magicDefenceReduction?: number;
   isCritical?: boolean;
   critMultiplier?: number;
+  combatantAHpAfter?: number;
+  combatantBHpAfter?: number;
+  spellName?: string;
+  healAmount?: number;
+  effectsApplied?: Array<{
+    stat: string;
+    modifier: number;
+    duration: number;
+    target: 'combatantA' | 'combatantB';
+  }>;
+  effectsExpired?: Array<{
+    name: string;
+    target: 'combatantA' | 'combatantB';
+  }>;
+  /** @deprecated Backward compat alias */
   playerHpAfter?: number;
+  /** @deprecated Backward compat alias */
   mobHpAfter?: number;
 }
 
@@ -548,7 +565,7 @@ export interface SkillXpGrantResponse {
   characterLeveledUp: boolean;
 }
 
-export type CombatOutcomeResponse = 'victory' | 'defeat' | 'fled';
+export type CombatOutcomeResponse = 'victory' | 'defeat' | 'fled' | 'draw';
 export type CombatSourceResponse = 'zone_combat' | 'encounter_site' | 'exploration_ambush' | 'travel_ambush';
 
 export interface CombatResultResponse {
@@ -1064,6 +1081,154 @@ export async function getGatheringNodes(query: GatheringNodesQuery = {}) {
 
   const suffix = params.toString();
   return fetchApi<GatheringNodesResponse>(`/api/v1/gathering/nodes${suffix ? `?${suffix}` : ''}`);
+}
+
+// PvP Arena
+
+export interface PvpRatingResponse {
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winStreak: number;
+  bestRating: number;
+}
+
+export interface PvpLadderEntry {
+  playerId: string;
+  username: string;
+  rating: number;
+  characterLevel: number;
+}
+
+export interface PvpLadderResponse {
+  myRating: PvpRatingResponse;
+  opponents: PvpLadderEntry[];
+}
+
+export interface PvpScoutData {
+  combatLevel: number;
+  attackStyle: string;
+  armorClass: string;
+  powerRating: number;
+  myPowerRating: number;
+}
+
+export interface PvpMatchResponse {
+  matchId: string;
+  attackerId: string;
+  attackerName: string;
+  defenderId: string;
+  defenderName: string;
+  winnerId: string | null;
+  attackerRating: number;
+  defenderRating: number;
+  attackerRatingChange: number;
+  defenderRatingChange: number;
+  attackerStyle: string;
+  defenderStyle: string;
+  isRevenge: boolean;
+  turnsSpent: number;
+  createdAt: string;
+}
+
+export interface PvpChallengeResponse {
+  matchId: string;
+  attackerId: string;
+  defenderId: string;
+  attackerName: string;
+  defenderName: string;
+  winnerId: string | null;
+  isDraw: boolean;
+  isRevenge: boolean;
+  turnsSpent: number;
+  attackerRating: number;
+  defenderRating: number;
+  attackerRatingChange: number;
+  defenderRatingChange: number;
+  attackerStyle: string;
+  defenderStyle: string;
+  combat: {
+    outcome: CombatOutcomeResponse;
+    combatantAMaxHp: number;
+    combatantBMaxHp: number;
+    combatantAHpRemaining: number;
+    combatantBHpRemaining: number;
+    log: CombatLogEntryResponse[];
+    potionsConsumed: Array<{ tier: number; healAmount: number; round: number }>;
+  };
+  attackerStartHp: number;
+  attackerKnockedOut: boolean;
+  fleeOutcome: 'clean_escape' | 'wounded_escape' | 'knockout' | null;
+}
+
+export interface PvpNotification {
+  matchId: string;
+  attackerName: string;
+  winnerId: string | null;
+  defenderRatingChange: number;
+  isRevenge: boolean;
+  createdAt: string;
+}
+
+export async function getPvpRating() {
+  return fetchApi<PvpRatingResponse>('/api/v1/pvp/rating');
+}
+
+export async function getPvpLadder() {
+  return fetchApi<PvpLadderResponse>('/api/v1/pvp/ladder');
+}
+
+export async function scoutPvpOpponent(targetId: string) {
+  return fetchApi<PvpScoutData>('/api/v1/pvp/scout', {
+    method: 'POST',
+    body: JSON.stringify({ targetId }),
+  });
+}
+
+export async function challengePvpOpponent(targetId: string) {
+  return fetchApi<PvpChallengeResponse>('/api/v1/pvp/challenge', {
+    method: 'POST',
+    body: JSON.stringify({ targetId }),
+  });
+}
+
+export interface PvpMatchDetailResponse extends PvpMatchResponse {
+  combatLog: {
+    outcome: CombatOutcomeResponse;
+    combatantAMaxHp: number;
+    combatantBMaxHp: number;
+    combatantAHpRemaining: number;
+    combatantBHpRemaining: number;
+    log: CombatLogEntryResponse[];
+    potionsConsumed: Array<{ tier: number; healAmount: number; round: number }>;
+  };
+}
+
+export async function getPvpMatchDetail(matchId: string) {
+  return fetchApi<PvpMatchDetailResponse>(`/api/v1/pvp/history/${matchId}`);
+}
+
+export async function getPvpHistory(page = 1, pageSize = 10) {
+  return fetchApi<{
+    matches: PvpMatchResponse[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number; hasNext: boolean; hasPrevious: boolean };
+  }>(`/api/v1/pvp/history?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function getPvpNotifications() {
+  return fetchApi<{ notifications: PvpNotification[] }>('/api/v1/pvp/notifications');
+}
+
+export async function getPvpNotificationCount() {
+  return fetchApi<{ count: number }>('/api/v1/pvp/notifications/count');
+}
+
+export async function markPvpNotificationsRead(matchIds?: string[]) {
+  return fetchApi<{ success: boolean }>('/api/v1/pvp/notifications/read', {
+    method: 'POST',
+    body: JSON.stringify(matchIds ? { matchIds } : {}),
+  });
 }
 
 // Chat

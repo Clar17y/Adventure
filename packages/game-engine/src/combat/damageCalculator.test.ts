@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { MobTemplate } from '@adventure/shared';
 import {
   buildPlayerCombatStats,
   calculateFinalDamage,
   doesAttackHit,
   isCriticalHit,
+  mobToCombatantStats,
 } from './damageCalculator';
 
 describe('isCriticalHit', () => {
@@ -147,6 +149,35 @@ describe('buildPlayerCombatStats', () => {
       { attack: 0, rangedPower: 0, magicPower: 5, accuracy: 3, armor: 2, magicDefence: 1, health: 10, dodge: 1 }
     );
     expect(stats.damageType).toBe('magic');
+  });
+});
+
+describe('mobToCombatantStats', () => {
+  const baseMob: MobTemplate = {
+    id: 'mob1', name: 'Goblin', zoneId: 'z1', level: 5,
+    hp: 50, accuracy: 12, defence: 8, magicDefence: 4, evasion: 6,
+    damageMin: 3, damageMax: 7, xpReward: 25, encounterWeight: 1,
+    spellPattern: [], damageType: 'physical',
+  };
+
+  it('maps MobTemplate fields to CombatantStats', () => {
+    const stats = mobToCombatantStats(baseMob);
+    expect(stats.hp).toBe(50);
+    expect(stats.maxHp).toBe(50);
+    expect(stats.attack).toBe(12);
+    expect(stats.accuracy).toBe(12);
+    expect(stats.defence).toBe(8);
+    expect(stats.dodge).toBe(6);
+    expect(stats.evasion).toBe(0);
+    expect(stats.speed).toBe(0);
+    expect(stats.damageType).toBe('physical');
+  });
+
+  it('uses currentHp/maxHp overrides when provided', () => {
+    const wounded = { ...baseMob, currentHp: 30, maxHp: 60 };
+    const stats = mobToCombatantStats(wounded);
+    expect(stats.hp).toBe(30);
+    expect(stats.maxHp).toBe(60);
   });
 });
 

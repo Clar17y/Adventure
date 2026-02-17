@@ -401,6 +401,22 @@ export const CHAT_CONSTANTS = {
 } as const;
 
 // =============================================================================
+// PVP ARENA
+// =============================================================================
+
+export const PVP_CONSTANTS = {
+  STARTING_RATING: 1000,
+  K_FACTOR: 32,
+  BRACKET_RANGE: 0.25,
+  CHALLENGE_TURN_COST: 500,
+  SCOUT_TURN_COST: 100,
+  REVENGE_TURN_COST: 250,
+  COOLDOWN_HOURS: 24,
+  MIN_OPPONENTS_SHOWN: 10,
+  MIN_CHARACTER_LEVEL: 10,
+} as const;
+
+// =============================================================================
 // WORLD EVENTS
 // =============================================================================
 

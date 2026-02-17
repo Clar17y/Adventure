@@ -136,6 +136,10 @@ authRouter.post('/login', async (req, res, next) => {
       throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
+    if (player.isBot) {
+      throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
+    }
+
     const validPassword = await bcrypt.compare(body.password, player.passwordHash);
     if (!validPassword) {
       throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');

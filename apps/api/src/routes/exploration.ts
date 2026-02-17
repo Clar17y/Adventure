@@ -18,6 +18,7 @@ import {
   EXPLORATION_CONSTANTS,
   WORLD_EVENT_TEMPLATES,
   WORLD_EVENT_CONSTANTS,
+  ZONE_EXPLORATION_CONSTANTS,
   type Combatant,
   type CombatOptions,
   type MobTemplate,
@@ -33,7 +34,7 @@ import { degradeEquippedDurability } from '../services/durabilityService';
 import { getEquipmentStats } from '../services/equipmentService';
 import { getPlayerProgressionState } from '../services/attributesService';
 import { discoverZone, getUndiscoveredNeighborZones, respawnToHomeTown } from '../services/zoneDiscoveryService';
-import { addExplorationTurns, getExplorationPercent } from '../services/zoneExplorationService';
+import { addExplorationTurns, calculateExplorationPercent, getExplorationPercent } from '../services/zoneExplorationService';
 import { getActiveZoneModifiers, spawnWorldEvent } from '../services/worldEventService';
 import { createBossEncounter } from '../services/bossEncounterService';
 import { checkAndSpawnEvents } from '../services/eventSchedulerService';
@@ -92,6 +93,7 @@ interface ZoneFamilyMember {
     id: string;
     name: string;
     zoneId: string;
+    explorationTier: number;
   };
 }
 
@@ -224,9 +226,18 @@ function pickFamilyMemberByRole(
 function buildEncounterSiteMobs(
   family: ZoneFamilyRow['mobFamily'],
   size: EncounterSiteSize,
-  zoneId: string
+  zoneId: string,
+  explorationPercent: number = 100,
+  zoneTiers: Record<string, number> | null = null,
 ): EncounterMobSlot[] {
-  const zoneMembers = family.members.filter((member) => member.mobTemplate.zoneId === zoneId);
+  const tiers = zoneTiers ?? ZONE_EXPLORATION_CONSTANTS.DEFAULT_TIERS;
+  const zoneMembers = family.members
+    .filter((member) => member.mobTemplate.zoneId === zoneId)
+    .filter((member) => {
+      const mobTier = member.mobTemplate.explorationTier ?? 1;
+      const threshold = tiers[String(mobTier)] ?? 0;
+      return explorationPercent >= threshold;
+    });
   if (zoneMembers.length === 0) return [];
 
   const { min, max } = getEncounterRange(size);
@@ -370,7 +381,7 @@ explorationRouter.post('/start', async (req, res, next) => {
               members: {
                 include: {
                   mobTemplate: {
-                    select: { id: true, name: true, zoneId: true },
+                    select: { id: true, name: true, zoneId: true, explorationTier: true },
                   },
                 },
               },
@@ -391,6 +402,15 @@ explorationRouter.post('/start', async (req, res, next) => {
 
     const undiscoveredNeighbors = await getUndiscoveredNeighborZones(playerId, body.zoneId);
     const effectiveExitChance = undiscoveredNeighbors.length > 0 ? zone.zoneExitChance : null;
+
+    // Pre-fetch connection thresholds for zone exit gating (used inside the loop)
+    const connectionThresholds = undiscoveredNeighbors.length > 0
+      ? await prisma.zoneConnection.findMany({
+          where: { fromId: body.zoneId },
+          select: { toId: true, explorationThreshold: true },
+        })
+      : [];
+    const thresholdByToId = new Map(connectionThresholds.map(c => [c.toId, c.explorationThreshold]));
 
     // Trigger lazy event scheduler
     await checkAndSpawnEvents(getIo());
@@ -674,7 +694,7 @@ explorationRouter.post('/start', async (req, res, next) => {
         if (!pickedFamily) continue;
 
         const size = pickEncounterSize(pickedFamily.minSize, pickedFamily.maxSize);
-        const mobs = buildEncounterSiteMobs(pickedFamily.mobFamily, size, body.zoneId);
+        const mobs = buildEncounterSiteMobs(pickedFamily.mobFamily, size, body.zoneId, explorationProgress.percent, zoneTiers);
         if (mobs.length === 0) continue;
 
         const siteName = getSiteName(pickedFamily.mobFamily.name, size, pickedFamily.mobFamily);
@@ -745,13 +765,6 @@ explorationRouter.post('/start', async (req, res, next) => {
       }
 
       if (outcome.type === 'zone_exit' && undiscoveredNeighbors.length > 0) {
-        // Filter neighbors by exploration threshold on connections
-        const connections = await prisma.zoneConnection.findMany({
-          where: { fromId: body.zoneId },
-          select: { toId: true, explorationThreshold: true },
-        });
-        const thresholdByToId = new Map(connections.map(c => [c.toId, c.explorationThreshold]));
-
         const eligibleNeighbors = undiscoveredNeighbors.filter(n => {
           const threshold = thresholdByToId.get(n.id) ?? 0;
           return explorationProgress.percent >= threshold;
@@ -1029,9 +1042,7 @@ explorationRouter.post('/start', async (req, res, next) => {
       ...(respawnedTo ? { respawnedTo } : {}),
       explorationProgress: {
         turnsExplored: explorationProgress.turnsExplored + spentTurns,
-        percent: explorationProgress.turnsToExplore
-          ? Math.min(100, ((explorationProgress.turnsExplored + spentTurns) / explorationProgress.turnsToExplore) * 100)
-          : 100,
+        percent: calculateExplorationPercent(explorationProgress.turnsExplored + spentTurns, explorationProgress.turnsToExplore),
         turnsToExplore: explorationProgress.turnsToExplore,
       },
     });

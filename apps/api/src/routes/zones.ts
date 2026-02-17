@@ -9,6 +9,7 @@ import {
   simulateTravelAmbushes,
   calculateFleeResult,
   mobToCombatantStats,
+  filterAndWeightMobsByTier,
 } from '@adventure/game-engine';
 import type { Combatant, MobTemplate, SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
@@ -27,6 +28,7 @@ import {
   respawnToHomeTown,
 } from '../services/zoneDiscoveryService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
+import { calculateExplorationPercent, getExplorationPercent } from '../services/zoneExplorationService';
 
 const db = prisma as unknown as any;
 
@@ -104,9 +106,7 @@ zonesRouter.get('/', async (req, res, next) => {
           exploration: z.zoneType === 'town' ? null : {
             turnsExplored: explorationByZoneId.get(z.id) ?? 0,
             turnsToExplore: z.turnsToExplore ?? null,
-            percent: z.turnsToExplore
-              ? Math.min(100, ((explorationByZoneId.get(z.id) ?? 0) / z.turnsToExplore) * 100)
-              : 100,
+            percent: calculateExplorationPercent(explorationByZoneId.get(z.id) ?? 0, z.turnsToExplore ?? null),
             tiers: z.explorationTiers ?? null,
           },
         };
@@ -266,16 +266,32 @@ zonesRouter.post('/travel', async (req, res, next) => {
           getEquipmentStats(playerId),
         ]);
 
-        // Get mob pool from current zone
+        // Get mob pool from current zone, filtered by exploration tier
         const mobTemplates = await prisma.mobTemplate.findMany({ where: { zoneId: currentZoneId } });
+        const explorationProgress = await getExplorationPercent(playerId, currentZoneId);
+        const zoneTiers = (currentZone as unknown as { explorationTiers: Record<string, number> | null }).explorationTiers;
+        const tieredMobs = filterAndWeightMobsByTier(
+          mobTemplates.map(m => ({
+            ...m,
+            explorationTier: (m as unknown as { explorationTier: number | null }).explorationTier ?? 1,
+          })),
+          explorationProgress.percent,
+          zoneTiers,
+        );
 
         let currentHp = hpState.currentHp;
 
         for (const ambush of ambushes) {
-          if (mobTemplates.length === 0) break;
+          if (tieredMobs.length === 0) break;
 
-          // Pick random mob
-          const rawMob = mobTemplates[Math.floor(Math.random() * mobTemplates.length)]!;
+          // Pick weighted mob from tier-filtered pool
+          const totalWeight = tieredMobs.reduce((sum, m) => sum + m.encounterWeight, 0);
+          let roll = Math.random() * totalWeight;
+          let rawMob = tieredMobs[0]!;
+          for (const m of tieredMobs) {
+            roll -= m.encounterWeight;
+            if (roll <= 0) { rawMob = m; break; }
+          }
           const baseMob: MobTemplate = {
             ...(rawMob as unknown as MobTemplate),
             spellPattern: Array.isArray(rawMob.spellPattern) ? (rawMob.spellPattern as unknown as MobTemplate['spellPattern']) : [],

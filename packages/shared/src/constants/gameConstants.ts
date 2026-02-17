@@ -458,5 +458,4 @@ export const WORLD_EVENT_CONSTANTS = {
 export const ZONE_EXPLORATION_CONSTANTS = {
   DEFAULT_TIERS: { '1': 0, '2': 25, '3': 50, '4': 75 } as Record<string, number>,
   NEWEST_TIER_WEIGHT_MULTIPLIER: 2,
-  MAX_TIER: 4,
 } as const;

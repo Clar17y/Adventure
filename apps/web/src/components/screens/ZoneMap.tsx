@@ -445,27 +445,28 @@ export function ZoneMap({
 
           {/* Locked zone exits */}
           {(() => {
-            const currentZoneData = zones.find((z) => z.id === currentZoneId);
-            const currentExploration = currentZoneData?.exploration;
+            const selectedExploration = selectedZone.exploration;
+            if (!selectedExploration || selectedZone.zoneType === 'town') return null;
+
             const lockedExits = connections
-              .filter((conn) => conn.fromId === currentZoneId && conn.explorationThreshold > 0)
+              .filter((conn) => conn.fromId === selectedZone.id && conn.explorationThreshold > 0)
               .filter((conn) => {
                 const targetZone = zones.find((z) => z.id === conn.toId);
-                return targetZone && !targetZone.discovered && (currentExploration?.percent ?? 0) < conn.explorationThreshold;
+                return targetZone && !targetZone.discovered && selectedExploration.percent < conn.explorationThreshold;
               })
               .map((conn) => {
                 const targetZone = zones.find((z) => z.id === conn.toId);
                 return { toId: conn.toId, toName: targetZone?.name ?? '???', explorationThreshold: conn.explorationThreshold };
               });
 
-            if (lockedExits.length === 0 || selectedZone.id !== currentZoneId) return null;
+            if (lockedExits.length === 0) return null;
 
             return (
               <div className="mb-3 space-y-1">
                 {lockedExits.map((exit) => (
                   <div key={exit.toId} className="flex items-center gap-1.5 text-xs text-[var(--rpg-text-secondary)] opacity-50">
                     <Lock size={10} />
-                    <span>{exit.toName} -- requires {exit.explorationThreshold}% explored (currently {Math.floor(currentExploration?.percent ?? 0)}%)</span>
+                    <span>{exit.toName} -- requires {exit.explorationThreshold}% explored (currently {Math.floor(selectedExploration.percent)}%)</span>
                   </div>
                 ))}
               </div>

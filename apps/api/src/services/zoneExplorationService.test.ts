@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@adventure/database', () => import('../__mocks__/database.js'));
 
 import { prisma } from '@adventure/database';
-import { getExplorationPercent, addExplorationTurns } from './zoneExplorationService';
+import { calculateExplorationPercent, getExplorationPercent, addExplorationTurns } from './zoneExplorationService';
 
 const mockPrisma = prisma as unknown as Record<string, any>;
 
@@ -43,6 +43,24 @@ describe('getExplorationPercent', () => {
 
     const result = await getExplorationPercent('player1', 'zone1');
     expect(result.percent).toBe(100);
+  });
+});
+
+describe('calculateExplorationPercent', () => {
+  it('returns 100 for null turnsToExplore', () => {
+    expect(calculateExplorationPercent(5000, null)).toBe(100);
+  });
+
+  it('returns 100 for zero turnsToExplore', () => {
+    expect(calculateExplorationPercent(5000, 0)).toBe(100);
+  });
+
+  it('calculates correct percent', () => {
+    expect(calculateExplorationPercent(7500, 30000)).toBe(25);
+  });
+
+  it('caps at 100', () => {
+    expect(calculateExplorationPercent(50000, 30000)).toBe(100);
   });
 });
 

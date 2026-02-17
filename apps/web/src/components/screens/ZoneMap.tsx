@@ -1,11 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { PixelButton } from '@/components/PixelButton';
 import { ActivityLog } from '@/components/ActivityLog';
 import { TurnPlayback } from '@/components/playback/TurnPlayback';
 import type { ActivityLogEntry } from '@/app/game/useGameController';
-import { MapPin, Star, Hourglass } from 'lucide-react';
+import { MapPin, Star, Hourglass, Lock } from 'lucide-react';
+
+function getMilestoneHint(percent: number): ReactNode {
+  if (percent >= 75) return <p className="text-xs text-amber-400 mt-1 italic">The apex predator stirs...</p>;
+  if (percent >= 50) return <p className="text-xs text-red-400 mt-1 italic">Dangerous creatures lurk ahead...</p>;
+  if (percent >= 25) return <p className="text-xs text-yellow-400 mt-1 italic">Larger creatures roam deeper in...</p>;
+  return <p className="text-xs text-[var(--rpg-text-secondary)] mt-1 italic">Only small creatures roam the outskirts.</p>;
+}
 
 interface ZoneMapProps {
   zones: Array<{
@@ -17,8 +24,14 @@ interface ZoneMapProps {
     discovered: boolean;
     zoneType: string;
     imageSrc?: string;
+    exploration: {
+      turnsExplored: number;
+      turnsToExplore: number | null;
+      percent: number;
+      tiers: Record<string, number> | null;
+    } | null;
   }>;
-  connections: Array<{ fromId: string; toId: string }>;
+  connections: Array<{ fromId: string; toId: string; explorationThreshold: number }>;
   currentZoneId: string;
   availableTurns: number;
   isRecovering: boolean;
@@ -412,6 +425,52 @@ export function ZoneMap({
               </div>
             )}
           </div>
+
+          {/* Exploration progress bar */}
+          {selectedZone.exploration && selectedZone.exploration.turnsToExplore && (
+            <div className="mb-3">
+              <div className="flex justify-between text-xs text-[var(--rpg-text-secondary)] mb-1">
+                <span>{Math.floor(selectedZone.exploration.percent)}% Explored</span>
+                <span>{selectedZone.exploration.turnsExplored.toLocaleString()} / {selectedZone.exploration.turnsToExplore.toLocaleString()}</span>
+              </div>
+              <div className="h-2 rounded-full bg-[var(--rpg-background)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--rpg-gold)] transition-all"
+                  style={{ width: `${Math.min(100, selectedZone.exploration.percent)}%` }}
+                />
+              </div>
+              {getMilestoneHint(selectedZone.exploration.percent)}
+            </div>
+          )}
+
+          {/* Locked zone exits */}
+          {(() => {
+            const currentZoneData = zones.find((z) => z.id === currentZoneId);
+            const currentExploration = currentZoneData?.exploration;
+            const lockedExits = connections
+              .filter((conn) => conn.fromId === currentZoneId && conn.explorationThreshold > 0)
+              .filter((conn) => {
+                const targetZone = zones.find((z) => z.id === conn.toId);
+                return targetZone && !targetZone.discovered && (currentExploration?.percent ?? 0) < conn.explorationThreshold;
+              })
+              .map((conn) => {
+                const targetZone = zones.find((z) => z.id === conn.toId);
+                return { toId: conn.toId, toName: targetZone?.name ?? '???', explorationThreshold: conn.explorationThreshold };
+              });
+
+            if (lockedExits.length === 0 || selectedZone.id !== currentZoneId) return null;
+
+            return (
+              <div className="mb-3 space-y-1">
+                {lockedExits.map((exit) => (
+                  <div key={exit.toId} className="flex items-center gap-1.5 text-xs text-[var(--rpg-text-secondary)] opacity-50">
+                    <Lock size={10} />
+                    <span>{exit.toName} -- requires {exit.explorationThreshold}% explored (currently {Math.floor(currentExploration?.percent ?? 0)}%)</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {selectedZone.id === currentZoneId && (
             <PixelButton

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@adventure/database', () => import('../__mocks__/database'));
+vi.mock('@adventure/database', () => import('../__mocks__/database.js'));
 vi.mock('./inventoryService', () => ({
   addStackableItem: vi.fn().mockResolvedValue({ itemId: 'stack-1', quantity: 1 }),
 }));

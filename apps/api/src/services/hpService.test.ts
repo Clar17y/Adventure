@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@adventure/database', () => import('../__mocks__/database'));
+vi.mock('@adventure/database', () => import('../__mocks__/database.js'));
 vi.mock('./equipmentService', () => ({
   getEquipmentStats: vi.fn().mockResolvedValue({
     attack: 0, rangedPower: 0, magicPower: 0, accuracy: 0,

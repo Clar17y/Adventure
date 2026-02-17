@@ -7,6 +7,7 @@ import {
   scoutOpponent,
   challenge,
   getHistory,
+  getMatchDetail,
   getNotificationCount,
   getNotifications,
   markNotificationsRead,
@@ -21,7 +22,6 @@ const scoutSchema = z.object({
 
 const challengeSchema = z.object({
   targetId: z.string().uuid(),
-  attackStyle: z.enum(['melee', 'ranged', 'magic']),
 });
 
 const historyQuerySchema = z.object({
@@ -90,7 +90,7 @@ pvpRouter.post('/challenge', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = challengeSchema.parse(req.body);
-    const result = await challenge(playerId, req.player!.username, body.targetId, body.attackStyle);
+    const result = await challenge(playerId, req.player!.username, body.targetId);
     res.json(result);
   } catch (err) {
     next(err);
@@ -109,6 +109,20 @@ pvpRouter.get('/history', async (req, res, next) => {
       pageSize: req.query.pageSize,
     });
     const result = await getHistory(playerId, query.page, query.pageSize);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/pvp/history/:matchId
+ * Full match detail including combat log.
+ */
+pvpRouter.get('/history/:matchId', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const result = await getMatchDetail(playerId, req.params.matchId);
     res.json(result);
   } catch (err) {
     next(err);

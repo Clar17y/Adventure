@@ -1,5 +1,5 @@
 import { Prisma, prisma } from '@adventure/database';
-import { buildPlayerCombatStats, calculateMaxHp, runCombat } from '@adventure/game-engine';
+import { buildPlayerCombatStats, calculateFleeResult, calculateMaxHp, runCombat } from '@adventure/game-engine';
 import { PVP_CONSTANTS, type Combatant, type CombatResult, type SkillType } from '@adventure/shared';
 import { AppError } from '../middleware/errorHandler';
 import { calculateEloChange } from './eloService';
@@ -7,7 +7,7 @@ import { getEquipmentStats } from './equipmentService';
 import { spendPlayerTurnsTx } from './turnBankService';
 import { degradeEquippedDurability } from './durabilityService';
 import { normalizePlayerAttributes } from './attributesService';
-import { getHpState } from './hpService';
+import { getHpState, setHp, enterRecoveringState } from './hpService';
 
 type AttackStyle = 'melee' | 'ranged' | 'magic';
 
@@ -18,11 +18,10 @@ const REVENGE_WINDOW_DAYS = 7;
 // ---------------------------------------------------------------------------
 
 export async function getOrCreateRating(playerId: string) {
-  const existing = await prisma.pvpRating.findUnique({ where: { playerId } });
-  if (existing) return existing;
-
-  return prisma.pvpRating.create({
-    data: {
+  return prisma.pvpRating.upsert({
+    where: { playerId },
+    update: {},
+    create: {
       playerId,
       rating: PVP_CONSTANTS.STARTING_RATING,
       bestRating: PVP_CONSTANTS.STARTING_RATING,
@@ -91,6 +90,15 @@ export async function scoutOpponent(attackerId: string, targetId: string) {
     throw new AppError(400, 'Cannot scout while recovering', 'IS_RECOVERING');
   }
 
+  // Town zone check
+  const attackerZone = await prisma.player.findUnique({
+    where: { id: attackerId },
+    select: { currentZone: { select: { zoneType: true } } },
+  });
+  if (attackerZone?.currentZone?.zoneType !== 'town') {
+    throw new AppError(400, 'Must be in a town to scout', 'NOT_IN_TOWN');
+  }
+
   // Spend turns for scouting
   await prisma.$transaction(async (tx) => {
     await spendPlayerTurnsTx(tx, attackerId, PVP_CONSTANTS.SCOUT_TURN_COST);
@@ -125,23 +133,18 @@ export async function scoutOpponent(attackerId: string, targetId: string) {
   const weightClass = chest?.item?.template?.weightClass as string | null;
   const armorClass = weightClass ?? 'none';
 
-  // Calculate power rating from equipment stats + combat skill levels
-  const equipStats = await getEquipmentStats(targetId);
-  const statTotal = equipStats.attack + equipStats.rangedPower + equipStats.magicPower
-    + equipStats.armor + equipStats.magicDefence + equipStats.health
-    + equipStats.dodge + equipStats.accuracy;
-
-  const combatSkills = await prisma.playerSkill.findMany({
-    where: { playerId: targetId, skillType: { in: ['melee', 'ranged', 'magic'] } },
-    select: { level: true },
-  });
-  const skillTotal = combatSkills.reduce((sum, s) => sum + s.level, 0);
+  // Calculate power ratings for both players
+  const [targetPower, myPower] = await Promise.all([
+    calculatePowerRating(targetId),
+    calculatePowerRating(attackerId),
+  ]);
 
   return {
     combatLevel: target.characterLevel,
     attackStyle,
     armorClass,
-    powerRating: statTotal + skillTotal,
+    powerRating: targetPower,
+    myPowerRating: myPower,
   };
 }
 
@@ -160,6 +163,32 @@ async function getAttackStyleFromEquipment(playerId: string): Promise<AttackStyl
   return 'melee';
 }
 
+async function calculatePowerRating(playerId: string): Promise<number> {
+  const [equipStats, player, combatSkills] = await Promise.all([
+    getEquipmentStats(playerId),
+    prisma.player.findUnique({
+      where: { id: playerId },
+      select: { attributes: true },
+    }),
+    prisma.playerSkill.findMany({
+      where: { playerId, skillType: { in: ['melee', 'ranged', 'magic'] } },
+      select: { level: true },
+    }),
+  ]);
+
+  const statTotal = equipStats.attack + equipStats.rangedPower + equipStats.magicPower
+    + equipStats.armor + equipStats.magicDefence + equipStats.health
+    + equipStats.dodge + equipStats.accuracy;
+
+  const attrs = normalizePlayerAttributes(player?.attributes);
+  const attrTotal = attrs.vitality + attrs.strength + attrs.dexterity
+    + attrs.intelligence + attrs.luck + attrs.evasion;
+
+  const skillTotal = combatSkills.reduce((sum, s) => sum + s.level, 0);
+
+  return statTotal + attrTotal + skillTotal;
+}
+
 async function getSkillLevel(playerId: string, skillType: SkillType): Promise<number> {
   const skill = await prisma.playerSkill.findUnique({
     where: { playerId_skillType: { playerId, skillType } },
@@ -172,7 +201,6 @@ export async function challenge(
   attackerId: string,
   attackerUsername: string,
   targetId: string,
-  attackStyle: AttackStyle,
 ) {
   // Validation: not self
   if (attackerId === targetId) {
@@ -222,6 +250,7 @@ export async function challenge(
       characterLevel: true,
       attributes: true,
       username: true,
+      isBot: true,
     },
   });
   if (!target) throw new AppError(404, 'Target not found', 'NOT_FOUND');
@@ -252,6 +281,7 @@ export async function challenge(
   const turnCost = isRevenge ? PVP_CONSTANTS.REVENGE_TURN_COST : PVP_CONSTANTS.CHALLENGE_TURN_COST;
 
   // Build attacker combatant
+  const attackStyle = await getAttackStyleFromEquipment(attackerId);
   const attackerAttributes = normalizePlayerAttributes(attacker.attributes);
   const attackerEquipStats = await getEquipmentStats(attackerId);
   const attackerSkillLevel = await getSkillLevel(attackerId, attackStyle);
@@ -260,7 +290,7 @@ export async function challenge(
     equipmentHealthBonus: attackerEquipStats.health,
   });
   const attackerStats = buildPlayerCombatStats(
-    attackerMaxHp,
+    hpState.currentHp,
     attackerMaxHp,
     { attackStyle, skillLevel: attackerSkillLevel, attributes: attackerAttributes },
     attackerEquipStats,
@@ -294,16 +324,19 @@ export async function challenge(
   };
 
   const combatResult: CombatResult = runCombat(combatantA, combatantB);
-  const attackerWon = combatResult.outcome === 'victory';
-  const winnerId = attackerWon ? attackerId : targetId;
 
-  // Calculate Elo changes
-  const elo = attackerWon
-    ? calculateEloChange(attackerRating.rating, defenderRating.rating, PVP_CONSTANTS.K_FACTOR)
-    : calculateEloChange(defenderRating.rating, attackerRating.rating, PVP_CONSTANTS.K_FACTOR);
+  // Detect draw: engine says "defeat" but both combatants alive (round limit hit)
+  const isDraw = combatResult.outcome === 'defeat'
+    && combatResult.combatantAHpRemaining > 0
+    && combatResult.combatantBHpRemaining > 0;
+  const attackerWon = !isDraw && combatResult.outcome === 'victory';
+  const winnerId = isDraw ? null : attackerWon ? attackerId : targetId;
 
-  const attackerRatingChange = attackerWon ? elo.winnerDelta : elo.loserDelta;
-  const defenderRatingChange = attackerWon ? elo.loserDelta : elo.winnerDelta;
+  // Calculate Elo changes — scoreA: 1 = win, 0.5 = draw, 0 = loss (from attacker perspective)
+  const score = isDraw ? 0.5 : attackerWon ? 1 : 0;
+  const elo = calculateEloChange(attackerRating.rating, defenderRating.rating, PVP_CONSTANTS.K_FACTOR, score);
+  const attackerRatingChange = elo.deltaA;
+  const defenderRatingChange = elo.deltaB;
   const now = new Date();
 
   // Execute everything in a transaction
@@ -322,29 +355,29 @@ export async function challenge(
       }
     }
 
-    // Update attacker rating
+    // Update attacker rating (draws: no win/loss, preserve streak)
     const newAttackerRating = Math.max(0, attackerRating.rating + attackerRatingChange);
     await tx.pvpRating.update({
       where: { playerId: attackerId },
       data: {
         rating: newAttackerRating,
         wins: attackerWon ? { increment: 1 } : undefined,
-        losses: attackerWon ? undefined : { increment: 1 },
-        winStreak: attackerWon ? { increment: 1 } : 0,
+        losses: !isDraw && !attackerWon ? { increment: 1 } : undefined,
+        winStreak: isDraw ? undefined : attackerWon ? { increment: 1 } : 0,
         bestRating: Math.max(attackerRating.bestRating, newAttackerRating),
         lastFoughtAt: now,
       },
     });
 
-    // Update defender rating
+    // Update defender rating (draws: no win/loss, preserve streak)
     const newDefenderRating = Math.max(0, defenderRating.rating + defenderRatingChange);
     await tx.pvpRating.update({
       where: { playerId: targetId },
       data: {
         rating: newDefenderRating,
-        wins: attackerWon ? undefined : { increment: 1 },
-        losses: attackerWon ? { increment: 1 } : undefined,
-        winStreak: attackerWon ? 0 : { increment: 1 },
+        wins: !isDraw && !attackerWon ? { increment: 1 } : undefined,
+        losses: !isDraw && attackerWon ? { increment: 1 } : undefined,
+        winStreak: isDraw ? undefined : attackerWon ? 0 : { increment: 1 },
         bestRating: Math.max(defenderRating.bestRating, newDefenderRating),
         lastFoughtAt: now,
       },
@@ -381,11 +414,34 @@ export async function challenge(
     return matchRecord;
   });
 
-  // Apply durability loss to both players outside transaction
+  // Apply durability loss (skip for bot defenders to preserve their gear)
+  // TODO: skip potion consumption for bots when auto-potions are implemented
   const [attackerDurability, defenderDurability] = await Promise.all([
     degradeEquippedDurability(attackerId),
-    degradeEquippedDurability(targetId),
+    target.isBot ? [] : degradeEquippedDurability(targetId),
   ]);
+
+  // Persist attacker HP after combat
+  let attackerKnockedOut = false;
+  let fleeOutcome: string | null = null;
+  if (combatResult.combatantAHpRemaining <= 0) {
+    // Defeated: roll flee check (evasion vs defender level)
+    const fleeResult = calculateFleeResult({
+      evasionLevel: attackerAttributes.evasion,
+      mobLevel: target.characterLevel,
+      maxHp: attackerMaxHp,
+      currentGold: 0,
+    });
+    fleeOutcome = fleeResult.outcome;
+    if (fleeResult.outcome === 'knockout') {
+      await enterRecoveringState(attackerId, attackerMaxHp);
+      attackerKnockedOut = true;
+    } else {
+      await setHp(attackerId, fleeResult.remainingHp);
+    }
+  } else {
+    await setHp(attackerId, combatResult.combatantAHpRemaining);
+  }
 
   return {
     matchId: match.id,
@@ -394,6 +450,7 @@ export async function challenge(
     attackerName: attackerUsername,
     defenderName: target.username,
     winnerId,
+    isDraw,
     isRevenge,
     turnsSpent: turnCost,
     attackerRating: attackerRating.rating,
@@ -403,6 +460,9 @@ export async function challenge(
     attackerStyle: attackStyle,
     defenderStyle,
     combat: combatResult,
+    attackerStartHp: hpState.currentHp,
+    attackerKnockedOut,
+    fleeOutcome,
     durability: {
       attacker: attackerDurability,
       defender: defenderDurability,
@@ -461,6 +521,46 @@ export async function getHistory(playerId: string, page: number, pageSize: numbe
       hasNext: page < totalPages,
       hasPrevious: page > 1,
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// getMatchDetail
+// ---------------------------------------------------------------------------
+
+export async function getMatchDetail(playerId: string, matchId: string) {
+  const match = await prisma.pvpMatch.findUnique({
+    where: { id: matchId },
+    include: {
+      attacker: { select: { username: true } },
+      defender: { select: { username: true } },
+    },
+  });
+
+  if (!match) {
+    throw new AppError(404, 'Match not found', 'NOT_FOUND');
+  }
+  if (match.attackerId !== playerId && match.defenderId !== playerId) {
+    throw new AppError(403, 'Not authorized to view this match', 'FORBIDDEN');
+  }
+
+  return {
+    matchId: match.id,
+    attackerId: match.attackerId,
+    attackerName: match.attacker.username,
+    defenderId: match.defenderId,
+    defenderName: match.defender.username,
+    winnerId: match.winnerId,
+    attackerRating: match.attackerRating,
+    defenderRating: match.defenderRating,
+    attackerRatingChange: match.attackerRatingChange,
+    defenderRatingChange: match.defenderRatingChange,
+    attackerStyle: match.attackerStyle,
+    defenderStyle: match.defenderStyle,
+    isRevenge: match.isRevenge,
+    turnsSpent: match.turnsSpent,
+    createdAt: match.createdAt.toISOString(),
+    combatLog: match.combatLog,
   };
 }
 

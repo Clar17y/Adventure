@@ -529,6 +529,18 @@ export interface CombatLogEntryResponse {
   critMultiplier?: number;
   combatantAHpAfter?: number;
   combatantBHpAfter?: number;
+  spellName?: string;
+  healAmount?: number;
+  effectsApplied?: Array<{
+    stat: string;
+    modifier: number;
+    duration: number;
+    target: 'combatantA' | 'combatantB';
+  }>;
+  effectsExpired?: Array<{
+    name: string;
+    target: 'combatantA' | 'combatantB';
+  }>;
   /** @deprecated Backward compat alias */
   playerHpAfter?: number;
   /** @deprecated Backward compat alias */
@@ -1098,6 +1110,7 @@ export interface PvpScoutData {
   attackStyle: string;
   armorClass: string;
   powerRating: number;
+  myPowerRating: number;
 }
 
 export interface PvpMatchResponse {
@@ -1106,7 +1119,7 @@ export interface PvpMatchResponse {
   attackerName: string;
   defenderId: string;
   defenderName: string;
-  winnerId: string;
+  winnerId: string | null;
   attackerRating: number;
   defenderRating: number;
   attackerRatingChange: number;
@@ -1124,7 +1137,8 @@ export interface PvpChallengeResponse {
   defenderId: string;
   attackerName: string;
   defenderName: string;
-  winnerId: string;
+  winnerId: string | null;
+  isDraw: boolean;
   isRevenge: boolean;
   turnsSpent: number;
   attackerRating: number;
@@ -1137,15 +1151,21 @@ export interface PvpChallengeResponse {
     outcome: 'victory' | 'defeat';
     combatantA: { id: string; name: string };
     combatantB: { id: string; name: string };
+    combatantAMaxHp: number;
+    combatantBMaxHp: number;
+    combatantAHpRemaining: number;
     log: CombatLogEntryResponse[];
     totalRounds: number;
   };
+  attackerStartHp: number;
+  attackerKnockedOut: boolean;
+  fleeOutcome: 'clean_escape' | 'wounded_escape' | 'knockout' | null;
 }
 
 export interface PvpNotification {
   matchId: string;
   attackerName: string;
-  winnerId: string;
+  winnerId: string | null;
   defenderRatingChange: number;
   isRevenge: boolean;
   createdAt: string;
@@ -1166,11 +1186,27 @@ export async function scoutPvpOpponent(targetId: string) {
   });
 }
 
-export async function challengePvpOpponent(targetId: string, attackStyle: string) {
+export async function challengePvpOpponent(targetId: string) {
   return fetchApi<PvpChallengeResponse>('/api/v1/pvp/challenge', {
     method: 'POST',
-    body: JSON.stringify({ targetId, attackStyle }),
+    body: JSON.stringify({ targetId }),
   });
+}
+
+export interface PvpMatchDetailResponse extends PvpMatchResponse {
+  combatLog: {
+    outcome: 'victory' | 'defeat';
+    combatantA: { id: string; name: string };
+    combatantB: { id: string; name: string };
+    combatantAMaxHp: number;
+    combatantBMaxHp: number;
+    log: CombatLogEntryResponse[];
+    totalRounds: number;
+  };
+}
+
+export async function getPvpMatchDetail(matchId: string) {
+  return fetchApi<PvpMatchDetailResponse>(`/api/v1/pvp/history/${matchId}`);
 }
 
 export async function getPvpHistory(page = 1, pageSize = 10) {

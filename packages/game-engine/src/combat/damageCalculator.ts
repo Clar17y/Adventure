@@ -37,7 +37,7 @@ export function doesAttackHit(
   if (attackRoll === 1) return false;
 
   const totalAttack = attackRoll + accuracyBonus;
-  const hitThreshold = 10 + targetDodge + Math.floor(Math.max(0, targetEvasion) / 2);
+  const hitThreshold = 10 + targetDodge + Math.max(0, targetEvasion);
   return totalAttack >= hitThreshold;
 }
 

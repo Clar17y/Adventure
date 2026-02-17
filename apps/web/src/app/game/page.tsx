@@ -731,8 +731,11 @@ export default function GamePage() {
             busyAction={busyAction}
             currentTurns={turns}
             playerId={player?.id ?? null}
+            isInTown={currentZone?.zoneType === 'town'}
             onTurnsChanged={() => void loadTurnsAndHp()}
             onNotificationsChanged={() => void loadPvpNotificationCount()}
+            onHpChanged={() => void loadTurnsAndHp()}
+            onNavigate={(s) => setActiveScreen(s as Screen)}
           />
         );
       case 'rest':

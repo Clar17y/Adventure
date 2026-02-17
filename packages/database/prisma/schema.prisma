@@ -533,7 +533,7 @@ model PvpMatch {
   defenderRating       Int      @map("defender_rating")
   attackerRatingChange Int      @map("attacker_rating_change")
   defenderRatingChange Int      @map("defender_rating_change")
-  winnerId             String   @map("winner_id")
+  winnerId             String?  @map("winner_id")
   combatLog            Json     @map("combat_log")
   attackerStyle        String   @map("attacker_style") @db.VarChar(16)
   defenderStyle        String   @map("defender_style") @db.VarChar(16)

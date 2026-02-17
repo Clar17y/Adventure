@@ -1,10 +1,11 @@
 export function calculateEloChange(
-  winnerRating: number,
-  loserRating: number,
+  ratingA: number,
+  ratingB: number,
   kFactor: number,
-): { winnerDelta: number; loserDelta: number } {
-  const expectedWinner = 1 / (1 + Math.pow(10, (loserRating - winnerRating) / 400));
-  const winnerDelta = Math.round(kFactor * (1 - expectedWinner));
-  const loserDelta = Math.max(-loserRating, -winnerDelta);
-  return { winnerDelta, loserDelta };
+  scoreA: number = 1,
+): { deltaA: number; deltaB: number } {
+  const expectedA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+  const deltaA = Math.round(kFactor * (scoreA - expectedA));
+  const deltaB = Math.max(-ratingB, -deltaA);
+  return { deltaA, deltaB };
 }

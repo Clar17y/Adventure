@@ -82,10 +82,7 @@ function tickEffects(state: CombatState, names: { combatantA: string; combatantB
   }
 
   if (expiredNames.size > 0) {
-    // Derive actor: if all expired effects targeted the player, the actor is player
     const targets = Array.from(expiredNames.values()).map(e => e.target);
-    const actor = targets.every(t => t === 'player') ? 'player' : 'mob';
-
     const actor = targets.every(t => t === 'combatantA') ? 'combatantA' as CombatActor : 'combatantB' as CombatActor;
 
     state.log.push({

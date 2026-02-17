@@ -16,6 +16,8 @@ interface CombatPlaybackProps {
   mobMaxHp: number;
   log: LastCombatLogEntry[];
   rewards?: LastCombat['rewards'];
+  playerLabel?: string;
+  defeatButtonLabel?: string;
   onComplete: () => void;
   onSkip: () => void;
 }
@@ -28,6 +30,8 @@ export function CombatPlayback({
   mobMaxHp,
   log,
   rewards,
+  playerLabel = 'You',
+  defeatButtonLabel,
   onComplete,
   onSkip,
 }: CombatPlaybackProps) {
@@ -130,7 +134,7 @@ export function CombatPlayback({
         {/* Player HP */}
         <div>
           <div className="flex justify-between text-xs mb-1">
-            <span className="text-[var(--rpg-green-light)]">You</span>
+            <span className="text-[var(--rpg-green-light)]">{playerLabel}</span>
             <span className="text-[var(--rpg-green-light)] font-mono">{currentPlayerHp}/{playerMaxHp}</span>
           </div>
           <div className={`h-4 bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded overflow-hidden ${shakeTarget === 'combatantA' ? 'animate-shake' : ''}`}>
@@ -202,6 +206,8 @@ export function CombatPlayback({
             playerMaxHp={playerMaxHp}
             mobMaxHp={mobMaxHp}
             showDetailedBreakdown={false}
+            playerLabel={playerLabel}
+            opponentLabel={mobDisplayName}
           />
         ))}
       </div>
@@ -225,7 +231,7 @@ export function CombatPlayback({
               variant={outcome === 'defeat' ? 'danger' : 'secondary'}
               onClick={onComplete}
             >
-              {outcome === 'defeat' ? 'Return to Town' : 'Continue'}
+              {outcome === 'defeat' ? (defeatButtonLabel ?? 'Return to Town') : 'Continue'}
             </PixelButton>
           )}
         </div>

@@ -8,6 +8,7 @@ import {
   getPvpLadder,
   getPvpNotifications,
   getPvpHistory,
+  getPvpMatchDetail,
   scoutPvpOpponent,
   challengePvpOpponent,
   markPvpNotificationsRead,
@@ -15,9 +16,12 @@ import {
   type PvpLadderEntry,
   type PvpNotification,
   type PvpMatchResponse,
+  type PvpMatchDetailResponse,
   type PvpScoutData,
   type PvpChallengeResponse,
 } from '@/lib/api';
+import { CombatPlayback } from '@/components/combat/CombatPlayback';
+import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
 import { PVP_CONSTANTS } from '@adventure/shared';
 import { Swords, Eye, Trophy, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -26,26 +30,31 @@ interface ArenaScreenProps {
   busyAction: string | null;
   currentTurns: number;
   playerId: string | null;
+  isInTown?: boolean;
   onTurnsChanged?: () => void;
   onNotificationsChanged?: () => void;
+  onHpChanged?: () => void;
+  onNavigate?: (screen: string) => void;
 }
 
 type ArenaView = 'ladder' | 'history' | 'notifications';
 
-export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId, onTurnsChanged, onNotificationsChanged }: ArenaScreenProps) {
+export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId, isInTown = true, onTurnsChanged, onNotificationsChanged, onHpChanged, onNavigate }: ArenaScreenProps) {
   const [rating, setRating] = useState<PvpRatingResponse | null>(null);
   const [ladder, setLadder] = useState<PvpLadderEntry[]>([]);
   const [notifications, setNotifications] = useState<PvpNotification[]>([]);
   const [history, setHistory] = useState<PvpMatchResponse[]>([]);
   const [historyPagination, setHistoryPagination] = useState<{ page: number; totalPages: number }>({ page: 1, totalPages: 1 });
   const [scoutData, setScoutData] = useState<Record<string, PvpScoutData>>({});
-  const [challengeTarget, setChallengeTarget] = useState<string | null>(null);
-  const [attackStyle, setAttackStyle] = useState<'melee' | 'ranged' | 'magic'>('melee');
   const [activeView, setActiveView] = useState<ArenaView>('ladder');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PvpChallengeResponse | null>(null);
+  const [pvpPlaybackActive, setPvpPlaybackActive] = useState(false);
+  const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
+  const [matchDetail, setMatchDetail] = useState<PvpMatchDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const meetsLevel = characterLevel >= PVP_CONSTANTS.MIN_CHARACTER_LEVEL;
 
@@ -118,11 +127,11 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
     if (actionBusy) return;
     setActionBusy('challenge');
     setError(null);
-    setChallengeTarget(null);
     try {
-      const result = await challengePvpOpponent(targetId, attackStyle);
+      const result = await challengePvpOpponent(targetId);
       if (result.data) {
         setLastResult(result.data);
+        setPvpPlaybackActive(true);
         await loadArenaData();
       } else if (result.error) {
         setError(result.error.message);
@@ -131,13 +140,14 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
       setActionBusy(null);
       onTurnsChanged?.();
       onNotificationsChanged?.();
+      onHpChanged?.();
     }
   }
 
   function handleViewChange(view: ArenaView) {
     setActiveView(view);
     setError(null);
-    if (view === 'history' && history.length === 0) {
+    if (view === 'history') {
       void loadHistory(1);
     }
     if (view === 'notifications') {
@@ -147,6 +157,25 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
           onNotificationsChanged?.();
         });
       });
+    }
+  }
+
+  async function handleToggleMatchDetail(matchId: string) {
+    if (expandedMatchId === matchId) {
+      setExpandedMatchId(null);
+      setMatchDetail(null);
+      return;
+    }
+    setExpandedMatchId(matchId);
+    setMatchDetail(null);
+    setDetailLoading(true);
+    try {
+      const res = await getPvpMatchDetail(matchId);
+      if (res.data) {
+        setMatchDetail(res.data);
+      }
+    } finally {
+      setDetailLoading(false);
     }
   }
 
@@ -206,33 +235,78 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
     </PixelCard>
   );
 
-  // Challenge result
+  // Challenge result: playback then rating summary
   const resultPanel = lastResult && (
-    <PixelCard className="mb-4">
-      <div className="text-center py-2">
-        <div className={`text-xl font-bold mb-1 ${
-          lastResult.winnerId === playerId ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'
-        }`}>
-          {lastResult.winnerId === playerId ? 'Victory!' : 'Defeat!'}
+    pvpPlaybackActive ? (
+      <CombatPlayback
+        mobDisplayName={lastResult.defenderName}
+        outcome={lastResult.isDraw ? 'defeat' : lastResult.winnerId === playerId ? 'victory' : 'defeat'}
+        playerMaxHp={lastResult.combat.combatantAMaxHp}
+        playerStartHp={lastResult.attackerStartHp}
+        mobMaxHp={lastResult.combat.combatantBMaxHp}
+        log={lastResult.combat.log}
+        playerLabel={lastResult.attackerName}
+        defeatButtonLabel="Continue"
+        onComplete={() => setPvpPlaybackActive(false)}
+        onSkip={() => setPvpPlaybackActive(false)}
+      />
+    ) : (
+      <PixelCard className="mb-4">
+        <div className="text-center py-2">
+          <div className={`text-xl font-bold mb-1 ${
+            lastResult.isDraw ? 'text-[var(--rpg-gold)]'
+              : lastResult.winnerId === playerId ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'
+          }`}>
+            {lastResult.isDraw ? 'Draw!' : lastResult.winnerId === playerId ? 'Victory!' : 'Defeat!'}
+          </div>
+          <p className="text-sm text-[var(--rpg-text-secondary)]">
+            {lastResult.attackerName} vs {lastResult.defenderName}
+            {lastResult.isDraw && ' — 100 rounds, no winner'}
+          </p>
+          {!lastResult.isDraw && (
+            <p className="text-sm font-mono mt-1">
+              Rating:{' '}
+              <span className={lastResult.attackerRatingChange >= 0 ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}>
+                {lastResult.attackerRatingChange >= 0 ? '+' : ''}{lastResult.attackerRatingChange}
+              </span>
+            </p>
+          )}
+          {lastResult.fleeOutcome === 'knockout' && (
+            <p className="text-sm text-[var(--rpg-red)] mt-1 font-semibold">
+              Knocked out! You need to recover.
+            </p>
+          )}
+          {lastResult.fleeOutcome === 'wounded_escape' && (
+            <p className="text-sm text-[var(--rpg-gold)] mt-1">
+              You limp away wounded.
+            </p>
+          )}
+          {lastResult.fleeOutcome === 'clean_escape' && (
+            <p className="text-sm text-[var(--rpg-text-secondary)] mt-1">
+              You escape relatively unscathed.
+            </p>
+          )}
+          <div className="flex items-center justify-center gap-3 mt-2">
+            {lastResult.attackerKnockedOut && onNavigate && (
+              <button
+                type="button"
+                onClick={() => { setLastResult(null); onNavigate('rest'); }}
+                className="text-sm text-[var(--rpg-gold)] underline font-semibold"
+              >
+                Recover
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setLastResult(null)}
+              className="text-xs text-[var(--rpg-text-secondary)] underline"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
-        <p className="text-sm text-[var(--rpg-text-secondary)]">
-          {lastResult.attackerName} vs {lastResult.defenderName}
-        </p>
-        <p className="text-sm font-mono mt-1">
-          Rating:{' '}
-          <span className={lastResult.attackerRatingChange >= 0 ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}>
-            {lastResult.attackerRatingChange >= 0 ? '+' : ''}{lastResult.attackerRatingChange}
-          </span>
-        </p>
-        <button
-          type="button"
-          onClick={() => setLastResult(null)}
-          className="mt-2 text-xs text-[var(--rpg-text-secondary)] underline"
-        >
-          Dismiss
-        </button>
-      </div>
-    </PixelCard>
+      </PixelCard>
+    )
   );
 
   // View tabs
@@ -277,7 +351,6 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
       )}
       {ladder.map((opponent) => {
         const scouted = scoutData[opponent.playerId];
-        const isChallengingThis = challengeTarget === opponent.playerId;
         return (
           <PixelCard key={opponent.playerId} padding="sm">
             <div className="flex items-center justify-between">
@@ -291,6 +364,9 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
                 {scouted && (
                   <div className="text-xs text-[var(--rpg-blue-light)] mt-1">
                     Style: {scouted.attackStyle} | Armor: {scouted.armorClass} | Power: {scouted.powerRating}
+                    <span className={scouted.myPowerRating >= scouted.powerRating ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}>
+                      {' '}(You: {scouted.myPowerRating})
+                    </span>
                   </div>
                 )}
               </div>
@@ -299,54 +375,24 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
                   <PixelButton
                     variant="secondary"
                     size="sm"
-                    disabled={!meetsLevel || !!actionBusy || !!busyAction || currentTurns < PVP_CONSTANTS.SCOUT_TURN_COST}
+                    disabled={!isInTown || !meetsLevel || !!actionBusy || !!busyAction || currentTurns < PVP_CONSTANTS.SCOUT_TURN_COST}
                     onClick={() => void handleScout(opponent.playerId)}
-                    title={`Scout (${PVP_CONSTANTS.SCOUT_TURN_COST} turns)`}
+                    title={isInTown ? `Scout (${PVP_CONSTANTS.SCOUT_TURN_COST} turns)` : 'Must be in a town'}
                   >
                     <Eye size={14} className="inline mr-1" />
-                    Scout
+                    {isInTown ? 'Scout' : 'Town Only'}
                   </PixelButton>
                 )}
-                {isChallengingThis ? (
-                  <div className="flex items-center gap-1">
-                    {(['melee', 'ranged', 'magic'] as const).map((style) => (
-                      <button
-                        key={style}
-                        type="button"
-                        onClick={() => {
-                          setAttackStyle(style);
-                          void handleChallenge(opponent.playerId);
-                        }}
-                        disabled={!!actionBusy}
-                        className={`px-2 py-1 rounded text-xs font-semibold transition-colors ${
-                          actionBusy === 'challenge'
-                            ? 'bg-[var(--rpg-border)] text-[var(--rpg-text-secondary)] cursor-not-allowed'
-                            : 'bg-[var(--rpg-gold)] text-[var(--rpg-background)] hover:bg-[#e4b85b]'
-                        }`}
-                      >
-                        {style.charAt(0).toUpperCase() + style.slice(1)}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setChallengeTarget(null)}
-                      className="px-1.5 py-1 rounded text-xs text-[var(--rpg-text-secondary)] hover:text-[var(--rpg-text-primary)]"
-                    >
-                      X
-                    </button>
-                  </div>
-                ) : (
-                  <PixelButton
-                    variant="gold"
-                    size="sm"
-                    disabled={!meetsLevel || !!actionBusy || !!busyAction || currentTurns < PVP_CONSTANTS.CHALLENGE_TURN_COST}
-                    onClick={() => setChallengeTarget(opponent.playerId)}
-                    title={`Challenge (${PVP_CONSTANTS.CHALLENGE_TURN_COST} turns)`}
-                  >
-                    <Swords size={14} className="inline mr-1" />
-                    Fight
-                  </PixelButton>
-                )}
+                <PixelButton
+                  variant="gold"
+                  size="sm"
+                  disabled={!isInTown || !meetsLevel || !!actionBusy || !!busyAction || currentTurns < PVP_CONSTANTS.CHALLENGE_TURN_COST}
+                  onClick={() => void handleChallenge(opponent.playerId)}
+                  title={isInTown ? `Challenge (${PVP_CONSTANTS.CHALLENGE_TURN_COST} turns)` : 'Must be in a town'}
+                >
+                  <Swords size={14} className="inline mr-1" />
+                  {isInTown ? 'Fight' : 'Town Only'}
+                </PixelButton>
               </div>
             </div>
           </PixelCard>
@@ -367,34 +413,72 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
       )}
       {history.map((match) => {
         const isAttacker = match.attackerId === playerId;
-        const won = match.winnerId === playerId;
+        const isDraw = match.winnerId === null;
+        const won = !isDraw && match.winnerId === playerId;
         const opponentName = isAttacker ? match.defenderName : match.attackerName;
         const ratingChange = isAttacker ? match.attackerRatingChange : match.defenderRatingChange;
+        const isExpanded = expandedMatchId === match.matchId;
         return (
-          <PixelCard key={match.matchId} padding="sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-bold ${won ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}`}>
-                    {won ? 'WIN' : 'LOSS'}
-                  </span>
-                  <span className="text-[var(--rpg-text-primary)]">vs {opponentName}</span>
-                  {match.isRevenge && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--rpg-gold)]/20 text-[var(--rpg-gold)]">
-                      Revenge
+          <div key={match.matchId}>
+            <PixelCard padding="sm">
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => void handleToggleMatchDetail(match.matchId)}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-bold ${isDraw ? 'text-[var(--rpg-gold)]' : won ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}`}>
+                        {isDraw ? 'DRAW' : won ? 'WIN' : 'LOSS'}
+                      </span>
+                      <span className="text-[var(--rpg-text-primary)]">vs {opponentName}</span>
+                      {match.isRevenge && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--rpg-gold)]/20 text-[var(--rpg-gold)]">
+                          Revenge
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-[var(--rpg-text-secondary)]">
+                      {isAttacker ? 'Attacked' : 'Defended'} | {match.attackerStyle} vs {match.defenderStyle}
+                      {' | '}{new Date(match.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-bold font-mono ${isDraw ? 'text-[var(--rpg-text-secondary)]' : ratingChange >= 0 ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}`}>
+                      {isDraw ? '—' : `${ratingChange >= 0 ? '+' : ''}${ratingChange}`}
                     </span>
-                  )}
+                    <ChevronRight size={14} className={`text-[var(--rpg-text-secondary)] transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                  </div>
                 </div>
-                <div className="text-xs text-[var(--rpg-text-secondary)]">
-                  {isAttacker ? 'Attacked' : 'Defended'} | {match.attackerStyle} vs {match.defenderStyle}
-                  {' | '}{new Date(match.createdAt).toLocaleDateString()}
-                </div>
+              </button>
+            </PixelCard>
+            {isExpanded && (
+              <div className="ml-2 mt-1 mb-2 border-l-2 border-[var(--rpg-border)] pl-2 max-h-64 overflow-y-auto space-y-0.5">
+                {detailLoading && (
+                  <p className="text-xs text-[var(--rpg-text-secondary)] py-2">Loading combat log...</p>
+                )}
+                {matchDetail && matchDetail.matchId === match.matchId && (() => {
+                  const viewerIsAttacker = match.attackerId === playerId;
+                  const pMaxHp = viewerIsAttacker ? matchDetail.combatLog.combatantAMaxHp : matchDetail.combatLog.combatantBMaxHp;
+                  const mMaxHp = viewerIsAttacker ? matchDetail.combatLog.combatantBMaxHp : matchDetail.combatLog.combatantAMaxHp;
+                  const pLabel = viewerIsAttacker ? matchDetail.attackerName : matchDetail.defenderName;
+                  const oLabel = viewerIsAttacker ? matchDetail.defenderName : matchDetail.attackerName;
+                  return matchDetail.combatLog.log.map((entry, i) => (
+                    <CombatLogEntry
+                      key={i}
+                      entry={viewerIsAttacker ? entry : { ...entry, actor: entry.actor === 'combatantA' ? 'combatantB' : 'combatantA' }}
+                      playerMaxHp={pMaxHp}
+                      mobMaxHp={mMaxHp}
+                      showDetailedBreakdown={false}
+                      playerLabel={pLabel}
+                      opponentLabel={oLabel}
+                    />
+                  ));
+                })()}
               </div>
-              <div className={`text-sm font-bold font-mono ${ratingChange >= 0 ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}`}>
-                {ratingChange >= 0 ? '+' : ''}{ratingChange}
-              </div>
-            </div>
-          </PixelCard>
+            )}
+          </div>
         );
       })}
       {historyPagination.totalPages > 1 && (
@@ -434,14 +518,15 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
         </PixelCard>
       )}
       {notifications.map((notif) => {
-        const won = notif.defenderRatingChange >= 0;
+        const isDraw = notif.winnerId === null;
+        const won = !isDraw && notif.defenderRatingChange >= 0;
         return (
           <PixelCard key={notif.matchId} padding="sm">
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-bold ${won ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}`}>
-                    {won ? 'DEFENDED' : 'LOST'}
+                  <span className={`text-sm font-bold ${isDraw ? 'text-[var(--rpg-gold)]' : won ? 'text-[var(--rpg-green-light)]' : 'text-[var(--rpg-red)]'}`}>
+                    {isDraw ? 'DRAW' : won ? 'DEFENDED' : 'LOST'}
                   </span>
                   <span className="text-[var(--rpg-text-primary)]">
                     Attacked by {notif.attackerName}

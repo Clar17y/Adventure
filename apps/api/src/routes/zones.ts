@@ -46,14 +46,23 @@ zonesRouter.get('/', async (req, res, next) => {
     await ensureStarterDiscoveries(playerId);
 
     // Fetch all data in parallel
-    const [zones, connections, discoveredZoneIds, player] = await Promise.all([
+    const [zones, connections, discoveredZoneIds, player, explorations] = await Promise.all([
       db.zone.findMany({
         orderBy: [{ isStarter: 'desc' }, { difficulty: 'asc' }, { name: 'asc' }],
       }),
-      db.zoneConnection.findMany({ select: { fromId: true, toId: true } }),
+      db.zoneConnection.findMany({ select: { fromId: true, toId: true, explorationThreshold: true } }),
       getDiscoveredZoneIds(playerId),
       prisma.player.findUnique({ where: { id: playerId }, select: { currentZoneId: true } }),
+      db.playerZoneExploration.findMany({
+        where: { playerId },
+        select: { zoneId: true, turnsExplored: true },
+      }),
     ]);
+    const explorationByZoneId = new Map<string, number>(
+      (explorations as Array<{ zoneId: string; turnsExplored: number }>).map(
+        (e: { zoneId: string; turnsExplored: number }) => [e.zoneId, e.turnsExplored],
+      ),
+    );
 
     if (zones.length === 0) {
       throw new AppError(500, 'No zones configured. Run database seed.', 'NO_ZONES_CONFIGURED');
@@ -74,12 +83,12 @@ zonesRouter.get('/', async (req, res, next) => {
 
     // Only include connections where both endpoints are discovered
     const filteredConnections = connections.filter(
-      (c: { fromId: string; toId: string }) =>
+      (c: { fromId: string; toId: string; explorationThreshold: number | null }) =>
         discoveredZoneIds.has(c.fromId) && discoveredZoneIds.has(c.toId),
     );
 
     res.json({
-      zones: zones.map((z: { id: string; name: string; description: string | null; difficulty: number; travelCost: number; isStarter: boolean; zoneType: string; zoneExitChance: number | null; maxCraftingLevel: number | null }) => {
+      zones: zones.map((z: { id: string; name: string; description: string | null; difficulty: number; travelCost: number; isStarter: boolean; zoneType: string; zoneExitChance: number | null; maxCraftingLevel: number | null; turnsToExplore: number | null; explorationTiers: Record<string, number> | null }) => {
         const discovered = discoveredZoneIds.has(z.id);
         return {
           id: z.id,
@@ -92,11 +101,20 @@ zonesRouter.get('/', async (req, res, next) => {
           zoneType: z.zoneType,
           zoneExitChance: discovered ? z.zoneExitChance : null,
           maxCraftingLevel: discovered ? z.maxCraftingLevel : null,
+          exploration: z.zoneType === 'town' ? null : {
+            turnsExplored: explorationByZoneId.get(z.id) ?? 0,
+            turnsToExplore: z.turnsToExplore ?? null,
+            percent: z.turnsToExplore
+              ? Math.min(100, ((explorationByZoneId.get(z.id) ?? 0) / z.turnsToExplore) * 100)
+              : 100,
+            tiers: z.explorationTiers ?? null,
+          },
         };
       }),
-      connections: filteredConnections.map((c: { fromId: string; toId: string }) => ({
+      connections: filteredConnections.map((c: { fromId: string; toId: string; explorationThreshold: number | null }) => ({
         fromId: c.fromId,
         toId: c.toId,
+        explorationThreshold: c.explorationThreshold ?? 0,
       })),
       currentZoneId,
     });

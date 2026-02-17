@@ -24,10 +24,10 @@ bestiaryRouter.get('/', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
 
-    const [mobTemplates, progress, prefixProgress] = await Promise.all([
+    const [mobTemplates, progress, prefixProgress, explorations] = await Promise.all([
       prisma.mobTemplate.findMany({
         include: {
-          zone: { select: { id: true, name: true, difficulty: true } },
+          zone: { select: { id: true, name: true, difficulty: true, turnsToExplore: true, explorationTiers: true } },
           dropTables: {
             include: {
               itemTemplate: { select: { id: true, name: true, itemType: true, tier: true } },
@@ -44,7 +44,16 @@ bestiaryRouter.get('/', async (req, res, next) => {
         where: { playerId },
         select: { mobTemplateId: true, prefix: true, kills: true },
       }),
+      prismaAny.playerZoneExploration.findMany({
+        where: { playerId },
+        select: { zoneId: true, turnsExplored: true },
+      }),
     ]);
+    const explorationByZoneId = new Map<string, number>(
+      (explorations as Array<{ zoneId: string; turnsExplored: number }>).map(
+        (e: { zoneId: string; turnsExplored: number }) => [e.zoneId, e.turnsExplored],
+      ),
+    );
 
     const killsByMobId = new Map<string, number>();
     for (const p of progress) killsByMobId.set(p.mobTemplateId, p.kills);
@@ -65,12 +74,25 @@ bestiaryRouter.get('/', async (req, res, next) => {
         const mobAccuracy = typeof mobStats.accuracy === 'number'
           ? mobStats.accuracy
           : Math.floor(mobStats.attack ?? 0);
+
+        // Exploration tier-lock calculation
+        const zoneExpl = mob.zone as unknown as { turnsToExplore: number | null; explorationTiers: Record<string, number> | null };
+        const turnsToExplore = zoneExpl.turnsToExplore ?? null;
+        const turnsExplored = explorationByZoneId.get(mob.zoneId) ?? 0;
+        const zonePercent = turnsToExplore ? Math.min(100, (turnsExplored / turnsToExplore) * 100) : 100;
+        const zoneTiers = zoneExpl.explorationTiers;
+        const mobTier = (mob as unknown as { explorationTier: number | null }).explorationTier ?? 1;
+        const tierThreshold = zoneTiers ? (zoneTiers[String(mobTier)] ?? 0) : 0;
+        const tierLocked = zonePercent < tierThreshold;
+
         return {
           id: mob.id,
-          name: mob.name,
+          name: tierLocked && kills === 0 ? '???' : mob.name,
           level: Math.max(1, mob.zone.difficulty * 5),
           isDiscovered: kills > 0,
           killCount: kills,
+          explorationTier: mobTier,
+          tierLocked,
           stats: {
             hp: mob.hp,
             accuracy: mobAccuracy,

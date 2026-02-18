@@ -8,8 +8,10 @@ import {
   signUpForBoss,
   type BossEncounterResponse,
   type BossParticipantResponse,
+  type BossPlayerReward,
   type BossRoundSummary,
 } from '@/lib/api';
+import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
 
 interface BossEncounterPanelProps {
   encounterId: string;
@@ -20,6 +22,7 @@ interface BossEncounterPanelProps {
 export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncounterPanelProps) {
   const [encounter, setEncounter] = useState<BossEncounterResponse | null>(null);
   const [participants, setParticipants] = useState<BossParticipantResponse[]>([]);
+  const [myRewards, setMyRewards] = useState<BossPlayerReward | null>(null);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
   const [role, setRole] = useState<'attacker' | 'healer'>('attacker');
@@ -33,6 +36,7 @@ export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncou
     if (res.data) {
       setEncounter(res.data.encounter);
       setParticipants(res.data.participants);
+      setMyRewards(res.data.myRewards ?? null);
     }
     setLoading(false);
   }, [encounterId]);
@@ -236,6 +240,36 @@ export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncou
               </p>
             )}
           </div>
+          {myRewards && (
+            <div className="text-xs space-y-1.5 mt-2">
+              <p className="font-semibold" style={{ color: 'var(--rpg-gold)' }}>Your Rewards:</p>
+              {myRewards.loot.length > 0 && (
+                <div className="space-y-0.5">
+                  {myRewards.loot.map((drop, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span style={{ color: RARITY_COLORS[(drop.rarity as Rarity) ?? 'common'] }}>
+                        {drop.itemName ?? drop.itemTemplateId.slice(0, 8)}
+                      </span>
+                      <span>x{drop.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {myRewards.xp && (
+                <p>
+                  +{myRewards.xp.xpAfterEfficiency} {myRewards.xp.skillType} XP
+                  {myRewards.xp.leveledUp && (
+                    <span style={{ color: 'var(--rpg-gold)' }}> (Level up! Lv.{myRewards.xp.newLevel})</span>
+                  )}
+                </p>
+              )}
+              {myRewards.recipeUnlocked && (
+                <p style={{ color: 'var(--rpg-green-light)' }}>
+                  Recipe learned: {myRewards.recipeUnlocked.recipeName} (soulbound)
+                </p>
+              )}
+            </div>
+          )}
           <div className="text-xs space-y-1">
             <p>Total rounds: {encounter.roundNumber}</p>
             {topContributors.length > 0 && (

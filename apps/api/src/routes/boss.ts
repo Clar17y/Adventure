@@ -79,8 +79,13 @@ bossRouter.get('/history', async (req, res, next) => {
     const playerId = req.player!.playerId;
     const { page, pageSize } = historyQuerySchema.parse(req.query);
     const result = await getBossHistory(playerId, page, pageSize);
+    const entries = result.entries.map((entry) => {
+      const myRewards = entry.encounter.rewardsByPlayer?.[playerId] ?? null;
+      const { rewardsByPlayer: _full, ...encounterWithoutRewardsMap } = entry.encounter;
+      return { ...entry, encounter: encounterWithoutRewardsMap, myRewards };
+    });
     res.json({
-      entries: result.entries,
+      entries,
       pagination: {
         page,
         pageSize,
@@ -122,9 +127,13 @@ bossRouter.get('/:id', async (req, res, next) => {
     ]);
     const usernameMap = new Map(players.map((p) => [p.id, p.username]));
 
+    const playerId = req.player!.playerId;
+    const myRewards = data.encounter.rewardsByPlayer?.[playerId] ?? null;
+    const { rewardsByPlayer: _full, ...encounterWithoutRewardsMap } = data.encounter;
+
     res.json({
       encounter: {
-        ...data.encounter,
+        ...encounterWithoutRewardsMap,
         mobName: mob?.name ?? 'Unknown',
         mobLevel: mob?.level ?? 1,
         killedByUsername,
@@ -133,6 +142,7 @@ bossRouter.get('/:id', async (req, res, next) => {
         ...p,
         username: usernameMap.get(p.playerId) ?? null,
       })),
+      myRewards,
     });
   } catch (err) {
     next(err);

@@ -1,42 +1,161 @@
-import type { LootDrop } from '@adventure/shared';
-import { rollAndGrantLoot } from './lootService';
+import { prisma } from '@adventure/database';
+import { WORLD_EVENT_CONSTANTS, type BossPlayerReward, type SkillType } from '@adventure/shared';
+import { rollAndGrantLoot, enrichLootWithNames } from './lootService';
+import { addStackableItem } from './inventoryService';
+import { grantSkillXp } from './xpService';
 
-interface BossContributor {
+export interface BossContributor {
   playerId: string;
   totalDamage: number;
   totalHealing: number;
+  attackSkill?: string;
 }
 
-/**
- * Distribute boss loot to contributors, weighted by contribution.
- * Each participant gets a loot roll; higher contributors get a bonus multiplier.
- */
+function randomIntInclusive(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+async function rollBossRecipeDrop(
+  playerId: string,
+  mobFamilyId: string,
+): Promise<BossPlayerReward['recipeUnlocked'] | undefined> {
+  const prismaAny = prisma as unknown as any;
+
+  const advancedRecipes = (await prismaAny.craftingRecipe.findMany({
+    where: { isAdvanced: true, mobFamilyId },
+    select: {
+      id: true,
+      resultTemplateId: true,
+      soulbound: true,
+      resultTemplate: { select: { name: true } },
+    },
+    orderBy: [{ requiredLevel: 'asc' }, { id: 'asc' }],
+  })) as Array<{
+    id: string;
+    resultTemplateId: string;
+    soulbound: boolean;
+    resultTemplate: { name: string };
+  }>;
+
+  if (advancedRecipes.length === 0) return undefined;
+
+  const known = (await prismaAny.playerRecipe.findMany({
+    where: {
+      playerId,
+      recipeId: { in: advancedRecipes.map((r) => r.id) },
+    },
+    select: { recipeId: true },
+  })) as Array<{ recipeId: string }>;
+
+  const knownIds = new Set(known.map((k) => k.recipeId));
+  const unknown = advancedRecipes.filter((r) => !knownIds.has(r.id));
+  if (unknown.length === 0) return undefined;
+
+  const picked = unknown[randomIntInclusive(0, unknown.length - 1)]!;
+  await prismaAny.playerRecipe.create({
+    data: { playerId, recipeId: picked.id },
+  });
+
+  return {
+    recipeId: picked.id,
+    recipeName: picked.resultTemplate.name,
+    soulbound: Boolean(picked.soulbound),
+  };
+}
+
 export async function distributeBossLoot(
   mobTemplateId: string,
   mobLevel: number,
   contributors: BossContributor[],
-): Promise<Map<string, LootDrop[]>> {
-  const result = new Map<string, LootDrop[]>();
+  zoneTier: number,
+): Promise<Record<string, BossPlayerReward>> {
+  const result: Record<string, BossPlayerReward> = {};
   if (contributors.length === 0) return result;
+
+  const tierIndex = Math.max(0, Math.min(4, zoneTier - 1));
+  const baseXp = WORLD_EVENT_CONSTANTS.BOSS_BASE_XP_REWARD_BY_TIER[tierIndex]!;
+  const rarityBonus = WORLD_EVENT_CONSTANTS.BOSS_RARITY_BONUS;
 
   const totalContribution = contributors.reduce(
     (sum, c) => sum + c.totalDamage + c.totalHealing,
     0,
   );
 
+  // Look up mob name + family for recipe drops and trophy grants
+  const mob = await prisma.mobTemplate.findUnique({
+    where: { id: mobTemplateId },
+    select: { name: true, familyMembers: { select: { mobFamily: { select: { id: true } } } } },
+  });
+  const mobFamilyId = mob?.familyMembers?.[0]?.mobFamily?.id ?? null;
+  const mobName = mob?.name ?? '';
+
+  // Resolve trophy item template IDs from boss name
+  const trophyDefs = WORLD_EVENT_CONSTANTS.BOSS_TROPHY_DROPS[mobName] ?? [];
+  const trophyTemplateMap = new Map<string, string>();
+  if (trophyDefs.length > 0) {
+    const trophyNames = trophyDefs.map((t) => t.itemName);
+    const trophyTemplates = await prisma.itemTemplate.findMany({
+      where: { name: { in: trophyNames } },
+      select: { id: true, name: true },
+    });
+    for (const t of trophyTemplates) {
+      trophyTemplateMap.set(t.name, t.id);
+    }
+  }
+
   for (const contributor of contributors) {
     const contribution = contributor.totalDamage + contributor.totalHealing;
-    // Minimum 0.5x multiplier, scales up to 2x for top contributor
     const ratio = totalContribution > 0 ? contribution / totalContribution : 1 / contributors.length;
     const dropMultiplier = Math.max(0.5, Math.min(2, ratio * contributors.length));
 
+    // 1. Item loot with rarity bonus
     const loot = await rollAndGrantLoot(
       contributor.playerId,
       mobTemplateId,
-      mobLevel,
+      mobLevel + rarityBonus,
       dropMultiplier,
     );
-    result.set(contributor.playerId, loot);
+    const enrichedLoot = await enrichLootWithNames(loot);
+    const lootReward: BossPlayerReward['loot'] = enrichedLoot.map((drop) => ({
+      itemTemplateId: drop.itemTemplateId,
+      quantity: drop.quantity,
+      rarity: drop.rarity,
+      itemName: drop.itemName ?? undefined,
+    }));
+
+    // 1b. Guaranteed trophy material drops
+    for (const tDef of trophyDefs) {
+      const templateId = trophyTemplateMap.get(tDef.itemName);
+      if (!templateId) continue;
+      const qty = randomIntInclusive(tDef.minQty, tDef.maxQty);
+      await addStackableItem(contributor.playerId, templateId, qty);
+      lootReward.push({ itemTemplateId: templateId, quantity: qty, rarity: 'common', itemName: tDef.itemName });
+    }
+
+    // 2. XP scaled by contribution
+    const scaledXp = Math.round(baseXp * Math.max(0.5, ratio * contributors.length));
+    const skillType = (contributor.attackSkill ?? 'magic') as SkillType;
+    const xpResult = await grantSkillXp(contributor.playerId, skillType, scaledXp);
+
+    const xpReward: BossPlayerReward['xp'] = {
+      skillType,
+      rawXp: scaledXp,
+      xpAfterEfficiency: xpResult.xpResult.xpAfterEfficiency,
+      leveledUp: xpResult.xpResult.leveledUp,
+      newLevel: xpResult.newLevel,
+    };
+
+    // 3. Recipe drop (15% chance)
+    let recipeUnlocked: BossPlayerReward['recipeUnlocked'] | undefined;
+    if (mobFamilyId && Math.random() < WORLD_EVENT_CONSTANTS.BOSS_RECIPE_DROP_CHANCE) {
+      recipeUnlocked = await rollBossRecipeDrop(contributor.playerId, mobFamilyId);
+    }
+
+    result[contributor.playerId] = {
+      loot: lootReward,
+      xp: xpReward,
+      recipeUnlocked,
+    };
   }
 
   return result;

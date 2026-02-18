@@ -88,6 +88,20 @@ export const IDS = {
     petrifiedPlank: randomUUID(),
   },
 
+  // ── Item Templates: Boss Trophy Materials ─────────────────────────────────
+  trophy: {
+    alphaWolfFang: randomUUID(),
+    spiritEssence: randomUUID(),
+  },
+
+  // ── Item Templates: Boss Equipment ──────────────────────────────────────
+  bossGear: {
+    wolfsbaneBlade: randomUUID(),
+    alphaPeltChest: randomUUID(),
+    spiritStaff: randomUUID(),
+    etherealRobes: randomUUID(),
+  },
+
   // ── Item Templates: Mob Drop Materials ────────────────────────────────────
   drop: {
     ratPelt: randomUUID(),

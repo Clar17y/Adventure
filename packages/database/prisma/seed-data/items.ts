@@ -380,6 +380,22 @@ const advancedGear = [
   it({ id: IDS.adv.goblinKingsCrown, name: "Goblin King's Crown", itemType: 'armor', slot: 'head', tier: 4, weightClass: 'medium', requiredLevel: 20, baseStats: { luck: 5, attack: 4, health: 4 }, maxDurability: 120 }),
 ];
 
+// ── Boss Trophy Materials ────────────────────────────────────────────────────
+
+const bossTrophyMaterials = [
+  resource(IDS.trophy.alphaWolfFang, 'Alpha Wolf Fang', 2),
+  resource(IDS.trophy.spiritEssence, 'Spirit Essence', 4),
+];
+
+// ── Boss Equipment ──────────────────────────────────────────────────────────
+
+const bossEquipment = [
+  weapon(IDS.bossGear.wolfsbaneBlade, 'Wolfsbane Blade', 2, 'melee', 8, { attack: 8, critChance: 0.02 }),
+  it({ id: IDS.bossGear.alphaPeltChest, name: 'Alpha Pelt Chest', itemType: 'armor', slot: 'chest', tier: 2, weightClass: 'medium', requiredLevel: 8, baseStats: { armor: 6, health: 5, dodge: 2 }, maxDurability: 100 }),
+  weapon(IDS.bossGear.spiritStaff, 'Spirit Staff', 4, 'magic', 16, { magicPower: 10, critChance: 0.03 }),
+  it({ id: IDS.bossGear.etherealRobes, name: 'Ethereal Robes', itemType: 'armor', slot: 'chest', tier: 4, weightClass: 'light', requiredLevel: 16, baseStats: { magicDefence: 8, health: 6, dodge: 3 }, maxDurability: 120 }),
+];
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 export function getAllItemTemplates() {
@@ -392,5 +408,7 @@ export function getAllItemTemplates() {
     ...weapons,
     ...generateArmor(),
     ...advancedGear,
+    ...bossTrophyMaterials,
+    ...bossEquipment,
   ];
 }

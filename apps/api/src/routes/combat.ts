@@ -22,7 +22,7 @@ import {
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
-import { rollAndGrantLoot } from '../services/lootService';
+import { rollAndGrantLoot, enrichLootWithNames, type LootDropWithName } from '../services/lootService';
 import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
@@ -48,7 +48,6 @@ combatRouter.use(authenticate);
 const prismaAny = prisma as unknown as any;
 
 const attackSkillSchema = z.enum(['melee', 'ranged', 'magic']);
-type LootDropWithName = LootDrop & { itemName: string | null };
 type EncounterSiteSize = 'small' | 'medium' | 'large';
 
 const lootDropWithNameSchema = z.object({
@@ -828,41 +827,6 @@ const listLogsQuerySchema = z.object({
 
 interface CombatHistoryCountRow {
   total: bigint;
-}
-
-async function enrichLootWithNames(
-  loot: Array<{
-    itemTemplateId: string;
-    quantity: number;
-    rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-    itemName?: string | null;
-  }>
-): Promise<LootDropWithName[]> {
-  if (loot.length === 0) return [];
-
-  const templateIdsMissingName = Array.from(
-    new Set(
-      loot
-        .filter((drop) => !drop.itemName)
-        .map((drop) => drop.itemTemplateId)
-    )
-  );
-
-  let templateNameById = new Map<string, string>();
-  if (templateIdsMissingName.length > 0) {
-    const templates = await prisma.itemTemplate.findMany({
-      where: { id: { in: templateIdsMissingName } },
-      select: { id: true, name: true },
-    });
-    templateNameById = new Map(templates.map((template) => [template.id, template.name]));
-  }
-
-  return loot.map((drop) => ({
-    itemTemplateId: drop.itemTemplateId,
-    quantity: drop.quantity,
-    rarity: drop.rarity,
-    itemName: drop.itemName ?? templateNameById.get(drop.itemTemplateId) ?? null,
-  }));
 }
 
 interface CombatHistoryListRow {

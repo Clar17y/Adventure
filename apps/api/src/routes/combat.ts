@@ -9,6 +9,7 @@ import {
   calculateFleeResult,
   rollMobPrefix,
   mobToCombatantStats,
+  filterAndWeightMobsByTier,
 } from '@adventure/game-engine';
 import {
   COMBAT_CONSTANTS,
@@ -38,6 +39,7 @@ import {
 } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
+import { getExplorationPercent } from '../services/zoneExplorationService';
 
 export const combatRouter = Router();
 
@@ -477,6 +479,8 @@ combatRouter.post('/start', async (req, res, next) => {
       throw new AppError(404, 'Zone not found', 'NOT_FOUND');
     }
 
+    const explorationProgress = await getExplorationPercent(playerId, zoneId);
+
     let mob = null as null | (MobTemplate & { spellPattern: unknown });
 
     if (mobTemplateId) {
@@ -487,7 +491,16 @@ combatRouter.post('/start', async (req, res, next) => {
       mob = found as unknown as MobTemplate & { spellPattern: unknown };
     } else {
       const mobs = await prisma.mobTemplate.findMany({ where: { zoneId } });
-      const picked = pickWeighted(mobs);
+      const zoneTiers = (zone as unknown as { explorationTiers: Record<string, number> | null }).explorationTiers;
+      const tieredMobs = filterAndWeightMobsByTier(
+        mobs.map(m => ({
+          ...m,
+          explorationTier: (m as unknown as { explorationTier: number | null }).explorationTier ?? 1,
+        })),
+        explorationProgress.percent,
+        zoneTiers,
+      );
+      const picked = pickWeighted(tieredMobs);
       if (!picked) {
         throw new AppError(400, 'No mobs available for this zone', 'NO_MOBS');
       }
@@ -786,6 +799,11 @@ combatRouter.post('/start', async (req, res, next) => {
               characterLeveledUp: xpGrant.characterLeveledUp,
             }
           : null,
+      },
+      explorationProgress: {
+        turnsExplored: explorationProgress.turnsExplored,
+        percent: explorationProgress.percent,
+        turnsToExplore: explorationProgress.turnsToExplore,
       },
       activeEvents: activeEventEffects.length > 0 ? activeEventEffects : undefined,
     });

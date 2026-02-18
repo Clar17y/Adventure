@@ -9,6 +9,7 @@ import {
   simulateTravelAmbushes,
   calculateFleeResult,
   mobToCombatantStats,
+  filterAndWeightMobsByTier,
 } from '@adventure/game-engine';
 import type { Combatant, MobTemplate, SkillType } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
@@ -27,6 +28,7 @@ import {
   respawnToHomeTown,
 } from '../services/zoneDiscoveryService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
+import { calculateExplorationPercent, getExplorationPercent } from '../services/zoneExplorationService';
 
 const db = prisma as unknown as any;
 
@@ -46,14 +48,23 @@ zonesRouter.get('/', async (req, res, next) => {
     await ensureStarterDiscoveries(playerId);
 
     // Fetch all data in parallel
-    const [zones, connections, discoveredZoneIds, player] = await Promise.all([
+    const [zones, connections, discoveredZoneIds, player, explorations] = await Promise.all([
       db.zone.findMany({
         orderBy: [{ isStarter: 'desc' }, { difficulty: 'asc' }, { name: 'asc' }],
       }),
-      db.zoneConnection.findMany({ select: { fromId: true, toId: true } }),
+      db.zoneConnection.findMany({ select: { fromId: true, toId: true, explorationThreshold: true } }),
       getDiscoveredZoneIds(playerId),
       prisma.player.findUnique({ where: { id: playerId }, select: { currentZoneId: true } }),
+      db.playerZoneExploration.findMany({
+        where: { playerId },
+        select: { zoneId: true, turnsExplored: true },
+      }),
     ]);
+    const explorationByZoneId = new Map<string, number>(
+      (explorations as Array<{ zoneId: string; turnsExplored: number }>).map(
+        (e: { zoneId: string; turnsExplored: number }) => [e.zoneId, e.turnsExplored],
+      ),
+    );
 
     if (zones.length === 0) {
       throw new AppError(500, 'No zones configured. Run database seed.', 'NO_ZONES_CONFIGURED');
@@ -74,12 +85,12 @@ zonesRouter.get('/', async (req, res, next) => {
 
     // Only include connections where both endpoints are discovered
     const filteredConnections = connections.filter(
-      (c: { fromId: string; toId: string }) =>
+      (c: { fromId: string; toId: string; explorationThreshold: number | null }) =>
         discoveredZoneIds.has(c.fromId) && discoveredZoneIds.has(c.toId),
     );
 
     res.json({
-      zones: zones.map((z: { id: string; name: string; description: string | null; difficulty: number; travelCost: number; isStarter: boolean; zoneType: string; zoneExitChance: number | null; maxCraftingLevel: number | null }) => {
+      zones: zones.map((z: { id: string; name: string; description: string | null; difficulty: number; travelCost: number; isStarter: boolean; zoneType: string; zoneExitChance: number | null; maxCraftingLevel: number | null; turnsToExplore: number | null; explorationTiers: Record<string, number> | null }) => {
         const discovered = discoveredZoneIds.has(z.id);
         return {
           id: z.id,
@@ -92,11 +103,18 @@ zonesRouter.get('/', async (req, res, next) => {
           zoneType: z.zoneType,
           zoneExitChance: discovered ? z.zoneExitChance : null,
           maxCraftingLevel: discovered ? z.maxCraftingLevel : null,
+          exploration: z.zoneType === 'town' ? null : {
+            turnsExplored: explorationByZoneId.get(z.id) ?? 0,
+            turnsToExplore: z.turnsToExplore ?? null,
+            percent: calculateExplorationPercent(explorationByZoneId.get(z.id) ?? 0, z.turnsToExplore ?? null),
+            tiers: z.explorationTiers ?? null,
+          },
         };
       }),
-      connections: filteredConnections.map((c: { fromId: string; toId: string }) => ({
+      connections: filteredConnections.map((c: { fromId: string; toId: string; explorationThreshold: number | null }) => ({
         fromId: c.fromId,
         toId: c.toId,
+        explorationThreshold: c.explorationThreshold ?? 0,
       })),
       currentZoneId,
     });
@@ -248,16 +266,32 @@ zonesRouter.post('/travel', async (req, res, next) => {
           getEquipmentStats(playerId),
         ]);
 
-        // Get mob pool from current zone
+        // Get mob pool from current zone, filtered by exploration tier
         const mobTemplates = await prisma.mobTemplate.findMany({ where: { zoneId: currentZoneId } });
+        const explorationProgress = await getExplorationPercent(playerId, currentZoneId);
+        const zoneTiers = (currentZone as unknown as { explorationTiers: Record<string, number> | null }).explorationTiers;
+        const tieredMobs = filterAndWeightMobsByTier(
+          mobTemplates.map(m => ({
+            ...m,
+            explorationTier: (m as unknown as { explorationTier: number | null }).explorationTier ?? 1,
+          })),
+          explorationProgress.percent,
+          zoneTiers,
+        );
 
         let currentHp = hpState.currentHp;
 
         for (const ambush of ambushes) {
-          if (mobTemplates.length === 0) break;
+          if (tieredMobs.length === 0) break;
 
-          // Pick random mob
-          const rawMob = mobTemplates[Math.floor(Math.random() * mobTemplates.length)]!;
+          // Pick weighted mob from tier-filtered pool
+          const totalWeight = tieredMobs.reduce((sum, m) => sum + m.encounterWeight, 0);
+          let roll = Math.random() * totalWeight;
+          let rawMob = tieredMobs[0]!;
+          for (const m of tieredMobs) {
+            roll -= m.encounterWeight;
+            if (roll <= 0) { rawMob = m; break; }
+          }
           const baseMob: MobTemplate = {
             ...(rawMob as unknown as MobTemplate),
             spellPattern: Array.isArray(rawMob.spellPattern) ? (rawMob.spellPattern as unknown as MobTemplate['spellPattern']) : [],

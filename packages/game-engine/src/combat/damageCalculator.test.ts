@@ -183,10 +183,10 @@ describe('mobToCombatantStats', () => {
 
 describe('doesAttackHit', () => {
   it('uses only roll + accuracy against dodge/evasion threshold', () => {
-    // roll + accuracy = 10 + 4
-    // threshold = 10 + 4 + floor(6 / 2) = 17
+    // roll + accuracy = 10 + 4 = 14
+    // threshold = 10 + dodge(4) + evasion(6) = 20
     expect(doesAttackHit(10, 4, 4, 6)).toBe(false);
-    expect(doesAttackHit(13, 4, 4, 6)).toBe(true);
+    expect(doesAttackHit(16, 4, 4, 6)).toBe(true);
   });
 
   it('still applies nat 1 auto-miss and nat 20 auto-hit', () => {

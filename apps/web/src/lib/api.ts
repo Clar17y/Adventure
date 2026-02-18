@@ -327,6 +327,8 @@ export async function getBestiary() {
         maxQuantity: number;
       }>;
       prefixesEncountered: string[];
+      explorationTier: number;
+      tierLocked: boolean;
     }>;
     prefixSummary: Array<{
       prefix: string;
@@ -424,8 +426,14 @@ export async function getZones() {
       zoneType: string;
       zoneExitChance: number | null;
       maxCraftingLevel: number | null;
+      exploration: {
+        turnsExplored: number;
+        turnsToExplore: number | null;
+        percent: number;
+        tiers: Record<string, number> | null;
+      } | null;
     }>;
-    connections: Array<{ fromId: string; toId: string }>;
+    connections: Array<{ fromId: string; toId: string; explorationThreshold: number }>;
     currentZoneId: string;
   }>('/api/v1/zones');
 }
@@ -499,6 +507,11 @@ export async function startExploration(zoneId: string, turns: number) {
     }>;
     hiddenCaches: Array<{ turnOccurred: number }>;
     zoneExitDiscovered: boolean;
+    explorationProgress: {
+      turnsExplored: number;
+      percent: number;
+      turnsToExplore: number | null;
+    };
   }>('/api/v1/exploration/start', {
     method: 'POST',
     body: JSON.stringify({ zoneId, turns }),
@@ -655,6 +668,11 @@ export interface CombatResponse {
     skillXp: SkillXpGrantResponse | null;
   };
   activeEvents?: Array<{ title: string; effectType: string; effectValue: number }>;
+  explorationProgress?: {
+    turnsExplored: number;
+    percent: number;
+    turnsToExplore: number | null;
+  };
 }
 
 export interface CombatHistoryListItemResponse {

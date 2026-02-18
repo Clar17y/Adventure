@@ -450,3 +450,12 @@ export const WORLD_EVENT_CONSTANTS = {
   PERSISTED_MOB_REENCOUNTER_CHANCE: 0.3,
   PERSISTED_MOB_MAX_AGE_MINUTES: 120,
 } as const;
+
+// =============================================================================
+// ZONE EXPLORATION PROGRESSION
+// =============================================================================
+
+export const ZONE_EXPLORATION_CONSTANTS = {
+  DEFAULT_TIERS: { '1': 0, '2': 25, '3': 50, '4': 75 } as Record<string, number>,
+  NEWEST_TIER_WEIGHT_MULTIPLIER: 2,
+} as const;

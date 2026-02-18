@@ -71,18 +71,20 @@ async function cleanTemplateData() {
 async function seedZones() {
   console.log('  Seeding zones...');
 
+  const explorationTiers = { '1': 0, '2': 25, '3': 50, '4': 75 };
+
   const zones: Prisma.ZoneCreateManyInput[] = [
     { id: IDS.zones.millbrook, name: 'Millbrook', description: 'A peaceful town nestled at the forest edge. Crafters and merchants ply their trade here.', difficulty: 0, travelCost: 0, isStarter: true, zoneType: 'town', zoneExitChance: null, maxCraftingLevel: 20 },
-    { id: IDS.zones.forestEdge, name: 'Forest Edge', description: 'A bright woodland border with gentle paths. Creatures stir among the undergrowth.', difficulty: 1, travelCost: 50, isStarter: false, zoneType: 'wild', zoneExitChance: 0.0001 },
-    { id: IDS.zones.deepForest, name: 'Deep Forest', description: 'Dense and shadowed. Predators stalk between the ancient trees.', difficulty: 2, travelCost: 150, isStarter: false, zoneType: 'wild', zoneExitChance: 0.000033 },
-    { id: IDS.zones.caveEntrance, name: 'Cave Entrance', description: 'A yawning cavern mouth. Strange sounds echo from within.', difficulty: 2, travelCost: 150, isStarter: false, zoneType: 'wild', zoneExitChance: 0.000033 },
-    { id: IDS.zones.ancientGrove, name: 'Ancient Grove', description: 'A sacred woodland where spirits dwell among towering trees.', difficulty: 3, travelCost: 300, isStarter: false, zoneType: 'wild', zoneExitChance: null },
-    { id: IDS.zones.deepMines, name: 'Deep Mines', description: 'Abandoned mine shafts descending into darkness. Something lurks below.', difficulty: 3, travelCost: 300, isStarter: false, zoneType: 'wild', zoneExitChance: null },
-    { id: IDS.zones.whisperingPlains, name: 'Whispering Plains', description: 'Vast grasslands where the wind carries distant cries.', difficulty: 3, travelCost: 250, isStarter: false, zoneType: 'wild', zoneExitChance: 0.000013 },
+    { id: IDS.zones.forestEdge, name: 'Forest Edge', description: 'A bright woodland border with gentle paths. Creatures stir among the undergrowth.', difficulty: 1, travelCost: 50, isStarter: false, zoneType: 'wild', zoneExitChance: 0.0001, turnsToExplore: 30000, explorationTiers },
+    { id: IDS.zones.deepForest, name: 'Deep Forest', description: 'Dense and shadowed. Predators stalk between the ancient trees.', difficulty: 2, travelCost: 150, isStarter: false, zoneType: 'wild', zoneExitChance: 0.000033, turnsToExplore: 45000, explorationTiers },
+    { id: IDS.zones.caveEntrance, name: 'Cave Entrance', description: 'A yawning cavern mouth. Strange sounds echo from within.', difficulty: 2, travelCost: 150, isStarter: false, zoneType: 'wild', zoneExitChance: 0.000033, turnsToExplore: 45000, explorationTiers },
+    { id: IDS.zones.ancientGrove, name: 'Ancient Grove', description: 'A sacred woodland where spirits dwell among towering trees.', difficulty: 3, travelCost: 300, isStarter: false, zoneType: 'wild', zoneExitChance: null, turnsToExplore: 60000, explorationTiers },
+    { id: IDS.zones.deepMines, name: 'Deep Mines', description: 'Abandoned mine shafts descending into darkness. Something lurks below.', difficulty: 3, travelCost: 300, isStarter: false, zoneType: 'wild', zoneExitChance: null, turnsToExplore: 60000, explorationTiers },
+    { id: IDS.zones.whisperingPlains, name: 'Whispering Plains', description: 'Vast grasslands where the wind carries distant cries.', difficulty: 3, travelCost: 250, isStarter: false, zoneType: 'wild', zoneExitChance: 0.000013, turnsToExplore: 60000, explorationTiers },
     { id: IDS.zones.thornwall, name: 'Thornwall', description: 'A fortified frontier settlement. Advanced crafting facilities line the main road.', difficulty: 0, travelCost: 0, isStarter: false, zoneType: 'town', zoneExitChance: null, maxCraftingLevel: null },
-    { id: IDS.zones.hauntedMarsh, name: 'Haunted Marsh', description: 'Fetid swampland shrouded in mist. The dead do not rest here.', difficulty: 4, travelCost: 400, isStarter: false, zoneType: 'wild', zoneExitChance: 0.0000067 },
-    { id: IDS.zones.crystalCaverns, name: 'Crystal Caverns', description: 'Glittering underground chambers pulsing with arcane energy.', difficulty: 4, travelCost: 400, isStarter: false, zoneType: 'wild', zoneExitChance: null },
-    { id: IDS.zones.sunkenRuins, name: 'Sunken Ruins', description: 'Ancient ruins half-submerged in brackish water. Unspeakable things dwell in the depths.', difficulty: 5, travelCost: 600, isStarter: false, zoneType: 'wild', zoneExitChance: null },
+    { id: IDS.zones.hauntedMarsh, name: 'Haunted Marsh', description: 'Fetid swampland shrouded in mist. The dead do not rest here.', difficulty: 4, travelCost: 400, isStarter: false, zoneType: 'wild', zoneExitChance: 0.0000067, turnsToExplore: 80000, explorationTiers },
+    { id: IDS.zones.crystalCaverns, name: 'Crystal Caverns', description: 'Glittering underground chambers pulsing with arcane energy.', difficulty: 4, travelCost: 400, isStarter: false, zoneType: 'wild', zoneExitChance: null, turnsToExplore: 80000, explorationTiers },
+    { id: IDS.zones.sunkenRuins, name: 'Sunken Ruins', description: 'Ancient ruins half-submerged in brackish water. Unspeakable things dwell in the depths.', difficulty: 5, travelCost: 600, isStarter: false, zoneType: 'wild', zoneExitChance: null, turnsToExplore: 100000, explorationTiers },
   ];
 
   await prisma.zone.createMany({ data: zones });
@@ -97,22 +99,24 @@ async function seedZoneConnections() {
   console.log('  Seeding zone connections...');
   const p = prisma as any;
 
-  const pairs: [string, string][] = [
-    [IDS.zones.millbrook, IDS.zones.forestEdge],
-    [IDS.zones.forestEdge, IDS.zones.deepForest],
-    [IDS.zones.forestEdge, IDS.zones.caveEntrance],
-    [IDS.zones.deepForest, IDS.zones.ancientGrove],
-    [IDS.zones.deepForest, IDS.zones.whisperingPlains],
-    [IDS.zones.caveEntrance, IDS.zones.deepMines],
-    [IDS.zones.whisperingPlains, IDS.zones.thornwall],
-    [IDS.zones.thornwall, IDS.zones.hauntedMarsh],
-    [IDS.zones.thornwall, IDS.zones.crystalCaverns],
-    [IDS.zones.hauntedMarsh, IDS.zones.sunkenRuins],
+  // [fromZone, toZone, explorationThreshold for forward direction]
+  // Reverse directions default to 0 (no threshold)
+  const pairs: [string, string, number][] = [
+    [IDS.zones.millbrook, IDS.zones.forestEdge, 0],
+    [IDS.zones.forestEdge, IDS.zones.deepForest, 40],
+    [IDS.zones.forestEdge, IDS.zones.caveEntrance, 60],
+    [IDS.zones.deepForest, IDS.zones.ancientGrove, 50],
+    [IDS.zones.deepForest, IDS.zones.whisperingPlains, 70],
+    [IDS.zones.caveEntrance, IDS.zones.deepMines, 60],
+    [IDS.zones.whisperingPlains, IDS.zones.thornwall, 50],
+    [IDS.zones.thornwall, IDS.zones.hauntedMarsh, 40],
+    [IDS.zones.thornwall, IDS.zones.crystalCaverns, 60],
+    [IDS.zones.hauntedMarsh, IDS.zones.sunkenRuins, 70],
   ];
 
-  const rows = pairs.flatMap(([a, b]) => [
-    { id: randomUUID(), fromId: a, toId: b },
-    { id: randomUUID(), fromId: b, toId: a },
+  const rows = pairs.flatMap(([a, b, threshold]) => [
+    { id: randomUUID(), fromId: a, toId: b, explorationThreshold: threshold },
+    { id: randomUUID(), fromId: b, toId: a, explorationThreshold: 0 },
   ]);
 
   await p.zoneConnection.createMany({ data: rows });

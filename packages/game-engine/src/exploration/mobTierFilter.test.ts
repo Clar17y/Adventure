@@ -59,4 +59,56 @@ describe('filterAndWeightMobsByTier', () => {
     const result = filterAndWeightMobsByTier(mobs, 15, customTiers);
     expect(result.map(m => m.id)).toEqual(['a', 'b']);
   });
+
+  // --- negative / edge cases ---
+
+  it('returns empty array for empty mobs input', () => {
+    const result = filterAndWeightMobsByTier([], 50, defaultTiers);
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty array for negative exploration percent', () => {
+    const mobs = [makeMob('a', 1)];
+    const result = filterAndWeightMobsByTier(mobs, -10, defaultTiers);
+    expect(result).toEqual([]);
+  });
+
+  it('treats exploration percent above 100 the same as 100', () => {
+    const mobs = [makeMob('a', 1), makeMob('b', 4)];
+    const result = filterAndWeightMobsByTier(mobs, 999, defaultTiers);
+    expect(result).toHaveLength(2);
+  });
+
+  it('excludes mobs whose tier is not in the tiers map', () => {
+    const mobs = [makeMob('a', 1), makeMob('b', 5)];
+    const result = filterAndWeightMobsByTier(mobs, 100, defaultTiers);
+    expect(result.map(m => m.id)).toEqual(['a']);
+  });
+
+  it('returns empty array when tiers map is empty', () => {
+    const mobs = [makeMob('a', 1), makeMob('b', 2)];
+    const result = filterAndWeightMobsByTier(mobs, 50, {});
+    expect(result).toEqual([]);
+  });
+
+  it('preserves zero encounter weight without boosting', () => {
+    const mobs = [makeMob('a', 1, 0), makeMob('b', 2, 0)];
+    const result = filterAndWeightMobsByTier(mobs, 30, defaultTiers);
+    expect(result.find(m => m.id === 'a')!.encounterWeight).toBe(0);
+    expect(result.find(m => m.id === 'b')!.encounterWeight).toBe(0);
+  });
+
+  it('does not boost when all filtered mobs share the same tier', () => {
+    const mobs = [makeMob('a', 2, 100), makeMob('b', 2, 100)];
+    const tiers = { '2': 0 };
+    const result = filterAndWeightMobsByTier(mobs, 50, tiers);
+    expect(result.every(m => m.encounterWeight === 100)).toBe(true);
+  });
+
+  it('preserves extra properties on mob objects', () => {
+    const mob = { id: 'a', explorationTier: 1, encounterWeight: 100, name: 'Rat', level: 3 };
+    const result = filterAndWeightMobsByTier([mob], 10, defaultTiers);
+    expect(result[0]!.name).toBe('Rat');
+    expect(result[0]!.level).toBe(3);
+  });
 });

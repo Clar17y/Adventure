@@ -87,3 +87,45 @@ describe('addExplorationTurns', () => {
     expect(mockPrisma.playerZoneExploration.upsert).not.toHaveBeenCalled();
   });
 });
+
+// --- negative / edge cases ---
+
+describe('getExplorationPercent edge cases', () => {
+  it('returns 100% when zone is not found', async () => {
+    mockPrisma.playerZoneExploration.findUnique.mockResolvedValue(null);
+    mockPrisma.zone.findUnique.mockResolvedValue(null);
+
+    const result = await getExplorationPercent('player1', 'missing-zone');
+    expect(result).toEqual({ turnsExplored: 0, percent: 100, turnsToExplore: null });
+  });
+
+  it('returns 100% when turnsToExplore is negative', () => {
+    expect(calculateExplorationPercent(100, -5)).toBe(100);
+  });
+
+  it('returns 0% when turnsExplored is 0 and zone exists', () => {
+    expect(calculateExplorationPercent(0, 30000)).toBe(0);
+  });
+
+  it('handles fractional percentages correctly', () => {
+    // 1 / 30000 * 100 = 0.00333...
+    const result = calculateExplorationPercent(1, 30000);
+    expect(result).toBeGreaterThan(0);
+    expect(result).toBeLessThan(1);
+  });
+});
+
+describe('addExplorationTurns edge cases', () => {
+  it('handles very large turn values', async () => {
+    mockPrisma.playerZoneExploration.upsert.mockResolvedValue({ turnsExplored: 1_000_000 });
+
+    await addExplorationTurns('player1', 'zone1', 1_000_000);
+
+    expect(mockPrisma.playerZoneExploration.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ turnsExplored: 1_000_000 }),
+        update: { turnsExplored: { increment: 1_000_000 } },
+      }),
+    );
+  });
+});

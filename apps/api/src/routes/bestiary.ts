@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '@adventure/database';
 import { getAllMobPrefixes } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
+import { calculateExplorationPercent } from '../services/zoneExplorationService';
 
 export const bestiaryRouter = Router();
 
@@ -24,10 +25,10 @@ bestiaryRouter.get('/', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
 
-    const [mobTemplates, progress, prefixProgress] = await Promise.all([
+    const [mobTemplates, progress, prefixProgress, explorations] = await Promise.all([
       prisma.mobTemplate.findMany({
         include: {
-          zone: { select: { id: true, name: true, difficulty: true } },
+          zone: { select: { id: true, name: true, difficulty: true, turnsToExplore: true, explorationTiers: true } },
           dropTables: {
             include: {
               itemTemplate: { select: { id: true, name: true, itemType: true, tier: true } },
@@ -44,7 +45,16 @@ bestiaryRouter.get('/', async (req, res, next) => {
         where: { playerId },
         select: { mobTemplateId: true, prefix: true, kills: true },
       }),
+      prismaAny.playerZoneExploration.findMany({
+        where: { playerId },
+        select: { zoneId: true, turnsExplored: true },
+      }),
     ]);
+    const explorationByZoneId = new Map<string, number>(
+      (explorations as Array<{ zoneId: string; turnsExplored: number }>).map(
+        (e: { zoneId: string; turnsExplored: number }) => [e.zoneId, e.turnsExplored],
+      ),
+    );
 
     const killsByMobId = new Map<string, number>();
     for (const p of progress) killsByMobId.set(p.mobTemplateId, p.kills);
@@ -65,27 +75,42 @@ bestiaryRouter.get('/', async (req, res, next) => {
         const mobAccuracy = typeof mobStats.accuracy === 'number'
           ? mobStats.accuracy
           : Math.floor(mobStats.attack ?? 0);
+
+        // Exploration tier-lock calculation
+        const zoneExpl = mob.zone as unknown as { turnsToExplore: number | null; explorationTiers: Record<string, number> | null };
+        const turnsToExplore = zoneExpl.turnsToExplore ?? null;
+        const turnsExplored = explorationByZoneId.get(mob.zoneId) ?? 0;
+        const zonePercent = calculateExplorationPercent(turnsExplored, turnsToExplore);
+        const zoneTiers = zoneExpl.explorationTiers;
+        const mobTier = (mob as unknown as { explorationTier: number | null }).explorationTier ?? 1;
+        const tierThreshold = zoneTiers ? (zoneTiers[String(mobTier)] ?? 0) : 0;
+        const tierLocked = zonePercent < tierThreshold;
+
+        const isHidden = tierLocked && kills === 0;
+
         return {
           id: mob.id,
-          name: mob.name,
+          name: isHidden ? '???' : mob.name,
           level: Math.max(1, mob.zone.difficulty * 5),
           isDiscovered: kills > 0,
           killCount: kills,
-          stats: {
+          explorationTier: mobTier,
+          tierLocked,
+          stats: isHidden ? null : {
             hp: mob.hp,
             accuracy: mobAccuracy,
             defence: mob.defence,
           },
           zones: [mob.zone.name],
-          description: `A creature found in ${mob.zone.name}.`,
-          drops: mob.dropTables.map((dt: typeof mob.dropTables[number]) => ({
+          description: isHidden ? null : `A creature found in ${mob.zone.name}.`,
+          drops: isHidden ? [] : mob.dropTables.map((dt: typeof mob.dropTables[number]) => ({
             item: dt.itemTemplate,
             rarity: rarityFromTier(dt.itemTemplate.tier),
             dropRate: Math.round(Number(dt.dropChance) * 10000) / 100,
             minQuantity: dt.minQuantity,
             maxQuantity: dt.maxQuantity,
           })),
-          prefixesEncountered: prefixKeysByMobId.get(mob.id) ?? [],
+          prefixesEncountered: isHidden ? [] : (prefixKeysByMobId.get(mob.id) ?? []),
         };
       }),
       prefixSummary: allPrefixes.map(p => ({

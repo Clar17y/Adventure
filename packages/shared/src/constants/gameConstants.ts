@@ -454,7 +454,8 @@ export const WORLD_EVENT_CONSTANTS = {
   BOSS_BASE_XP_REWARD_BY_TIER: [100, 250, 500, 1000, 2000] as readonly number[],
   BOSS_RECIPE_DROP_CHANCE: 0.15,
   BOSS_RARITY_BONUS: 5,
-  // Trophy item names keyed by boss mob template name → guaranteed drops per boss kill
+  // Trophy drops keyed by boss mob template name. WARNING: keys must match mob
+  // template names in seed-data/mobs.ts exactly — a mismatch silently disables drops.
   BOSS_TROPHY_DROPS: {
     'Alpha Wolf': [{ itemName: 'Alpha Wolf Fang', minQty: 2, maxQty: 4 }],
     'Ancient Spirit': [{ itemName: 'Spirit Essence', minQty: 2, maxQty: 4 }],

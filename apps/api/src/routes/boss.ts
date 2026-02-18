@@ -47,8 +47,9 @@ bossRouter.get('/active', async (_req, res, next) => {
           }),
           resolveKilledByUsername(enc.killedBy),
         ]);
+        const { rewardsByPlayer: _rewards, ...encWithoutRewards } = enc;
         return {
-          ...enc,
+          ...encWithoutRewards,
           mobName: mob?.name ?? 'Unknown',
           mobLevel: mob?.level ?? 1,
           zoneId: event?.zoneId ?? '',

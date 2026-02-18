@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getBossHistory, type BossHistoryEntry } from '@/lib/api';
 import { Pagination } from '@/components/common/Pagination';
-import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
+import { BossRewardsDisplay } from '@/components/common/BossRewardsDisplay';
 
 const PAGE_SIZE = 10;
 
@@ -97,34 +97,7 @@ export function BossHistory() {
                   <p>Total boss rounds: {entry.encounter.roundNumber}</p>
 
                   {entry.myRewards && (
-                    <div className="space-y-1.5">
-                      <p className="font-semibold" style={{ color: 'var(--rpg-gold)' }}>Your Rewards:</p>
-                      {entry.myRewards.loot.length > 0 && (
-                        <div className="space-y-0.5">
-                          {entry.myRewards.loot.map((drop, i) => (
-                            <div key={i} className="flex justify-between">
-                              <span style={{ color: RARITY_COLORS[(drop.rarity as Rarity) ?? 'common'] }}>
-                                {drop.itemName ?? drop.itemTemplateId.slice(0, 8)}
-                              </span>
-                              <span>x{drop.quantity}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {entry.myRewards.xp && (
-                        <p>
-                          +{entry.myRewards.xp.xpAfterEfficiency} {entry.myRewards.xp.skillType} XP
-                          {entry.myRewards.xp.leveledUp && (
-                            <span style={{ color: 'var(--rpg-gold)' }}> (Level up! Lv.{entry.myRewards.xp.newLevel})</span>
-                          )}
-                        </p>
-                      )}
-                      {entry.myRewards.recipeUnlocked && (
-                        <p style={{ color: 'var(--rpg-green-light)' }}>
-                          Recipe learned: {entry.myRewards.recipeUnlocked.recipeName} (soulbound)
-                        </p>
-                      )}
-                    </div>
+                    <BossRewardsDisplay rewards={entry.myRewards} />
                   )}
 
                   {entry.encounter.roundSummaries && entry.encounter.roundSummaries.length > 0 && (

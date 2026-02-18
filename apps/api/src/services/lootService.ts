@@ -1,15 +1,10 @@
 import { Prisma, prisma } from '@adventure/database';
 import { rollBonusStatsForRarity, rollDropRarity } from '@adventure/game-engine';
 import type { EquipmentSlot, ItemStats, ItemType, LootDrop } from '@adventure/shared';
+import { randomIntInclusive } from '../utils/random';
 import { addStackableItem } from './inventoryService';
 
 export type LootDropWithName = LootDrop & { itemName: string | null };
-
-function randomIntInclusive(min: number, max: number): number {
-  const lo = Math.ceil(min);
-  const hi = Math.floor(max);
-  return Math.floor(Math.random() * (hi - lo + 1)) + lo;
-}
 
 export async function rollAndGrantLoot(
   playerId: string,

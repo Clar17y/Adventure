@@ -540,7 +540,7 @@ export async function resolveBossRound(
     const rewardsByPlayer = await distributeBossLoot(encounter.mobTemplateId, encounter.mobTemplate.level ?? 1, contributors, zoneTier);
     await prisma.bossEncounter.update({
       where: { id: encounterId },
-      data: { rewardsByPlayer: rewardsByPlayer as any },
+      data: { rewardsByPlayer: JSON.parse(JSON.stringify(rewardsByPlayer)) },
     });
 
     // Announce boss kill in world chat and zone chat with killer name

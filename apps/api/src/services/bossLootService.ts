@@ -1,5 +1,6 @@
 import { prisma } from '@adventure/database';
 import { WORLD_EVENT_CONSTANTS, type BossPlayerReward, type SkillType } from '@adventure/shared';
+import { randomIntInclusive } from '../utils/random';
 import { rollAndGrantLoot, enrichLootWithNames } from './lootService';
 import { addStackableItem } from './inventoryService';
 import { grantSkillXp } from './xpService';
@@ -9,10 +10,6 @@ export interface BossContributor {
   totalDamage: number;
   totalHealing: number;
   attackSkill?: string;
-}
-
-function randomIntInclusive(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 async function rollBossRecipeDrop(
@@ -133,7 +130,7 @@ export async function distributeBossLoot(
     }
 
     // 2. XP scaled by contribution
-    const scaledXp = Math.round(baseXp * Math.max(0.5, ratio * contributors.length));
+    const scaledXp = Math.round(baseXp * Math.max(0.5, Math.min(2, ratio * contributors.length)));
     const skillType = (contributor.attackSkill ?? 'magic') as SkillType;
     const xpResult = await grantSkillXp(contributor.playerId, skillType, scaledXp);
 

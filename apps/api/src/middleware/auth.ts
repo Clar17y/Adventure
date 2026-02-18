@@ -87,6 +87,30 @@ export function authenticate(
   }
 }
 
+export function optionalAuthenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.slice(7);
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    req.player = payload;
+    touchPlayerLastActive(payload.playerId);
+  } catch {
+    // Invalid token — proceed unauthenticated
+  }
+
+  next();
+}
+
 export function generateAccessToken(payload: AuthPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: authConfig.accessTokenTtlMinutes * 60 });
 }

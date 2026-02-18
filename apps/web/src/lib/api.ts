@@ -1292,6 +1292,27 @@ export async function getZoneEvents(zoneId: string) {
 }
 
 // Boss Encounters
+export interface BossPlayerReward {
+  loot: Array<{
+    itemTemplateId: string;
+    quantity: number;
+    rarity?: string;
+    itemName?: string;
+  }>;
+  xp?: {
+    skillType: string;
+    rawXp: number;
+    xpAfterEfficiency: number;
+    leveledUp: boolean;
+    newLevel: number;
+  };
+  recipeUnlocked?: {
+    recipeId: string;
+    recipeName: string;
+    soulbound: boolean;
+  };
+}
+
 export interface BossRoundSummary {
   round: number;
   bossDamage: number;
@@ -1344,6 +1365,7 @@ export interface BossHistoryEntry {
   mobLevel: number;
   zoneName: string;
   killedByUsername: string | null;
+  myRewards?: BossPlayerReward | null;
   playerStats: {
     totalDamage: number;
     totalHealing: number;
@@ -1362,6 +1384,7 @@ export async function getBossEncounter(id: string) {
   return fetchApi<{
     encounter: BossEncounterResponse;
     participants: BossParticipantResponse[];
+    myRewards?: BossPlayerReward | null;
   }>(`/api/v1/boss/${id}`);
 }
 

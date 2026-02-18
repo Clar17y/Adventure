@@ -7,6 +7,7 @@ import {
   type EncounterSiteSize,
 } from '@adventure/game-engine';
 import type { LootDrop } from '@adventure/shared';
+import { randomIntInclusive } from '../utils/random';
 import { addStackableItemTx } from './inventoryService';
 
 export interface RecipeUnlockReward {
@@ -21,12 +22,6 @@ export interface EncounterSiteChestRewards {
   materialRolls: number;
   loot: LootDrop[];
   recipeUnlocked: RecipeUnlockReward | null;
-}
-
-function randomIntInclusive(min: number, max: number): number {
-  const lo = Math.ceil(min);
-  const hi = Math.floor(max);
-  return Math.floor(Math.random() * (hi - lo + 1)) + lo;
 }
 
 function decimalLikeToNumber(value: unknown): number {

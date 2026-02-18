@@ -449,6 +449,17 @@ export const WORLD_EVENT_CONSTANTS = {
   PERSISTED_MOB_REGEN_PERCENT_PER_MINUTE: 1,
   PERSISTED_MOB_REENCOUNTER_CHANCE: 0.3,
   PERSISTED_MOB_MAX_AGE_MINUTES: 120,
+
+  // Boss rewards
+  BOSS_BASE_XP_REWARD_BY_TIER: [100, 250, 500, 1000, 2000] as readonly number[],
+  BOSS_RECIPE_DROP_CHANCE: 0.15,
+  BOSS_RARITY_BONUS: 5,
+  // Trophy drops keyed by boss mob template name. WARNING: keys must match mob
+  // template names in seed-data/mobs.ts exactly — a mismatch silently disables drops.
+  BOSS_TROPHY_DROPS: {
+    'Alpha Wolf': [{ itemName: 'Alpha Wolf Fang', minQty: 2, maxQty: 4 }],
+    'Ancient Spirit': [{ itemName: 'Spirit Essence', minQty: 2, maxQty: 4 }],
+  } as Record<string, Array<{ itemName: string; minQty: number; maxQty: number }>>,
 } as const;
 
 // =============================================================================

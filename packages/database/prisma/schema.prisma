@@ -622,6 +622,7 @@ model BossEncounter {
   status         String    @default("waiting") @db.VarChar(16)
   killedBy       String?   @map("killed_by")
   roundSummaries Json?     @map("round_summaries")
+  rewardsByPlayer Json?    @map("rewards_by_player")
 
   event         WorldEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   mobTemplate   MobTemplate       @relation(fields: [mobTemplateId], references: [id])

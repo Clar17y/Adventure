@@ -7,6 +7,7 @@ import {
   type BossParticipantData,
   type BossParticipantRole,
   type BossParticipantStatus,
+  type BossPlayerReward,
   type BossRoundSummary,
 } from '@adventure/shared';
 import {
@@ -40,11 +41,15 @@ function toBossEncounterData(row: {
   status: string;
   killedBy: string | null;
   roundSummaries?: unknown;
+  rewardsByPlayer?: unknown;
 }): BossEncounterData {
   let parsedSummaries: BossRoundSummary[] | null = null;
   if (Array.isArray(row.roundSummaries)) {
     parsedSummaries = row.roundSummaries as BossRoundSummary[];
   }
+  const parsedRewards = (row.rewardsByPlayer && typeof row.rewardsByPlayer === 'object' && !Array.isArray(row.rewardsByPlayer))
+    ? row.rewardsByPlayer as Record<string, BossPlayerReward>
+    : null;
   return {
     id: row.id,
     eventId: row.eventId,
@@ -59,6 +64,7 @@ function toBossEncounterData(row: {
     status: row.status as BossEncounterStatus,
     killedBy: row.killedBy,
     roundSummaries: parsedSummaries,
+    rewardsByPlayer: parsedRewards,
   };
 }
 
@@ -508,7 +514,7 @@ export async function resolveBossRound(
     const allParticipants = await prisma.bossParticipant.findMany({
       where: { encounterId },
     });
-    const contributorMap = new Map<string, { totalDamage: number; totalHealing: number }>();
+    const contributorMap = new Map<string, { totalDamage: number; totalHealing: number; attackSkill?: string }>();
     for (const p of allParticipants) {
       const existing = contributorMap.get(p.playerId);
       if (existing) {
@@ -518,12 +524,24 @@ export async function resolveBossRound(
         contributorMap.set(p.playerId, { totalDamage: p.totalDamage, totalHealing: p.totalHealing });
       }
     }
+    // Resolve attack skill for each contributor from current round's participantData
+    for (const pd of participantData) {
+      const entry = contributorMap.get(pd.signup.playerId);
+      if (entry && pd.role === 'attacker' && !entry.attackSkill) {
+        entry.attackSkill = pd.attackSkill;
+      }
+    }
     const contributors = Array.from(contributorMap.entries()).map(([playerId, stats]) => ({
       playerId,
       totalDamage: stats.totalDamage,
       totalHealing: stats.totalHealing,
+      attackSkill: stats.attackSkill,
     }));
-    await distributeBossLoot(encounter.mobTemplateId, encounter.mobTemplate.level ?? 1, contributors);
+    const rewardsByPlayer = await distributeBossLoot(encounter.mobTemplateId, encounter.mobTemplate.level ?? 1, contributors, zoneTier);
+    await prisma.bossEncounter.update({
+      where: { id: encounterId },
+      data: { rewardsByPlayer: JSON.parse(JSON.stringify(rewardsByPlayer)) },
+    });
 
     // Announce boss kill in world chat and zone chat with killer name
     let killerName = 'unknown';

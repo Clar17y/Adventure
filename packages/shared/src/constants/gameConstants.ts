@@ -450,3 +450,13 @@ export const WORLD_EVENT_CONSTANTS = {
   PERSISTED_MOB_REENCOUNTER_CHANCE: 0.3,
   PERSISTED_MOB_MAX_AGE_MINUTES: 120,
 } as const;
+
+// =============================================================================
+// LEADERBOARD
+// =============================================================================
+
+export const LEADERBOARD_CONSTANTS = {
+  REFRESH_INTERVAL_MS: 900_000,
+  PAGE_SIZE: 25,
+  TOP_N: 25,
+} as const;

@@ -9,6 +9,7 @@ import {
   calculateFleeResult,
   rollMobPrefix,
   mobToCombatantStats,
+  filterAndWeightMobsByTier,
 } from '@adventure/game-engine';
 import {
   COMBAT_CONSTANTS,
@@ -21,7 +22,7 @@ import {
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
-import { rollAndGrantLoot } from '../services/lootService';
+import { rollAndGrantLoot, enrichLootWithNames, type LootDropWithName } from '../services/lootService';
 import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { grantSkillXp } from '../services/xpService';
 import { degradeEquippedDurability } from '../services/durabilityService';
@@ -38,6 +39,7 @@ import {
 } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
+import { getExplorationPercent } from '../services/zoneExplorationService';
 
 export const combatRouter = Router();
 
@@ -46,7 +48,6 @@ combatRouter.use(authenticate);
 const prismaAny = prisma as unknown as any;
 
 const attackSkillSchema = z.enum(['melee', 'ranged', 'magic']);
-type LootDropWithName = LootDrop & { itemName: string | null };
 type EncounterSiteSize = 'small' | 'medium' | 'large';
 
 const lootDropWithNameSchema = z.object({
@@ -477,6 +478,8 @@ combatRouter.post('/start', async (req, res, next) => {
       throw new AppError(404, 'Zone not found', 'NOT_FOUND');
     }
 
+    const explorationProgress = await getExplorationPercent(playerId, zoneId);
+
     let mob = null as null | (MobTemplate & { spellPattern: unknown });
 
     if (mobTemplateId) {
@@ -487,7 +490,16 @@ combatRouter.post('/start', async (req, res, next) => {
       mob = found as unknown as MobTemplate & { spellPattern: unknown };
     } else {
       const mobs = await prisma.mobTemplate.findMany({ where: { zoneId } });
-      const picked = pickWeighted(mobs);
+      const zoneTiers = (zone as unknown as { explorationTiers: Record<string, number> | null }).explorationTiers;
+      const tieredMobs = filterAndWeightMobsByTier(
+        mobs.map(m => ({
+          ...m,
+          explorationTier: (m as unknown as { explorationTier: number | null }).explorationTier ?? 1,
+        })),
+        explorationProgress.percent,
+        zoneTiers,
+      );
+      const picked = pickWeighted(tieredMobs);
       if (!picked) {
         throw new AppError(400, 'No mobs available for this zone', 'NO_MOBS');
       }
@@ -787,6 +799,11 @@ combatRouter.post('/start', async (req, res, next) => {
             }
           : null,
       },
+      explorationProgress: {
+        turnsExplored: explorationProgress.turnsExplored,
+        percent: explorationProgress.percent,
+        turnsToExplore: explorationProgress.turnsToExplore,
+      },
       activeEvents: activeEventEffects.length > 0 ? activeEventEffects : undefined,
     });
   } catch (err) {
@@ -810,41 +827,6 @@ const listLogsQuerySchema = z.object({
 
 interface CombatHistoryCountRow {
   total: bigint;
-}
-
-async function enrichLootWithNames(
-  loot: Array<{
-    itemTemplateId: string;
-    quantity: number;
-    rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
-    itemName?: string | null;
-  }>
-): Promise<LootDropWithName[]> {
-  if (loot.length === 0) return [];
-
-  const templateIdsMissingName = Array.from(
-    new Set(
-      loot
-        .filter((drop) => !drop.itemName)
-        .map((drop) => drop.itemTemplateId)
-    )
-  );
-
-  let templateNameById = new Map<string, string>();
-  if (templateIdsMissingName.length > 0) {
-    const templates = await prisma.itemTemplate.findMany({
-      where: { id: { in: templateIdsMissingName } },
-      select: { id: true, name: true },
-    });
-    templateNameById = new Map(templates.map((template) => [template.id, template.name]));
-  }
-
-  return loot.map((drop) => ({
-    itemTemplateId: drop.itemTemplateId,
-    quantity: drop.quantity,
-    rarity: drop.rarity,
-    itemName: drop.itemName ?? templateNameById.get(drop.itemTemplateId) ?? null,
-  }));
 }
 
 interface CombatHistoryListRow {

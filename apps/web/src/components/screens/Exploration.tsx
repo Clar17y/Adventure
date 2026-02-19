@@ -19,6 +19,11 @@ interface ExplorationProps {
     minLevel: number;
     imageSrc?: string;
   };
+  explorationProgress: {
+    turnsExplored: number;
+    turnsToExplore: number | null;
+    percent: number;
+  } | null;
   availableTurns: number;
   onStartExploration: (turns: number) => void;
   activityLog: ActivityLogEntry[];
@@ -38,7 +43,7 @@ interface ExplorationProps {
   onPushLog?: (...entries: Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>) => void;
 }
 
-export function Exploration({ currentZone, availableTurns, onStartExploration, activityLog, isRecovering = false, recoveryCost, playbackData, onPlaybackComplete, onPlaybackSkip, onPushLog }: ExplorationProps) {
+export function Exploration({ currentZone, explorationProgress, availableTurns, onStartExploration, activityLog, isRecovering = false, recoveryCost, playbackData, onPlaybackComplete, onPlaybackSkip, onPushLog }: ExplorationProps) {
   const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
 
   const calculateProbabilities = (turns: number) => {
@@ -115,6 +120,22 @@ export function Exploration({ currentZone, availableTurns, onStartExploration, a
       {/* Normal exploration UI — hide during playback */}
       {!playbackData && (
         <>
+          {/* Zone exploration progress */}
+          {explorationProgress && explorationProgress.turnsToExplore && (
+            <PixelCard>
+              <div className="flex justify-between text-sm text-[var(--rpg-text-secondary)] mb-1">
+                <span>Zone Exploration: {Math.floor(explorationProgress.percent)}%</span>
+                <span>{explorationProgress.turnsExplored.toLocaleString()} / {explorationProgress.turnsToExplore.toLocaleString()} turns</span>
+              </div>
+              <div className="h-2 rounded-full bg-[var(--rpg-background)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--rpg-gold)] transition-all"
+                  style={{ width: `${Math.min(100, explorationProgress.percent)}%` }}
+                />
+              </div>
+            </PixelCard>
+          )}
+
           {/* Turn Investment */}
           <PixelCard>
             <div className="space-y-4">

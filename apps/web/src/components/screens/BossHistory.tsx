@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getBossHistory, type BossHistoryEntry } from '@/lib/api';
 import { Pagination } from '@/components/common/Pagination';
+import { BossRewardsDisplay } from '@/components/common/BossRewardsDisplay';
 
 const PAGE_SIZE = 10;
 
@@ -94,6 +95,10 @@ export function BossHistory() {
                     </p>
                   )}
                   <p>Total boss rounds: {entry.encounter.roundNumber}</p>
+
+                  {entry.myRewards && (
+                    <BossRewardsDisplay rewards={entry.myRewards} />
+                  )}
 
                   {entry.encounter.roundSummaries && entry.encounter.roundSummaries.length > 0 && (
                     <div>

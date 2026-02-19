@@ -33,6 +33,7 @@ export const prisma = {
   zone: mockModel(),
   zoneConnection: mockModel(),
   playerZoneDiscovery: mockModel(),
+  playerZoneExploration: mockModel(),
   chatMessage: mockModel(),
   $transaction: vi.fn((fn: (tx: any) => Promise<any>) => fn(prisma)),
 };

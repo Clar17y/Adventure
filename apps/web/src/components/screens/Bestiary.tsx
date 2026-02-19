@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
-import { BookOpen, X, MapPin, Sword, Shield, Heart } from 'lucide-react';
+import { BookOpen, X, MapPin, Sword, Shield, Heart, Lock } from 'lucide-react';
 import Image from 'next/image';
 import { uiIconSrc } from '@/lib/assets';
 import { RARITY_COLORS, type Rarity } from '@/lib/rarity';
@@ -32,6 +32,8 @@ interface Monster {
   zones: string[];
   description: string;
   prefixesEncountered: string[];
+  explorationTier?: number;
+  tierLocked?: boolean;
 }
 
 interface PrefixSummaryEntry {
@@ -201,61 +203,74 @@ export function Bestiary({ monsters, prefixSummary }: BestiaryProps) {
         <>
           {/* Monster Grid */}
           <div className="grid grid-cols-3 gap-3">
-            {sortedMonsters.map((monster) => (
-              <button
-                key={monster.id}
-                onClick={() => monster.isDiscovered && setSelectedMonster(monster)}
-                disabled={!monster.isDiscovered}
-                className="aspect-square"
-              >
-                <div
-                  className={`w-full h-full rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
-                    monster.isDiscovered
-                      ? 'bg-[var(--rpg-surface)] border-[var(--rpg-border)] hover:border-[var(--rpg-gold)]'
-                      : 'bg-[var(--rpg-background)] border-[var(--rpg-border)] border-dashed'
-                  }`}
+            {sortedMonsters.map((monster) => {
+              const isTierLocked = monster.tierLocked && !monster.isDiscovered;
+
+              return (
+                <button
+                  key={monster.id}
+                  onClick={() => monster.isDiscovered && setSelectedMonster(monster)}
+                  disabled={!monster.isDiscovered}
+                  className="aspect-square"
                 >
-                  {monster.isDiscovered ? (
-                    <>
-                      {monster.imageSrc ? (
-                        <Image
-                          src={monster.imageSrc}
-                          alt={monster.name}
-                          width={48}
-                          height={48}
-                          className="image-rendering-pixelated mb-1"
-                        />
-                      ) : (
-                        <Image
-                          src={uiIconSrc('attack')}
-                          alt={monster.name}
-                          width={48}
-                          height={48}
-                          className="image-rendering-pixelated mb-1"
-                        />
-                      )}
-                      <span className="text-[10px] text-[var(--rpg-text-secondary)] text-center px-1 leading-tight">
-                        {monster.name}
-                      </span>
-                      <span className="text-xs text-[var(--rpg-gold)] font-mono mt-1">x{monster.killCount}</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-12 h-12 bg-[var(--rpg-surface)] rounded-lg mb-1 flex items-center justify-center">
-                        <Image
-                          src={uiIconSrc('scroll')}
-                          alt="Unknown monster"
-                          width={24}
-                          height={24}
-                          className="image-rendering-pixelated opacity-30"
-                        />
-                      </div>
-                      <span className="text-xs text-[var(--rpg-text-secondary)]">???</span>
-                    </>
-                  )}
-                </div>
-              </button>
-            ))}
+                  <div
+                    className={`w-full h-full rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
+                      monster.isDiscovered
+                        ? 'bg-[var(--rpg-surface)] border-[var(--rpg-border)] hover:border-[var(--rpg-gold)]'
+                        : isTierLocked
+                          ? 'bg-[var(--rpg-background)] border-[var(--rpg-border)] opacity-40'
+                          : 'bg-[var(--rpg-background)] border-[var(--rpg-border)] border-dashed'
+                    }`}
+                  >
+                    {monster.isDiscovered ? (
+                      <>
+                        {monster.imageSrc ? (
+                          <Image
+                            src={monster.imageSrc}
+                            alt={monster.name}
+                            width={48}
+                            height={48}
+                            className="image-rendering-pixelated mb-1"
+                          />
+                        ) : (
+                          <Image
+                            src={uiIconSrc('attack')}
+                            alt={monster.name}
+                            width={48}
+                            height={48}
+                            className="image-rendering-pixelated mb-1"
+                          />
+                        )}
+                        <span className="text-[10px] text-[var(--rpg-text-secondary)] text-center px-1 leading-tight">
+                          {monster.name}
+                        </span>
+                        <span className="text-xs text-[var(--rpg-gold)] font-mono mt-1">x{monster.killCount}</span>
+                      </>
+                    ) : isTierLocked ? (
+                      <>
+                        <div className="w-12 h-12 bg-[var(--rpg-surface)] rounded-lg mb-1 flex items-center justify-center">
+                          <Lock size={20} color="var(--rpg-text-secondary)" className="opacity-40" />
+                        </div>
+                        <span className="text-[10px] text-[var(--rpg-text-secondary)]">Locked</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-12 h-12 bg-[var(--rpg-surface)] rounded-lg mb-1 flex items-center justify-center">
+                          <Image
+                            src={uiIconSrc('scroll')}
+                            alt="Unknown monster"
+                            width={24}
+                            height={24}
+                            className="image-rendering-pixelated opacity-30"
+                          />
+                        </div>
+                        <span className="text-xs text-[var(--rpg-text-secondary)]">???</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           {/* Monster Detail Modal */}

@@ -337,6 +337,11 @@ export default function GamePage() {
                   ? zoneImageSrc(currentZone.name)
                   : undefined,
             }}
+            explorationProgress={currentZone?.exploration ? {
+              turnsExplored: currentZone.exploration.turnsExplored,
+              turnsToExplore: currentZone.exploration.turnsToExplore,
+              percent: currentZone.exploration.percent,
+            } : null}
             availableTurns={turns}
             onStartExploration={handleStartExploration}
             activityLog={activityLog}
@@ -503,6 +508,7 @@ export default function GamePage() {
               discovered: z.discovered ?? true,
               zoneType: z.zoneType ?? 'wild',
               imageSrc: z.discovered && z.name !== '???' ? zoneImageSrc(z.name) : undefined,
+              exploration: z.exploration ?? null,
             }))}
             connections={zoneConnections}
             currentZoneId={activeZoneId ?? ''}
@@ -542,6 +548,8 @@ export default function GamePage() {
               zones: m.zones,
               description: m.description,
               prefixesEncountered: m.prefixesEncountered,
+              explorationTier: m.explorationTier,
+              tierLocked: m.tierLocked,
               drops: m.drops.map((d) => ({
                 name: d.item.name,
                 imageSrc: itemImageSrc(d.item.name, d.item.itemType),

@@ -10,6 +10,8 @@ const wep = IDS.wep;
 const arm = IDS.arm;
 const adv = IDS.adv;
 const fam = IDS.families;
+const trophy = IDS.trophy;
+const bossGear = IDS.bossGear;
 
 type Recipe = {
   id?: string;
@@ -225,8 +227,21 @@ function advancedRecipes() {
   ];
 }
 
+// ── Boss-Exclusive Recipes ────────────────────────────────────────────────────
+
+function bossRecipes() {
+  return [
+    // Alpha Wolf (Tier 2)
+    recipe({ skillType: 'weaponsmithing', requiredLevel: 8, resultTemplateId: bossGear.wolfsbaneBlade, turnCost: 24, xpReward: 40, isAdvanced: true, soulbound: true, mobFamilyId: fam.wolves, materials: [{ itemTemplateId: trophy.alphaWolfFang, quantity: 6 }, { itemTemplateId: proc.tinIngot, quantity: 4 }, { itemTemplateId: lth.wolfLeather, quantity: 3 }] }),
+    recipe({ skillType: 'leatherworking', requiredLevel: 8, resultTemplateId: bossGear.alphaPeltChest, turnCost: 24, xpReward: 40, isAdvanced: true, soulbound: true, mobFamilyId: fam.wolves, materials: [{ itemTemplateId: trophy.alphaWolfFang, quantity: 4 }, { itemTemplateId: drop.wolfPelt, quantity: 6 }, { itemTemplateId: lth.wolfLeather, quantity: 4 }] }),
+    // Ancient Spirit (Tier 4)
+    recipe({ skillType: 'weaponsmithing', requiredLevel: 16, resultTemplateId: bossGear.spiritStaff, turnCost: 55, xpReward: 85, isAdvanced: true, soulbound: true, mobFamilyId: fam.spirits, materials: [{ itemTemplateId: trophy.spiritEssence, quantity: 6 }, { itemTemplateId: proc.elderwoodPlank, quantity: 4 }, { itemTemplateId: drop.spriteDust, quantity: 5 }] }),
+    recipe({ skillType: 'tailoring', requiredLevel: 16, resultTemplateId: bossGear.etherealRobes, turnCost: 55, xpReward: 85, isAdvanced: true, soulbound: true, mobFamilyId: fam.spirits, materials: [{ itemTemplateId: trophy.spiritEssence, quantity: 4 }, { itemTemplateId: drop.dryadThread, quantity: 6 }, { itemTemplateId: lth.faeFabric, quantity: 4 }] }),
+  ];
+}
+
 // ── Export ─────────────────────────────────────────────────────────────────────
 
 export function getAllRecipes() {
-  return [...processingRecipes(), ...weaponRecipes(), ...armorRecipes(), ...advancedRecipes()];
+  return [...processingRecipes(), ...weaponRecipes(), ...armorRecipes(), ...advancedRecipes(), ...bossRecipes()];
 }

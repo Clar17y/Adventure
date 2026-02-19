@@ -57,6 +57,7 @@ model Player {
   refreshTokens      RefreshToken[]
   resourceNodes      PlayerResourceNode[]
   zoneDiscoveries    PlayerZoneDiscovery[]
+  zoneExplorations   PlayerZoneExploration[]
   pvpRating          PvpRating?
   pvpAttacks         PvpMatch[] @relation("PvpAttacker")
   pvpDefenses        PvpMatch[] @relation("PvpDefender")
@@ -186,6 +187,8 @@ model Zone {
   zoneType       String  @default("wild") @map("zone_type") @db.VarChar(16) // wild | town
   zoneExitChance Float?  @map("zone_exit_chance")
   maxCraftingLevel Int?    @default(0) @map("max_crafting_level")
+  turnsToExplore   Int?  @map("turns_to_explore")
+  explorationTiers Json? @map("exploration_tiers")
 
   mobs               MobTemplate[]
   resourceNodes      ResourceNode[]
@@ -194,6 +197,7 @@ model Zone {
   connectionsFrom    ZoneConnection[]        @relation("from_zone")
   connectionsTo      ZoneConnection[]        @relation("to_zone")
   discoveries        PlayerZoneDiscovery[]
+  explorations       PlayerZoneExploration[]
   playersHere        Player[]                @relation("current_zone")
   playersBreadcrumb  Player[]                @relation("breadcrumb_zone")
   playersHome        Player[]                @relation("home_town")
@@ -206,6 +210,7 @@ model ZoneConnection {
   id       String @id @default(uuid())
   fromId   String @map("from_zone_id")
   toId     String @map("to_zone_id")
+  explorationThreshold Float @default(0) @map("exploration_threshold")
 
   fromZone Zone @relation("from_zone", fields: [fromId], references: [id], onDelete: Cascade)
   toZone   Zone @relation("to_zone", fields: [toId], references: [id], onDelete: Cascade)
@@ -228,6 +233,20 @@ model PlayerZoneDiscovery {
   @@map("player_zone_discoveries")
 }
 
+model PlayerZoneExploration {
+  id            String @id @default(cuid())
+  playerId      String @map("player_id")
+  zoneId        String @map("zone_id")
+  turnsExplored Int    @default(0) @map("turns_explored")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  zone   Zone   @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, zoneId])
+  @@index([playerId])
+  @@map("player_zone_explorations")
+}
+
 // =============================================================================
 // MOBS & COMBAT
 // =============================================================================
@@ -246,6 +265,7 @@ model MobTemplate {
   damageMax       Int     @map("damage_max")
   xpReward        Int     @map("xp_reward")
   encounterWeight Int     @default(100) @map("encounter_weight")
+  explorationTier Int     @default(1) @map("exploration_tier")
   spellPattern    Json    @default("[]") @map("spell_pattern")
   damageType      String  @default("physical") @map("damage_type")
   isBoss          Boolean @default(false) @map("is_boss")
@@ -602,6 +622,7 @@ model BossEncounter {
   status         String    @default("waiting") @db.VarChar(16)
   killedBy       String?   @map("killed_by")
   roundSummaries Json?     @map("round_summaries")
+  rewardsByPlayer Json?    @map("rewards_by_player")
 
   event         WorldEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   mobTemplate   MobTemplate       @relation(fields: [mobTemplateId], references: [id])

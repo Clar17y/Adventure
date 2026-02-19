@@ -8,8 +8,10 @@ import {
   signUpForBoss,
   type BossEncounterResponse,
   type BossParticipantResponse,
+  type BossPlayerReward,
   type BossRoundSummary,
 } from '@/lib/api';
+import { BossRewardsDisplay } from '@/components/common/BossRewardsDisplay';
 
 interface BossEncounterPanelProps {
   encounterId: string;
@@ -20,6 +22,7 @@ interface BossEncounterPanelProps {
 export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncounterPanelProps) {
   const [encounter, setEncounter] = useState<BossEncounterResponse | null>(null);
   const [participants, setParticipants] = useState<BossParticipantResponse[]>([]);
+  const [myRewards, setMyRewards] = useState<BossPlayerReward | null>(null);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
   const [role, setRole] = useState<'attacker' | 'healer'>('attacker');
@@ -33,6 +36,7 @@ export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncou
     if (res.data) {
       setEncounter(res.data.encounter);
       setParticipants(res.data.participants);
+      setMyRewards(res.data.myRewards ?? null);
     }
     setLoading(false);
   }, [encounterId]);
@@ -236,6 +240,11 @@ export function BossEncounterPanel({ encounterId, playerId, onClose }: BossEncou
               </p>
             )}
           </div>
+          {myRewards && (
+            <div className="mt-2">
+              <BossRewardsDisplay rewards={myRewards} />
+            </div>
+          )}
           <div className="text-xs space-y-1">
             <p>Total rounds: {encounter.roundNumber}</p>
             {topContributors.length > 0 && (

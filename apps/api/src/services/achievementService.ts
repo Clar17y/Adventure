@@ -1,0 +1,236 @@
+import { prisma } from '@adventure/database';
+import {
+  ALL_ACHIEVEMENTS,
+  ACHIEVEMENTS_BY_STAT_KEY,
+  ACHIEVEMENTS_BY_FAMILY_KEY,
+  ACHIEVEMENTS_BY_ID,
+} from '@adventure/shared';
+import type { AchievementDef, PlayerAchievementProgress } from '@adventure/shared';
+
+// Maps MobFamily DB name to the family key used in achievement definitions
+const FAMILY_NAME_TO_KEY: Record<string, string> = {
+  'Vermin': 'vermin', 'Spiders': 'spiders', 'Boars': 'boars',
+  'Wolves': 'wolves', 'Bandits': 'bandits', 'Treants': 'treants',
+  'Spirits': 'spirits', 'Fae': 'fae', 'Bats': 'bats',
+  'Goblins': 'goblins', 'Golems': 'golems', 'Crawlers': 'crawlers',
+  'Harpies': 'harpies', 'Undead': 'undead', 'Swamp Beasts': 'swampBeasts',
+  'Witches': 'witches', 'Elementals': 'elementals', 'Serpents': 'serpents',
+  'Abominations': 'abominations',
+};
+
+interface CheckOptions {
+  statKeys?: string[];
+  familyId?: string;
+}
+
+export async function checkAchievements(
+  playerId: string,
+  options: CheckOptions,
+): Promise<AchievementDef[]> {
+  const [stats, familyStats, unlocked] = await Promise.all([
+    prisma.playerStats.findUnique({ where: { playerId } }),
+    prisma.playerFamilyStats.findMany({ where: { playerId } }),
+    prisma.playerAchievement.findMany({ where: { playerId }, select: { achievementId: true } }),
+  ]);
+
+  if (!stats) return [];
+
+  const unlockedSet = new Set(unlocked.map((u) => u.achievementId));
+  const familyKillMap = new Map(familyStats.map((f) => [f.mobFamilyId, f.kills]));
+
+  // Collect candidate achievements to check
+  const candidates: AchievementDef[] = [];
+
+  if (options.statKeys) {
+    for (const key of options.statKeys) {
+      const matching = ACHIEVEMENTS_BY_STAT_KEY.get(key) ?? [];
+      candidates.push(...matching);
+    }
+  }
+
+  if (options.familyId) {
+    const family = await prisma.mobFamily.findUnique({ where: { id: options.familyId } });
+    if (family) {
+      const familyKey = FAMILY_NAME_TO_KEY[family.name];
+      if (familyKey) {
+        const matching = ACHIEVEMENTS_BY_FAMILY_KEY.get(familyKey) ?? [];
+        candidates.push(...matching);
+      }
+    }
+  }
+
+  // Check each candidate
+  const newlyUnlocked: AchievementDef[] = [];
+
+  for (const achievement of candidates) {
+    if (unlockedSet.has(achievement.id)) continue;
+
+    let progress = 0;
+    if (achievement.statKey) {
+      progress = (stats as Record<string, number>)[achievement.statKey] ?? 0;
+    } else if (achievement.familyKey && options.familyId) {
+      progress = familyKillMap.get(options.familyId) ?? 0;
+    }
+
+    if (progress >= achievement.threshold) {
+      await prisma.playerAchievement.create({
+        data: { playerId, achievementId: achievement.id },
+      });
+      newlyUnlocked.push(achievement);
+      unlockedSet.add(achievement.id);
+    }
+  }
+
+  return newlyUnlocked;
+}
+
+export async function getPlayerAchievements(playerId: string): Promise<{
+  achievements: PlayerAchievementProgress[];
+  unclaimedCount: number;
+}> {
+  const [stats, familyStats, unlocked] = await Promise.all([
+    prisma.playerStats.findUnique({ where: { playerId } }),
+    prisma.playerFamilyStats.findMany({ where: { playerId } }),
+    prisma.playerAchievement.findMany({ where: { playerId } }),
+  ]);
+
+  // Build family kill map by family key (need to resolve IDs)
+  const families = await prisma.mobFamily.findMany({ select: { id: true, name: true } });
+  const familyIdToKey = new Map<string, string>();
+  for (const f of families) {
+    const key = FAMILY_NAME_TO_KEY[f.name];
+    if (key) familyIdToKey.set(f.id, key);
+  }
+  const familyKillsByKey = new Map<string, number>();
+  for (const fs of familyStats) {
+    const key = familyIdToKey.get(fs.mobFamilyId);
+    if (key) familyKillsByKey.set(key, fs.kills);
+  }
+
+  const unlockedMap = new Map(unlocked.map((u) => [u.achievementId, u]));
+  let unclaimedCount = 0;
+
+  const achievements: PlayerAchievementProgress[] = ALL_ACHIEVEMENTS.map((def) => {
+    const playerAch = unlockedMap.get(def.id);
+    const isUnlocked = !!playerAch;
+
+    if (isUnlocked && !playerAch.rewardClaimed && def.rewards?.length) {
+      unclaimedCount++;
+    }
+
+    let progress = 0;
+    if (def.statKey && stats) {
+      progress = (stats as Record<string, number>)[def.statKey] ?? 0;
+    } else if (def.familyKey) {
+      progress = familyKillsByKey.get(def.familyKey) ?? 0;
+    }
+
+    // Secret achievements hide title/description when not unlocked
+    const title = def.secret && !isUnlocked ? '???' : def.title;
+    const description = def.secret && !isUnlocked ? '???' : def.description;
+
+    return {
+      id: def.id,
+      category: def.category,
+      title,
+      description,
+      titleReward: isUnlocked ? def.titleReward : undefined,
+      threshold: def.threshold,
+      secret: def.secret,
+      tier: def.tier,
+      progress: Math.min(progress, def.threshold),
+      unlocked: isUnlocked,
+      unlockedAt: playerAch?.unlockedAt?.toISOString(),
+      rewardClaimed: playerAch?.rewardClaimed,
+      rewards: def.rewards,
+    };
+  });
+
+  return { achievements, unclaimedCount };
+}
+
+export async function claimReward(playerId: string, achievementId: string) {
+  const def = ACHIEVEMENTS_BY_ID.get(achievementId);
+  if (!def) throw new Error('Unknown achievement');
+
+  const playerAch = await prisma.playerAchievement.findUnique({
+    where: { playerId_achievementId: { playerId, achievementId } },
+  });
+
+  if (!playerAch) throw new Error('Achievement not unlocked');
+  if (playerAch.rewardClaimed) throw new Error('Reward already claimed');
+
+  await prisma.playerAchievement.update({
+    where: { playerId_achievementId: { playerId, achievementId } },
+    data: { rewardClaimed: true },
+  });
+
+  const rewards = def.rewards ?? [];
+  for (const reward of rewards) {
+    switch (reward.type) {
+      case 'attribute_points':
+        await prisma.player.update({
+          where: { id: playerId },
+          data: { attributePoints: { increment: reward.amount } },
+        });
+        break;
+      case 'turns':
+        await prisma.turnBank.update({
+          where: { playerId },
+          data: { currentTurns: { increment: reward.amount } },
+        });
+        break;
+      case 'item':
+        if (reward.itemTemplateId) {
+          const template = await prisma.itemTemplate.findUnique({
+            where: { id: reward.itemTemplateId },
+          });
+          if (template) {
+            await prisma.item.create({
+              data: {
+                ownerId: playerId,
+                templateId: reward.itemTemplateId,
+                rarity: 'legendary',
+                quantity: reward.amount,
+              },
+            });
+          }
+        }
+        break;
+    }
+  }
+
+  return { success: true, rewards };
+}
+
+export async function setActiveTitle(playerId: string, achievementId: string | null) {
+  if (achievementId) {
+    const def = ACHIEVEMENTS_BY_ID.get(achievementId);
+    if (!def?.titleReward) throw new Error('Achievement has no title reward');
+
+    const playerAch = await prisma.playerAchievement.findUnique({
+      where: { playerId_achievementId: { playerId, achievementId } },
+    });
+    if (!playerAch) throw new Error('Achievement not unlocked');
+  }
+
+  const player = await prisma.player.update({
+    where: { id: playerId },
+    data: { activeTitle: achievementId },
+    select: { activeTitle: true },
+  });
+
+  return player;
+}
+
+export async function getUnclaimedCount(playerId: string): Promise<number> {
+  const unlocked = await prisma.playerAchievement.findMany({
+    where: { playerId, rewardClaimed: false },
+    select: { achievementId: true },
+  });
+
+  return unlocked.filter((u) => {
+    const def = ACHIEVEMENTS_BY_ID.get(u.achievementId);
+    return def?.rewards?.length;
+  }).length;
+}

@@ -1401,3 +1401,40 @@ export async function getBossHistory(page = 1, pageSize = 10) {
     pagination: { page: number; pageSize: number; total: number; totalPages: number };
   }>(`/api/v1/boss/history?page=${page}&pageSize=${pageSize}`);
 }
+
+// ── Leaderboard ─────────────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  rank: number;
+  playerId: string;
+  username: string;
+  characterLevel: number;
+  score: number;
+  isBot: boolean;
+}
+
+export interface LeaderboardResponse {
+  category: string;
+  entries: LeaderboardEntry[];
+  myRank: LeaderboardEntry | null;
+  totalPlayers: number;
+  lastRefreshedAt: string | null;
+}
+
+export interface LeaderboardCategoryGroup {
+  name: string;
+  categories: { slug: string; label: string }[];
+}
+
+export interface LeaderboardCategoriesResponse {
+  groups: LeaderboardCategoryGroup[];
+}
+
+export async function getLeaderboardCategories() {
+  return fetchApi<LeaderboardCategoriesResponse>('/api/v1/leaderboard/categories');
+}
+
+export async function getLeaderboard(category: string, aroundMe = false) {
+  const params = aroundMe ? '?around_me=true' : '';
+  return fetchApi<LeaderboardResponse>(`/api/v1/leaderboard/${category}${params}`);
+}

@@ -10,10 +10,12 @@ import {
   rollMobPrefix,
   mobToCombatantStats,
   filterAndWeightMobsByTier,
+  selectTierWithBleedthrough,
 } from '@adventure/game-engine';
 import {
   COMBAT_CONSTANTS,
   EXPLORATION_CONSTANTS,
+  ZONE_EXPLORATION_CONSTANTS,
   getMobPrefixDefinition,
   type Combatant,
   type CombatOptions,
@@ -491,14 +493,41 @@ combatRouter.post('/start', async (req, res, next) => {
     } else {
       const mobs = await prisma.mobTemplate.findMany({ where: { zoneId } });
       const zoneTiers = (zone as unknown as { explorationTiers: Record<string, number> | null }).explorationTiers;
-      const tieredMobs = filterAndWeightMobsByTier(
-        mobs.map(m => ({
-          ...m,
-          explorationTier: (m as unknown as { explorationTier: number | null }).explorationTier ?? 1,
-        })),
-        explorationProgress.percent,
-        zoneTiers,
-      );
+      const tiers = zoneTiers ?? ZONE_EXPLORATION_CONSTANTS.DEFAULT_TIERS;
+
+      // Determine current tier
+      let currentTier = 0;
+      for (const [tierStr, threshold] of Object.entries(tiers)) {
+        const tier = Number(tierStr);
+        if (explorationProgress.percent >= threshold && tier > currentTier) {
+          currentTier = tier;
+        }
+      }
+
+      // Select tier with bleedthrough
+      const selectedTier = selectTierWithBleedthrough(currentTier, zoneTiers);
+
+      // Map mobs with tier info
+      const mobsWithTier = mobs.map(m => ({
+        ...m,
+        explorationTier: (m as unknown as { explorationTier: number | null }).explorationTier ?? 1,
+      }));
+
+      // Filter mobs to selected tier, fallback to current tier, then any
+      let candidates = mobsWithTier.filter(m => m.explorationTier === selectedTier);
+      if (candidates.length === 0) {
+        candidates = mobsWithTier.filter(m => m.explorationTier === currentTier);
+      }
+      if (candidates.length === 0) {
+        candidates = mobsWithTier;
+      }
+
+      // Weight and pick (pass permissive tiers to bypass tier filtering in filterAndWeightMobsByTier)
+      const allTiersUnlocked: Record<string, number> = {};
+      for (const c of candidates) {
+        allTiersUnlocked[String(c.explorationTier)] = 0;
+      }
+      const tieredMobs = filterAndWeightMobsByTier(candidates, 100, allTiersUnlocked);
       const picked = pickWeighted(tieredMobs);
       if (!picked) {
         throw new AppError(400, 'No mobs available for this zone', 'NO_MOBS');

@@ -11,6 +11,7 @@ import {
   mobToCombatantStats,
   rollMobPrefix,
   runCombat,
+  selectTierWithBleedthrough,
   simulateExploration,
   validateExplorationTurns,
 } from '@adventure/game-engine';
@@ -231,14 +232,44 @@ function buildEncounterSiteMobs(
   zoneTiers: Record<string, number> | null = null,
 ): EncounterMobSlot[] {
   const tiers = zoneTiers ?? ZONE_EXPLORATION_CONSTANTS.DEFAULT_TIERS;
+
+  // Determine current unlocked tier
+  let currentTier = 0;
+  for (const [tierStr, threshold] of Object.entries(tiers)) {
+    const tier = Number(tierStr);
+    if (explorationPercent >= threshold && tier > currentTier) {
+      currentTier = tier;
+    }
+  }
+  if (currentTier === 0) return [];
+
+  // Get ALL zone members (not filtered by tier)
   const zoneMembers = family.members
-    .filter((member) => member.mobTemplate.zoneId === zoneId)
-    .filter((member) => {
-      const mobTier = member.mobTemplate.explorationTier ?? 1;
-      const threshold = tiers[String(mobTier)] ?? 0;
-      return explorationPercent >= threshold;
-    });
+    .filter((member) => member.mobTemplate.zoneId === zoneId);
   if (zoneMembers.length === 0) return [];
+
+  // Group members by tier
+  const membersByTier = new Map<number, ZoneFamilyMember[]>();
+  for (const member of zoneMembers) {
+    const tier = member.mobTemplate.explorationTier ?? 1;
+    if (!membersByTier.has(tier)) membersByTier.set(tier, []);
+    membersByTier.get(tier)!.push(member);
+  }
+
+  // Pick a member at a bleedthrough-selected tier, falling back to lower tiers
+  function pickMemberWithBleedthrough(
+    role: EncounterMobRole,
+    fallbackRoles: EncounterMobRole[],
+  ): ZoneFamilyMember | null {
+    const selectedTier = selectTierWithBleedthrough(currentTier, tiers);
+    for (let t = selectedTier; t >= 1; t--) {
+      const tierMembers = membersByTier.get(t) ?? [];
+      if (tierMembers.length === 0) continue;
+      const picked = pickFamilyMemberByRole(tierMembers, role, fallbackRoles);
+      if (picked) return picked;
+    }
+    return pickFamilyMemberByRole(zoneMembers, role, fallbackRoles);
+  }
 
   const { min, max } = getEncounterRange(size);
   const total = randomIntInclusive(min, max);
@@ -261,7 +292,7 @@ function buildEncounterSiteMobs(
   let slot = 0;
 
   for (let i = 0; i < trashCount; i++) {
-    const member = pickFamilyMemberByRole(zoneMembers, 'trash', ['elite', 'boss']);
+    const member = pickMemberWithBleedthrough('trash', ['elite', 'boss']);
     if (!member) continue;
     mobs.push({
       slot: slot++,
@@ -273,7 +304,7 @@ function buildEncounterSiteMobs(
   }
 
   for (let i = 0; i < eliteCount; i++) {
-    const member = pickFamilyMemberByRole(zoneMembers, 'elite', ['trash', 'boss']);
+    const member = pickMemberWithBleedthrough('elite', ['trash', 'boss']);
     if (!member) continue;
     mobs.push({
       slot: slot++,
@@ -285,7 +316,7 @@ function buildEncounterSiteMobs(
   }
 
   for (let i = 0; i < bossCount; i++) {
-    const member = pickFamilyMemberByRole(zoneMembers, 'boss', ['elite', 'trash']);
+    const member = pickMemberWithBleedthrough('boss', ['elite', 'trash']);
     if (!member) continue;
     mobs.push({
       slot: slot++,

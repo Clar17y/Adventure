@@ -419,6 +419,50 @@ combatRouter.post('/sites/abandon', async (req, res, next) => {
   }
 });
 
+const strategySchema = z.object({
+  strategy: z.enum(['full_clear', 'room_by_room']),
+});
+
+/**
+ * POST /api/v1/combat/sites/:id/strategy
+ * Select clearing strategy for an encounter site.
+ */
+combatRouter.post('/sites/:id/strategy', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const siteId = req.params.id;
+    const body = strategySchema.parse(req.body);
+
+    const site = await prismaAny.encounterSite.findFirst({
+      where: { id: siteId, playerId },
+    });
+
+    if (!site) {
+      throw new AppError(404, 'Encounter site not found', 'NOT_FOUND');
+    }
+
+    if (site.clearStrategy) {
+      throw new AppError(400, 'Strategy already selected for this site', 'STRATEGY_ALREADY_SET');
+    }
+
+    await prismaAny.encounterSite.update({
+      where: { id: siteId },
+      data: {
+        clearStrategy: body.strategy,
+        fullClearActive: body.strategy === 'full_clear',
+      },
+    });
+
+    res.json({
+      success: true,
+      encounterSiteId: siteId,
+      strategy: body.strategy,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * POST /api/v1/combat/start
  * Spend turns and run a single combat encounter.

@@ -470,3 +470,36 @@ export const ZONE_EXPLORATION_CONSTANTS = {
   DEFAULT_TIERS: { '1': 0, '2': 25, '3': 50, '4': 75 } as Record<string, number>,
   NEWEST_TIER_WEIGHT_MULTIPLIER: 2,
 } as const;
+
+// =============================================================================
+// TIER BLEEDTHROUGH
+// =============================================================================
+
+export const TIER_BLEED_CONSTANTS = {
+  CURRENT_TIER_WEIGHT: 0.75,
+  PLUS_ONE_TIER_WEIGHT: 0.20,
+  PLUS_TWO_TIER_WEIGHT: 0.05,
+} as const;
+
+// =============================================================================
+// ROOM CONFIGURATION
+// =============================================================================
+
+export const ROOM_CONSTANTS = {
+  ROOMS_SMALL: { min: 1, max: 1 },
+  ROOMS_MEDIUM: { min: 2, max: 2 },
+  ROOMS_LARGE: { min: 3, max: 4 },
+  MOBS_PER_ROOM_SMALL: { min: 2, max: 4 },
+  MOBS_PER_ROOM_MEDIUM: { min: 2, max: 4 },
+  MOBS_PER_ROOM_LARGE: { min: 2, max: 5 },
+} as const;
+
+// =============================================================================
+// FULL-CLEAR BONUSES
+// =============================================================================
+
+export const FULL_CLEAR_CONSTANTS = {
+  DROP_MULTIPLIER: 1.5,
+  RECIPE_MULTIPLIER: 1.5,
+  CHEST_TIER_UPGRADE: true,
+} as const;

@@ -1,0 +1,191 @@
+'use client';
+
+import { useState } from 'react';
+import { PixelCard } from '@/components/PixelCard';
+import { PixelButton } from '@/components/PixelButton';
+import { StatBar } from '@/components/StatBar';
+import type { PlayerAchievementProgress, AchievementRewardResponse } from '@/lib/api';
+
+interface AchievementsProps {
+  achievements: PlayerAchievementProgress[];
+  unclaimedCount: number;
+  activeTitle: string | null;
+  onClaim: (achievementId: string) => Promise<void>;
+  onSetTitle: (achievementId: string | null) => Promise<void>;
+}
+
+const CATEGORIES = [
+  { id: 'all', label: 'All' },
+  { id: 'combat', label: 'Combat' },
+  { id: 'exploration', label: 'Exploration' },
+  { id: 'crafting', label: 'Crafting' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'gathering', label: 'Gathering' },
+  { id: 'bestiary', label: 'Bestiary' },
+  { id: 'general', label: 'General' },
+  { id: 'family', label: 'Families' },
+];
+
+function RewardBadge({ reward }: { reward: AchievementRewardResponse }) {
+  switch (reward.type) {
+    case 'attribute_points': return <span className="text-xs text-[var(--rpg-gold)]">+{reward.amount} attr pt{reward.amount > 1 ? 's' : ''}</span>;
+    case 'turns': return <span className="text-xs text-[var(--rpg-blue-light)]">+{reward.amount.toLocaleString()} turns</span>;
+    case 'item': return <span className="text-xs text-[var(--rpg-purple)]">Unique item</span>;
+    case 'xp': return <span className="text-xs text-[var(--rpg-green-light)]">+{reward.amount} XP</span>;
+    default: return null;
+  }
+}
+
+export function Achievements({ achievements, unclaimedCount, activeTitle, onClaim, onSetTitle }: AchievementsProps) {
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+
+  const filtered = activeCategory === 'all'
+    ? achievements
+    : achievements.filter((a) => a.category === activeCategory);
+
+  // Sort: unclaimed first, then in-progress, then locked
+  const sorted = [...filtered].sort((a, b) => {
+    if (a.unlocked && !a.rewardClaimed && a.rewards?.length) return -1;
+    if (b.unlocked && !b.rewardClaimed && b.rewards?.length) return 1;
+    if (a.unlocked && !b.unlocked) return -1;
+    if (!a.unlocked && b.unlocked) return 1;
+    return (b.progress / b.threshold) - (a.progress / a.threshold);
+  });
+
+  const handleClaim = async (id: string) => {
+    setClaimingId(id);
+    try { await onClaim(id); } finally { setClaimingId(null); }
+  };
+
+  // Collect unlocked titles for title selector
+  const unlockedTitles = achievements.filter((a) => a.unlocked && a.titleReward);
+
+  return (
+    <div className="space-y-4">
+      {/* Title selector */}
+      {unlockedTitles.length > 0 && (
+        <PixelCard padding="sm">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-[var(--rpg-text-secondary)]">Active title:</span>
+            <button
+              onClick={() => onSetTitle(null)}
+              className={`px-2 py-1 rounded text-xs transition-colors ${
+                !activeTitle
+                  ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                  : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)] hover:bg-[var(--rpg-border)]'
+              }`}
+            >
+              None
+            </button>
+            {unlockedTitles.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => onSetTitle(a.id)}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  activeTitle === a.id
+                    ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                    : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)] hover:bg-[var(--rpg-border)]'
+                }`}
+              >
+                {a.titleReward}
+              </button>
+            ))}
+          </div>
+        </PixelCard>
+      )}
+
+      {/* Category filter */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => setActiveCategory(cat.id)}
+            className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+              activeCategory === cat.id
+                ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)]'
+            }`}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Achievement cards */}
+      <div className="space-y-2">
+        {sorted.map((achievement) => {
+          const isClaimable = achievement.unlocked && !achievement.rewardClaimed && (achievement.rewards?.length ?? 0) > 0;
+          const isClaiming = claimingId === achievement.id;
+
+          return (
+            <PixelCard key={achievement.id} padding="sm">
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      {achievement.unlocked && (
+                        <span className="text-[var(--rpg-green-light)]">&#x2713;</span>
+                      )}
+                      <span className={`font-medium ${
+                        achievement.unlocked
+                          ? 'text-[var(--rpg-gold)]'
+                          : 'text-[var(--rpg-text-primary)]'
+                      }`}>
+                        {achievement.title}
+                      </span>
+                      {achievement.titleReward && achievement.unlocked && (
+                        <span className="text-xs text-[var(--rpg-purple)] italic">
+                          &quot;{achievement.titleReward}&quot;
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-[var(--rpg-text-secondary)]">
+                      {achievement.description}
+                    </p>
+                  </div>
+                  {isClaimable && (
+                    <PixelButton
+                      variant="gold"
+                      size="sm"
+                      onClick={() => handleClaim(achievement.id)}
+                      disabled={isClaiming}
+                    >
+                      {isClaiming ? '...' : 'Claim'}
+                    </PixelButton>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                {!achievement.unlocked && (
+                  <StatBar
+                    current={achievement.progress}
+                    max={achievement.threshold}
+                    color="xp"
+                    size="sm"
+                    showNumbers
+                  />
+                )}
+
+                {/* Rewards */}
+                {achievement.rewards && achievement.rewards.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {achievement.rewards.map((r, i) => (
+                      <RewardBadge key={i} reward={r} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </PixelCard>
+          );
+        })}
+
+        {sorted.length === 0 && (
+          <p className="text-center text-[var(--rpg-text-secondary)] py-8">
+            No achievements in this category
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}

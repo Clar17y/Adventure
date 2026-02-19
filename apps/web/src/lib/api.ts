@@ -1401,3 +1401,58 @@ export async function getBossHistory(page = 1, pageSize = 10) {
     pagination: { page: number; pageSize: number; total: number; totalPages: number };
   }>(`/api/v1/boss/history?page=${page}&pageSize=${pageSize}`);
 }
+
+// --- Achievements ---
+
+export interface AchievementRewardResponse {
+  type: 'xp' | 'turns' | 'attribute_points' | 'item';
+  amount: number;
+  itemTemplateId?: string;
+}
+
+export interface PlayerAchievementProgress {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  titleReward?: string;
+  threshold: number;
+  secret?: boolean;
+  tier?: number;
+  progress: number;
+  unlocked: boolean;
+  unlockedAt?: string;
+  rewardClaimed?: boolean;
+  rewards?: AchievementRewardResponse[];
+}
+
+export interface AchievementsResponse {
+  achievements: PlayerAchievementProgress[];
+  unclaimedCount: number;
+}
+
+export async function getAchievements() {
+  return fetchApi<AchievementsResponse>('/api/v1/achievements');
+}
+
+export async function getAchievementUnclaimedCount() {
+  return fetchApi<{ unclaimedCount: number }>('/api/v1/achievements/unclaimed-count');
+}
+
+export async function claimAchievementReward(achievementId: string) {
+  return fetchApi<{ success: boolean; rewards: AchievementRewardResponse[] }>(
+    `/api/v1/achievements/${achievementId}/claim`,
+    { method: 'POST' },
+  );
+}
+
+export async function getActiveTitle() {
+  return fetchApi<{ activeTitle: string | null }>('/api/v1/achievements/title');
+}
+
+export async function setActiveTitle(achievementId: string | null) {
+  return fetchApi<{ activeTitle: string | null }>('/api/v1/achievements/title', {
+    method: 'PUT',
+    body: JSON.stringify({ achievementId }),
+  });
+}

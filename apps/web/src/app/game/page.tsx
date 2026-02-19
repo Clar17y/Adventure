@@ -18,6 +18,8 @@ import { Forge } from '@/components/screens/Forge';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { WorldEvents } from '@/components/screens/WorldEvents';
+import { Achievements } from '@/components/screens/Achievements';
+import { AchievementToast } from '@/components/AchievementToast';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
@@ -251,9 +253,21 @@ export default function GamePage() {
     zoneCraftingName,
     loadTurnsAndHp,
     loadPvpNotificationCount,
+    achievementData,
+    achievementUnclaimedCount,
+    activeTitle,
+    handleClaimAchievement,
+    handleSetActiveTitle,
+    loadAchievements,
   } = useGameController({ isAuthenticated });
 
   const chat = useChat({ isAuthenticated, currentZoneId: activeZoneId });
+
+  useEffect(() => {
+    if (activeScreen === 'achievements' && !achievementData) {
+      void loadAchievements();
+    }
+  }, [activeScreen, achievementData, loadAchievements]);
 
   if (isLoading) {
     return (
@@ -798,6 +812,16 @@ export default function GamePage() {
             onNavigate={(s) => setActiveScreen(s as Screen)}
           />
         );
+      case 'achievements':
+        return (
+          <Achievements
+            achievements={achievementData?.achievements ?? []}
+            unclaimedCount={achievementUnclaimedCount}
+            activeTitle={activeTitle}
+            onClaim={handleClaimAchievement}
+            onSetTitle={handleSetActiveTitle}
+          />
+        );
       default:
         return null;
     }
@@ -821,22 +845,28 @@ export default function GamePage() {
         {getActiveTab() === 'home' && (
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
             {[
-              { id: 'home', label: 'Dashboard' },
-              { id: 'skills', label: 'Skills' },
-              { id: 'zones', label: 'Map' },
-              { id: 'bestiary', label: 'Bestiary' },
-              { id: 'worldEvents', label: 'Events' },
+              { id: 'home', label: 'Dashboard', badge: 0 },
+              { id: 'skills', label: 'Skills', badge: 0 },
+              { id: 'zones', label: 'Map', badge: 0 },
+              { id: 'bestiary', label: 'Bestiary', badge: 0 },
+              { id: 'worldEvents', label: 'Events', badge: 0 },
+              { id: 'achievements', label: 'Achievements', badge: achievementUnclaimedCount },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveScreen(tab.id as Screen)}
-                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                className={`relative px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
                   activeScreen === tab.id
                     ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
                     : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)]'
                 }`}
               >
                 {tab.label}
+                {tab.badge > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-[var(--rpg-red)] text-white font-bold">
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -938,6 +968,7 @@ export default function GamePage() {
         pinnedMessage={chat.activeChannel === 'world' ? chat.pinnedWorld : chat.pinnedZone}
       />
       <BottomNav activeTab={getActiveTab()} onNavigate={handleNavigate} />
+      <AchievementToast />
     </>
   );
 }

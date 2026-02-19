@@ -1,4 +1,4 @@
-import { prisma } from '@adventure/database';
+import { prisma, Prisma } from '@adventure/database';
 import { LEADERBOARD_CONSTANTS } from '@adventure/shared';
 import { redis } from '../redis';
 import { AppError } from '../middleware/errorHandler';
@@ -340,20 +340,26 @@ async function refreshCombat() {
       'boss_damage',
       Array.from(dmgTotals.entries()).map(([playerId, data]) => ({ playerId, ...data })),
     );
-  } catch {
-    // BossParticipant model may not exist yet — skip silently
+  } catch (err) {
+    // Skip if table doesn't exist (migration not yet applied); re-throw other errors
+    const isMissingTable =
+      err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021';
+    if (!isMissingTable) throw err;
   }
 }
 
 export async function refreshAllLeaderboards(): Promise<void> {
   const start = Date.now();
+  let failures = 0;
 
-  try { await refreshPvp(); } catch (err) { console.error('Leaderboard refresh error (pvp):', err); }
-  try { await refreshProgression(); } catch (err) { console.error('Leaderboard refresh error (progression):', err); }
-  try { await refreshSkills(); } catch (err) { console.error('Leaderboard refresh error (skills):', err); }
-  try { await refreshCombat(); } catch (err) { console.error('Leaderboard refresh error (combat):', err); }
+  try { await refreshPvp(); } catch (err) { failures++; console.error('Leaderboard refresh error (pvp):', err); }
+  try { await refreshProgression(); } catch (err) { failures++; console.error('Leaderboard refresh error (progression):', err); }
+  try { await refreshSkills(); } catch (err) { failures++; console.error('Leaderboard refresh error (skills):', err); }
+  try { await refreshCombat(); } catch (err) { failures++; console.error('Leaderboard refresh error (combat):', err); }
 
-  await redis.set('leaderboard:last_refresh', new Date().toISOString());
+  if (failures === 0) {
+    await redis.set('leaderboard:last_refresh', new Date().toISOString());
+  }
 
-  console.log(`Leaderboard refresh completed in ${Date.now() - start}ms`);
+  console.log(`Leaderboard refresh completed in ${Date.now() - start}ms (${failures} failures)`);
 }

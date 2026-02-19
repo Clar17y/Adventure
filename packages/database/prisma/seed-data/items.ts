@@ -396,6 +396,30 @@ const bossEquipment = [
   it({ id: IDS.bossGear.etherealRobes, name: 'Ethereal Robes', itemType: 'armor', slot: 'chest', tier: 4, weightClass: 'light', requiredLevel: 16, baseStats: { magicDefence: 8, health: 6, dodge: 3 }, maxDurability: 120 }),
 ];
 
+// ── Achievement Family Reward Items ──────────────────────────────────────────
+
+const achievementFamilyItems = [
+  it({ id: 'achievement_vermin_gloves', name: "Ratcatcher's Gloves", itemType: 'armor', slot: 'gloves', tier: 5, weightClass: 'light', baseStats: { attack: 5, speed: 10 }, maxDurability: 200 }),
+  it({ id: 'achievement_spiders_boots', name: 'Venomweave Boots', itemType: 'armor', slot: 'boots', tier: 5, weightClass: 'light', baseStats: { evasion: 12, speed: 8 }, maxDurability: 200 }),
+  it({ id: 'achievement_boars_chest', name: 'Tuskhide Pauldrons', itemType: 'armor', slot: 'chest', tier: 5, weightClass: 'heavy', baseStats: { health: 15, defence: 8 }, maxDurability: 200 }),
+  it({ id: 'achievement_wolves_chest', name: 'Wolf Pelt Cloak', itemType: 'armor', slot: 'chest', tier: 5, weightClass: 'light', baseStats: { evasion: 10, speed: 6 }, maxDurability: 200 }),
+  it({ id: 'achievement_bandits_weapon', name: "Bandit Lord's Blade", itemType: 'weapon', slot: 'main_hand', tier: 5, baseStats: { attack: 12, critChance: 0.05 }, maxDurability: 200 }),
+  it({ id: 'achievement_treants_shield', name: 'Ironbark Shield', itemType: 'armor', slot: 'off_hand', tier: 5, weightClass: 'heavy', baseStats: { defence: 15, health: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_spirits_charm', name: 'Spectral Lantern', itemType: 'accessory', slot: 'charm', tier: 5, baseStats: { magicPower: 12, magicDefence: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_fae_ring', name: 'Pixie Dust Ring', itemType: 'accessory', slot: 'ring', tier: 5, baseStats: { luck: 10, speed: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_bats_helm', name: 'Echolocation Helm', itemType: 'armor', slot: 'head', tier: 5, weightClass: 'light', baseStats: { evasion: 10, accuracy: 8 }, maxDurability: 200 }),
+  it({ id: 'achievement_goblins_helm', name: "Goblin King's Crown", itemType: 'armor', slot: 'head', tier: 5, weightClass: 'light', baseStats: { luck: 12, attack: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_golems_charm', name: 'Crystal Core Charm', itemType: 'accessory', slot: 'charm', tier: 5, baseStats: { magicDefence: 15, defence: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_crawlers_legs', name: 'Chitin Legguards', itemType: 'armor', slot: 'legs', tier: 5, weightClass: 'heavy', baseStats: { defence: 12, health: 8 }, maxDurability: 200 }),
+  it({ id: 'achievement_harpies_boots', name: 'Featherstep Boots', itemType: 'armor', slot: 'boots', tier: 5, weightClass: 'light', baseStats: { speed: 15, evasion: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_undead_gloves', name: "Death Knight's Gauntlets", itemType: 'armor', slot: 'gloves', tier: 5, weightClass: 'heavy', baseStats: { attack: 12, critDamage: 0.1 }, maxDurability: 200 }),
+  it({ id: 'achievement_swampBeasts_belt', name: "Mire Walker's Belt", itemType: 'accessory', slot: 'belt', tier: 5, baseStats: { health: 12, defence: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_witches_helm', name: 'Hexweave Cowl', itemType: 'armor', slot: 'head', tier: 5, weightClass: 'light', baseStats: { magicPower: 12, magicDefence: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_elementals_neck', name: 'Primordial Shard Necklace', itemType: 'accessory', slot: 'neck', tier: 5, baseStats: { magicPower: 8, magicDefence: 8 }, maxDurability: 200 }),
+  it({ id: 'achievement_serpents_ring', name: "Naga Queen's Ring", itemType: 'accessory', slot: 'ring', tier: 5, baseStats: { magicDefence: 12, evasion: 5 }, maxDurability: 200 }),
+  it({ id: 'achievement_abominations_chest', name: 'Fleshknit Vest', itemType: 'armor', slot: 'chest', tier: 5, weightClass: 'light', baseStats: { health: 18, healthRegen: 2 }, maxDurability: 200 }),
+];
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 export function getAllItemTemplates() {
@@ -410,5 +434,6 @@ export function getAllItemTemplates() {
     ...advancedGear,
     ...bossTrophyMaterials,
     ...bossEquipment,
+    ...achievementFamilyItems,
   ];
 }

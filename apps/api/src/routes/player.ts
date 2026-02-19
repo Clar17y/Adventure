@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '@adventure/database';
-import { ATTRIBUTE_TYPES, type AttributeType } from '@adventure/shared';
+import { ATTRIBUTE_TYPES, type AttributeType, ACHIEVEMENTS_BY_ID } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { ensureEquipmentSlots } from '../services/equipmentService';
@@ -37,6 +37,7 @@ playerRouter.get('/', async (req, res, next) => {
         attributePoints: true,
         attributes: true,
         autoPotionThreshold: true,
+        activeTitle: true,
       },
     });
 
@@ -44,11 +45,14 @@ playerRouter.get('/', async (req, res, next) => {
       throw new AppError(404, 'Player not found', 'NOT_FOUND');
     }
 
+    const titleDef = player.activeTitle ? ACHIEVEMENTS_BY_ID.get(player.activeTitle) : null;
+
     res.json({
       player: {
         ...player,
         characterXp: Number(player.characterXp),
         attributes: normalizePlayerAttributes(player.attributes),
+        activeTitle: titleDef?.titleReward ?? null,
       },
     });
   } catch (err) {

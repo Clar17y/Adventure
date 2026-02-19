@@ -25,6 +25,7 @@ import { createSocketServer, getIo } from './socket';
 import { checkAndResolveDueBossRounds } from './services/bossEncounterService';
 import { cleanupFullyHealedMobs } from './services/persistedMobService';
 import { refreshAllLeaderboards } from './services/leaderboardService';
+import { LEADERBOARD_CONSTANTS } from '@adventure/shared';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -129,5 +130,5 @@ server.listen(PORT, () => {
     refreshAllLeaderboards().catch((err) => {
       console.error('Leaderboard refresh error:', err);
     });
-  }, 900_000);
+  }, LEADERBOARD_CONSTANTS.REFRESH_INTERVAL_MS);
 });

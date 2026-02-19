@@ -1,6 +1,7 @@
 import { prisma } from '@adventure/database';
 import { LEADERBOARD_CONSTANTS } from '@adventure/shared';
 import { redis } from '../redis';
+import { AppError } from '../middleware/errorHandler';
 
 // ── Category definitions ────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export async function getLeaderboard(
   aroundMe = false,
 ): Promise<LeaderboardResponse> {
   if (!VALID_SLUGS.has(category)) {
-    throw new Error(`Invalid leaderboard category: ${category}`);
+    throw new AppError(400, `Invalid leaderboard category: ${category}`, 'INVALID_CATEGORY');
   }
 
   const key = `leaderboard:${category}`;
@@ -103,53 +104,57 @@ export async function getLeaderboard(
   let start = 0;
   let stop = PAGE_SIZE - 1;
 
+  // Fetch player rank once (reused for around_me centering and myRank)
+  const myRankIndex = playerId ? await redis.zrevrank(key, playerId) : null;
+
   // If around_me, center the window on the player's rank
-  if (aroundMe && playerId) {
-    const myRankIndex = await redis.zrevrank(key, playerId);
-    if (myRankIndex !== null) {
-      const half = Math.floor(PAGE_SIZE / 2);
-      start = Math.max(0, myRankIndex - half);
-      stop = start + PAGE_SIZE - 1;
-    }
+  if (aroundMe && playerId && myRankIndex !== null) {
+    const half = Math.floor(PAGE_SIZE / 2);
+    start = Math.max(0, myRankIndex - half);
+    stop = start + PAGE_SIZE - 1;
   }
 
   // Fetch entries with scores
   const raw = await redis.zrevrange(key, start, stop, 'WITHSCORES');
-  const entries: LeaderboardEntry[] = [];
 
+  // Extract player IDs and scores from interleaved WITHSCORES response
+  const playerIds: string[] = [];
+  const scores: number[] = [];
   for (let i = 0; i < raw.length; i += 2) {
-    const pid = raw[i];
-    const score = Number(raw[i + 1]);
-    const metaStr = await redis.hget(metaKey, pid);
-    const meta = metaStr ? JSON.parse(metaStr) : { username: 'Unknown', characterLevel: 1, isBot: false };
+    playerIds.push(raw[i]);
+    scores.push(Number(raw[i + 1]));
+  }
 
-    entries.push({
-      rank: start + (i / 2) + 1,
+  // Batch-fetch all metadata in one HMGET call
+  const DEFAULT_META = { username: 'Unknown', characterLevel: 1, isBot: false };
+  const metaValues = playerIds.length > 0 ? await redis.hmget(metaKey, ...playerIds) : [];
+
+  const entries: LeaderboardEntry[] = playerIds.map((pid, idx) => {
+    const meta = metaValues[idx] ? JSON.parse(metaValues[idx]!) : DEFAULT_META;
+    return {
+      rank: start + idx + 1,
       playerId: pid,
       username: meta.username,
       characterLevel: meta.characterLevel,
-      score,
+      score: scores[idx],
       isBot: meta.isBot,
-    });
-  }
+    };
+  });
 
-  // Compute myRank
+  // Compute myRank (reuses myRankIndex from above)
   let myRank: LeaderboardEntry | null = null;
-  if (playerId) {
-    const myRankIndex = await redis.zrevrank(key, playerId);
-    if (myRankIndex !== null) {
-      const myScore = await redis.zscore(key, playerId);
-      const metaStr = await redis.hget(metaKey, playerId);
-      const meta = metaStr ? JSON.parse(metaStr) : { username: 'Unknown', characterLevel: 1, isBot: false };
-      myRank = {
-        rank: myRankIndex + 1,
-        playerId,
-        username: meta.username,
-        characterLevel: meta.characterLevel,
-        score: Number(myScore),
-        isBot: meta.isBot,
-      };
-    }
+  if (playerId && myRankIndex !== null) {
+    const myScore = await redis.zscore(key, playerId);
+    const metaStr = await redis.hget(metaKey, playerId);
+    const meta = metaStr ? JSON.parse(metaStr) : DEFAULT_META;
+    myRank = {
+      rank: myRankIndex + 1,
+      playerId,
+      username: meta.username,
+      characterLevel: meta.characterLevel,
+      score: Number(myScore),
+      isBot: meta.isBot,
+    };
   }
 
   return { category, entries, myRank, totalPlayers, lastRefreshedAt };

@@ -47,6 +47,27 @@ export interface BossRoundSummary {
   raidPoolPercent: number;
 }
 
+export interface BossPlayerReward {
+  loot: Array<{
+    itemTemplateId: string;
+    quantity: number;
+    rarity?: string;
+    itemName?: string;
+  }>;
+  xp?: {
+    skillType: string;
+    rawXp: number;
+    xpAfterEfficiency: number;
+    leveledUp: boolean;
+    newLevel: number;
+  };
+  recipeUnlocked?: {
+    recipeId: string;
+    recipeName: string;
+    soulbound: boolean;
+  };
+}
+
 export interface BossEncounterData {
   id: string;
   eventId: string;
@@ -61,6 +82,7 @@ export interface BossEncounterData {
   status: BossEncounterStatus;
   killedBy: string | null;
   roundSummaries: BossRoundSummary[] | null;
+  rewardsByPlayer: Record<string, BossPlayerReward> | null;
 }
 
 export interface BossParticipantData {

@@ -16,21 +16,26 @@ Turn-based async RPG with real-time turn regeneration. Players explore, fight mo
 
 ## Git Workflow
 
-**All work MUST be done in git worktrees.** Do not work directly in the main clone. Create and use worktrees for all feature branches and fixes.
+**All work MUST be done in git worktrees.** Do not work directly in the main clone. Use the provided scripts to create and tear down worktrees — they handle database isolation, env files, and dependencies automatically.
 
 ```bash
-# Create a worktree with a new branch (-b creates the branch)
-git worktree add -b feature-branch-name .worktrees/adventure-feature-name
+# Create a worktree (creates branch, DB, env files, installs deps, migrates, seeds)
+./scripts/setup-worktree.sh feature-branch-name
 
-# Create a worktree for an existing branch
-git worktree add .worktrees/adventure-feature-name feature-branch-name
+# Create without seeding the database
+./scripts/setup-worktree.sh feature-branch-name --no-seed
 
 # List active worktrees
 git worktree list
 
-# Remove a worktree when done
-git worktree remove .worktrees/adventure-feature-name
+# Remove worktree, drop its database, and delete the branch
+./scripts/teardown-worktree.sh feature-branch-name
+
+# Remove worktree + DB but keep the branch
+./scripts/teardown-worktree.sh feature-branch-name --keep-branch
 ```
+
+Each worktree gets its own PostgreSQL database (`adventure_<branch_name>`), so multiple worktrees with different migrations can run concurrently without conflicts.
 
 ## Project Structure
 

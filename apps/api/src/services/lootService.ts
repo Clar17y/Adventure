@@ -1,13 +1,10 @@
 import { Prisma, prisma } from '@adventure/database';
 import { rollBonusStatsForRarity, rollDropRarity } from '@adventure/game-engine';
 import type { EquipmentSlot, ItemStats, ItemType, LootDrop } from '@adventure/shared';
+import { randomIntInclusive } from '../utils/random';
 import { addStackableItem } from './inventoryService';
 
-function randomIntInclusive(min: number, max: number): number {
-  const lo = Math.ceil(min);
-  const hi = Math.floor(max);
-  return Math.floor(Math.random() * (hi - lo + 1)) + lo;
-}
+export type LootDropWithName = LootDrop & { itemName: string | null };
 
 export async function rollAndGrantLoot(
   playerId: string,
@@ -75,4 +72,39 @@ export async function rollAndGrantLoot(
   }
 
   return drops;
+}
+
+export async function enrichLootWithNames(
+  loot: Array<{
+    itemTemplateId: string;
+    quantity: number;
+    rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+    itemName?: string | null;
+  }>
+): Promise<LootDropWithName[]> {
+  if (loot.length === 0) return [];
+
+  const templateIdsMissingName = Array.from(
+    new Set(
+      loot
+        .filter((drop) => !drop.itemName)
+        .map((drop) => drop.itemTemplateId)
+    )
+  );
+
+  let templateNameById = new Map<string, string>();
+  if (templateIdsMissingName.length > 0) {
+    const templates = await prisma.itemTemplate.findMany({
+      where: { id: { in: templateIdsMissingName } },
+      select: { id: true, name: true },
+    });
+    templateNameById = new Map(templates.map((template) => [template.id, template.name]));
+  }
+
+  return loot.map((drop) => ({
+    itemTemplateId: drop.itemTemplateId,
+    quantity: drop.quantity,
+    rarity: drop.rarity,
+    itemName: drop.itemName ?? templateNameById.get(drop.itemTemplateId) ?? null,
+  }));
 }

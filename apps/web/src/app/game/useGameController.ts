@@ -213,9 +213,15 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     zoneType: string;
     zoneExitChance: number | null;
     maxCraftingLevel: number | null;
+    exploration: {
+      turnsExplored: number;
+      turnsToExplore: number | null;
+      percent: number;
+      tiers: Record<string, number> | null;
+    } | null;
   }>>([]);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
-  const [zoneConnections, setZoneConnections] = useState<Array<{ fromId: string; toId: string }>>([]);
+  const [zoneConnections, setZoneConnections] = useState<Array<{ fromId: string; toId: string; explorationThreshold: number }>>([]);
   const [skills, setSkills] = useState<Array<{ skillType: string; level: number; xp: number; dailyXpGained: number }>>([]);
   const [characterProgression, setCharacterProgression] = useState<CharacterProgression>(DEFAULT_CHARACTER_PROGRESSION);
   const [inventory, setInventory] = useState<Array<{
@@ -364,6 +370,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       maxQuantity: number;
     }>;
     prefixesEncountered: string[];
+    explorationTier: number;
+    tierLocked: boolean;
   }>>([]);
   const [bestiaryLoading, setBestiaryLoading] = useState(false);
   const [bestiaryError, setBestiaryError] = useState<string | null>(null);

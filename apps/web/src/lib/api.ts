@@ -327,6 +327,8 @@ export async function getBestiary() {
         maxQuantity: number;
       }>;
       prefixesEncountered: string[];
+      explorationTier: number;
+      tierLocked: boolean;
     }>;
     prefixSummary: Array<{
       prefix: string;
@@ -424,8 +426,14 @@ export async function getZones() {
       zoneType: string;
       zoneExitChance: number | null;
       maxCraftingLevel: number | null;
+      exploration: {
+        turnsExplored: number;
+        turnsToExplore: number | null;
+        percent: number;
+        tiers: Record<string, number> | null;
+      } | null;
     }>;
-    connections: Array<{ fromId: string; toId: string }>;
+    connections: Array<{ fromId: string; toId: string; explorationThreshold: number }>;
     currentZoneId: string;
   }>('/api/v1/zones');
 }
@@ -499,6 +507,11 @@ export async function startExploration(zoneId: string, turns: number) {
     }>;
     hiddenCaches: Array<{ turnOccurred: number }>;
     zoneExitDiscovered: boolean;
+    explorationProgress: {
+      turnsExplored: number;
+      percent: number;
+      turnsToExplore: number | null;
+    };
   }>('/api/v1/exploration/start', {
     method: 'POST',
     body: JSON.stringify({ zoneId, turns }),
@@ -655,6 +668,11 @@ export interface CombatResponse {
     skillXp: SkillXpGrantResponse | null;
   };
   activeEvents?: Array<{ title: string; effectType: string; effectValue: number }>;
+  explorationProgress?: {
+    turnsExplored: number;
+    percent: number;
+    turnsToExplore: number | null;
+  };
 }
 
 export interface CombatHistoryListItemResponse {
@@ -1274,6 +1292,27 @@ export async function getZoneEvents(zoneId: string) {
 }
 
 // Boss Encounters
+export interface BossPlayerReward {
+  loot: Array<{
+    itemTemplateId: string;
+    quantity: number;
+    rarity?: string;
+    itemName?: string;
+  }>;
+  xp?: {
+    skillType: string;
+    rawXp: number;
+    xpAfterEfficiency: number;
+    leveledUp: boolean;
+    newLevel: number;
+  };
+  recipeUnlocked?: {
+    recipeId: string;
+    recipeName: string;
+    soulbound: boolean;
+  };
+}
+
 export interface BossRoundSummary {
   round: number;
   bossDamage: number;
@@ -1326,6 +1365,7 @@ export interface BossHistoryEntry {
   mobLevel: number;
   zoneName: string;
   killedByUsername: string | null;
+  myRewards?: BossPlayerReward | null;
   playerStats: {
     totalDamage: number;
     totalHealing: number;
@@ -1344,6 +1384,7 @@ export async function getBossEncounter(id: string) {
   return fetchApi<{
     encounter: BossEncounterResponse;
     participants: BossParticipantResponse[];
+    myRewards?: BossPlayerReward | null;
   }>(`/api/v1/boss/${id}`);
 }
 

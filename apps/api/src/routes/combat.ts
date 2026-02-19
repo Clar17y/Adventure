@@ -40,9 +40,8 @@ import {
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 import { getExplorationPercent } from '../services/zoneExplorationService';
-import { incrementStats, incrementFamilyKills, setStatsMax } from '../services/statsService';
-import { checkAchievements } from '../services/achievementService';
-import { getIo } from '../socket';
+import { incrementStats, incrementFamilyKills, setStatsMax, checkBestiaryMobCompleted } from '../services/statsService';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 
 export const combatRouter = Router();
 
@@ -660,24 +659,7 @@ combatRouter.post('/start', async (req, res, next) => {
 
         await incrementStats(playerId, { totalDeaths: 1 });
         const deathAchievements = await checkAchievements(playerId, { statKeys: ['totalDeaths'] });
-        if (deathAchievements.length > 0) {
-          const io = getIo();
-          for (const ach of deathAchievements) {
-            await prisma.activityLog.create({
-              data: {
-                playerId,
-                activityType: 'achievement',
-                turnsSpent: 0,
-                result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue,
-              },
-            });
-            io?.to(playerId).emit('achievement_unlocked', {
-              id: ach.id,
-              title: ach.title,
-              category: ach.category,
-            });
-          }
-        }
+        await emitAchievementNotifications(playerId, deathAchievements);
       } else {
         await setHp(playerId, fleeResult.remainingHp);
       }
@@ -710,6 +692,7 @@ combatRouter.post('/start', async (req, res, next) => {
       update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
     });
 
+    let bestiaryMobJustCompleted = false;
     if (mobPrefix) {
       await prismaAny.playerBestiaryPrefix.upsert({
         where: {
@@ -727,6 +710,9 @@ combatRouter.post('/start', async (req, res, next) => {
         },
         update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
       });
+      if (combatResult.outcome === 'victory') {
+        bestiaryMobJustCompleted = await checkBestiaryMobCompleted(playerId, prefixedMob.id);
+      }
     }
 
     // --- Achievement stat tracking ---
@@ -736,6 +722,13 @@ combatRouter.post('/start', async (req, res, next) => {
       // Check if first kill of this mob (new bestiary entry)
       if (bestiaryEntry && Number(bestiaryEntry.kills) === 1) {
         statsToIncrement.totalUniqueMonsterKills = 1;
+      }
+      // Track recipe learned from encounter site chest
+      if (siteCompletionRewards?.recipeUnlocked) {
+        statsToIncrement.totalRecipesLearned = 1;
+      }
+      if (bestiaryMobJustCompleted) {
+        statsToIncrement.totalBestiaryCompleted = 1;
       }
       await incrementStats(playerId, statsToIncrement);
 
@@ -760,32 +753,15 @@ combatRouter.post('/start', async (req, res, next) => {
 
       // Check achievements
       const achievementKeys = ['totalKills', 'totalUniqueMonsterKills'];
+      if (siteCompletionRewards?.recipeUnlocked) achievementKeys.push('totalRecipesLearned');
+      if (bestiaryMobJustCompleted) achievementKeys.push('totalBestiaryCompleted');
       if (xpGrant?.newLevel) achievementKeys.push('highestSkillLevel');
       if (xpGrant?.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) achievementKeys.push('highestCharacterLevel');
       const newAchievements = await checkAchievements(playerId, {
         statKeys: achievementKeys,
         familyId: mobFamilyIdForAchievement,
       });
-
-      // Emit achievement notifications
-      if (newAchievements.length > 0) {
-        const io = getIo();
-        for (const ach of newAchievements) {
-          await prisma.activityLog.create({
-            data: {
-              playerId,
-              activityType: 'achievement',
-              turnsSpent: 0,
-              result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue,
-            },
-          });
-          io?.to(playerId).emit('achievement_unlocked', {
-            id: ach.id,
-            title: ach.title,
-            category: ach.category,
-          });
-        }
-      }
+      await emitAchievementNotifications(playerId, newAchievements);
     }
 
     const combatLog = await prisma.activityLog.create({

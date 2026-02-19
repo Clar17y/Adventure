@@ -1,4 +1,5 @@
 import { prisma } from '@adventure/database';
+import { getAllMobPrefixes } from '@adventure/shared';
 
 type StatsIncrements = Partial<Record<
   | 'totalKills' | 'totalBossKills' | 'totalBossDamage'
@@ -65,4 +66,17 @@ export async function incrementFamilyKills(playerId: string, mobFamilyId: string
     create: { playerId, mobFamilyId, kills: count },
     update: { kills: { increment: count } },
   });
+}
+
+const TOTAL_PREFIX_COUNT = getAllMobPrefixes().length;
+
+/** Returns true if the player just completed all prefixes for the given mob. */
+export async function checkBestiaryMobCompleted(
+  playerId: string,
+  mobTemplateId: string,
+): Promise<boolean> {
+  const prefixCount = await (prisma as unknown as any).playerBestiaryPrefix.count({
+    where: { playerId, mobTemplateId },
+  });
+  return prefixCount >= TOTAL_PREFIX_COUNT;
 }

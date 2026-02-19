@@ -9,8 +9,7 @@ import { addStackableItemTx } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
 import { incrementStats, setStatsMax } from '../services/statsService';
-import { checkAchievements } from '../services/achievementService';
-import { getIo } from '../socket';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
 import { applyResourceEventModifiers } from '@adventure/game-engine';
 
@@ -363,15 +362,7 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     if (xpGrant.newLevel) gatherAchKeys.push('highestSkillLevel');
     if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) gatherAchKeys.push('highestCharacterLevel');
     const gatherAchievements = await checkAchievements(playerId, { statKeys: gatherAchKeys });
-    if (gatherAchievements.length > 0) {
-      const io = getIo();
-      for (const ach of gatherAchievements) {
-        await prisma.activityLog.create({
-          data: { playerId, activityType: 'achievement', turnsSpent: 0, result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue },
-        });
-        io?.to(playerId).emit('achievement_unlocked', { id: ach.id, title: ach.title, category: ach.category });
-      }
-    }
+    await emitAchievementNotifications(playerId, gatherAchievements);
 
     const log = await prisma.activityLog.create({
       data: {

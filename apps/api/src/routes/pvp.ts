@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { Prisma, prisma } from '@adventure/database';
+import { prisma } from '@adventure/database';
 import { authenticate } from '../middleware/auth';
 import {
   getLadder,
@@ -14,8 +14,7 @@ import {
   markNotificationsRead,
 } from '../services/pvpService';
 import { incrementStats, setStatsMax } from '../services/statsService';
-import { checkAchievements } from '../services/achievementService';
-import { getIo } from '../socket';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 
 export const pvpRouter = Router();
 pvpRouter.use(authenticate);
@@ -111,24 +110,7 @@ pvpRouter.post('/challenge', async (req, res, next) => {
       const pvpAchievements = await checkAchievements(playerId, {
         statKeys: ['totalPvpWins', 'bestPvpWinStreak'],
       });
-      if (pvpAchievements.length > 0) {
-        const io = getIo();
-        for (const ach of pvpAchievements) {
-          await prisma.activityLog.create({
-            data: {
-              playerId,
-              activityType: 'achievement',
-              turnsSpent: 0,
-              result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue,
-            },
-          });
-          io?.to(playerId).emit('achievement_unlocked', {
-            id: ach.id,
-            title: ach.title,
-            category: ach.category,
-          });
-        }
-      }
+      await emitAchievementNotifications(playerId, pvpAchievements);
     }
 
     res.json(result);

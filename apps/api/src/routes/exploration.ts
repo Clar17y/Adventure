@@ -39,11 +39,12 @@ import { getActiveZoneModifiers, spawnWorldEvent } from '../services/worldEventS
 import { createBossEncounter } from '../services/bossEncounterService';
 import { checkAndSpawnEvents } from '../services/eventSchedulerService';
 import { getIo } from '../socket';
+import { emitAchievementNotifications } from '../services/achievementService';
 import { emitSystemMessage } from '../services/systemMessageService';
 import { persistMobHp } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
-import { incrementStats, incrementFamilyKills } from '../services/statsService';
+import { incrementStats, incrementFamilyKills, checkBestiaryMobCompleted } from '../services/statsService';
 import { checkAchievements } from '../services/achievementService';
 
 export const explorationRouter = Router();
@@ -903,7 +904,10 @@ explorationRouter.post('/start', async (req, res, next) => {
     await deductConsumedPotions(playerId, allPotionsConsumed);
 
     const spentTurns = aborted && abortedAtTurn ? abortedAtTurn : body.turns;
+    const explorationBefore = await getExplorationPercent(playerId, body.zoneId);
     await addExplorationTurns(playerId, body.zoneId, spentTurns);
+    const explorationAfter = await getExplorationPercent(playerId, body.zoneId);
+    const zoneJustFullyExplored = explorationBefore.percent < 100 && explorationAfter.percent >= 100;
 
     const refundAmount = aborted && abortedAtTurn ? Math.max(0, body.turns - abortedAtTurn) : 0;
     const refundedTurns = refundAmount > 0 ? await refundPlayerTurns(playerId, refundAmount) : null;
@@ -1034,11 +1038,14 @@ explorationRouter.post('/start', async (req, res, next) => {
     // Track family kills from ambush victories
     const familyKillCounts = new Map<string, number>();
 
+    const prefixedMobTemplateIds = new Set<string>();
     for (const ev of events) {
       if (ev.type === 'ambush_victory') {
         ambushKillCount++;
         const mobTemplateId = (ev.details as Record<string, unknown>)?.mobTemplateId as string | undefined;
+        const mobPrefix = (ev.details as Record<string, unknown>)?.mobPrefix as string | undefined;
         if (mobTemplateId) {
+          if (mobPrefix) prefixedMobTemplateIds.add(mobTemplateId);
           const familyId = mobTemplateToFamilyId.get(mobTemplateId);
           if (familyId) {
             familyKillCounts.set(familyId, (familyKillCounts.get(familyId) ?? 0) + 1);
@@ -1049,8 +1056,16 @@ explorationRouter.post('/start', async (req, res, next) => {
       }
     }
 
+    // Check bestiary completion for mobs with prefix kills this exploration
+    let bestiaryCompletedCount = 0;
+    for (const mtId of prefixedMobTemplateIds) {
+      if (await checkBestiaryMobCompleted(playerId, mtId)) bestiaryCompletedCount++;
+    }
+
     if (ambushKillCount > 0) explorationStatsIncrement.totalKills = ambushKillCount;
     if (zoneExitCount > 0) explorationStatsIncrement.totalZonesDiscovered = zoneExitCount;
+    if (zoneJustFullyExplored) explorationStatsIncrement.totalZonesFullyExplored = 1;
+    if (bestiaryCompletedCount > 0) explorationStatsIncrement.totalBestiaryCompleted = bestiaryCompletedCount;
 
     if (Object.keys(explorationStatsIncrement).length > 0) {
       await incrementStats(playerId, explorationStatsIncrement);
@@ -1064,10 +1079,12 @@ explorationRouter.post('/start', async (req, res, next) => {
     if (explorationStatsIncrement.totalTurnsSpent) explorationAchievementKeys.push('totalTurnsSpent');
     if (ambushKillCount > 0) explorationAchievementKeys.push('totalKills');
     if (zoneExitCount > 0) explorationAchievementKeys.push('totalZonesDiscovered');
+    if (zoneJustFullyExplored) explorationAchievementKeys.push('totalZonesFullyExplored');
+    if (bestiaryCompletedCount > 0) explorationAchievementKeys.push('totalBestiaryCompleted');
 
     if (explorationAchievementKeys.length > 0 || familyKillCounts.size > 0) {
       // Check stat-based achievements
-      const newAchievements: Array<{ id: string; title: string; category: string }> = [];
+      const newAchievements: Awaited<ReturnType<typeof checkAchievements>> = [];
 
       if (explorationAchievementKeys.length > 0) {
         const statAchievements = await checkAchievements(playerId, { statKeys: explorationAchievementKeys });
@@ -1080,24 +1097,7 @@ explorationRouter.post('/start', async (req, res, next) => {
         newAchievements.push(...familyAchievements);
       }
 
-      if (newAchievements.length > 0) {
-        const io = getIo();
-        for (const ach of newAchievements) {
-          await prisma.activityLog.create({
-            data: {
-              playerId,
-              activityType: 'achievement',
-              turnsSpent: 0,
-              result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue,
-            },
-          });
-          io?.to(playerId).emit('achievement_unlocked', {
-            id: ach.id,
-            title: ach.title,
-            category: ach.category,
-          });
-        }
-      }
+      await emitAchievementNotifications(playerId, newAchievements);
     }
 
     if (events.length === 0) {

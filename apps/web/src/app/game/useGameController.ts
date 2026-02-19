@@ -8,6 +8,7 @@ import {
   forgeUpgrade,
   getAchievements,
   getAchievementUnclaimedCount,
+  getActiveTitle,
   claimAchievementReward,
   setActiveTitle,
   getBestiary,
@@ -518,6 +519,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       void loadAll();
       void loadPvpNotificationCount();
       void loadAchievementUnclaimedCount();
+      void getActiveTitle().then((res) => {
+        if (res.data) setActiveTitleState(res.data.activeTitle);
+      });
       const interval = setInterval(() => void loadTurnsAndHp(), 10000);
       // Poll PvP notifications less frequently (60s)
       const pvpInterval = setInterval(() => void loadPvpNotificationCount(), 60000);

@@ -26,8 +26,7 @@ import { AppError } from '../middleware/errorHandler';
 import { getEquipmentStats } from '../services/equipmentService';
 import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { incrementStats, setStatsMax } from '../services/statsService';
-import { checkAchievements } from '../services/achievementService';
-import { getIo } from '../socket';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 import {
   addStackableItemTx,
   consumeItemsByTemplateTx,
@@ -558,15 +557,7 @@ craftingRouter.post('/craft', async (req, res, next) => {
     if (xpGrant.newLevel) craftAchKeys.push('highestSkillLevel');
     if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) craftAchKeys.push('highestCharacterLevel');
     const craftAchievements = await checkAchievements(playerId, { statKeys: craftAchKeys });
-    if (craftAchievements.length > 0) {
-      const io = getIo();
-      for (const ach of craftAchievements) {
-        await prisma.activityLog.create({
-          data: { playerId, activityType: 'achievement', turnsSpent: 0, result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue },
-        });
-        io?.to(playerId).emit('achievement_unlocked', { id: ach.id, title: ach.title, category: ach.category });
-      }
-    }
+    await emitAchievementNotifications(playerId, craftAchievements);
 
     const log = await prisma.activityLog.create({
       data: {
@@ -713,15 +704,7 @@ craftingRouter.post('/forge/upgrade', async (req, res, next) => {
     // --- Achievement stat tracking ---
     await incrementStats(playerId, { totalForgeUpgrades: 1 });
     const forgeAchievements = await checkAchievements(playerId, { statKeys: ['totalForgeUpgrades'] });
-    if (forgeAchievements.length > 0) {
-      const io = getIo();
-      for (const ach of forgeAchievements) {
-        await prisma.activityLog.create({
-          data: { playerId, activityType: 'achievement', turnsSpent: 0, result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue },
-        });
-        io?.to(playerId).emit('achievement_unlocked', { id: ach.id, title: ach.title, category: ach.category });
-      }
-    }
+    await emitAchievementNotifications(playerId, forgeAchievements);
 
     const itemType = isItemType(item.template.itemType) ? item.template.itemType : null;
     if (!itemType) {
@@ -1119,15 +1102,7 @@ craftingRouter.post('/salvage', async (req, res, next) => {
     // --- Achievement stat tracking ---
     await incrementStats(playerId, { totalSalvages: 1 });
     const salvageAchievements = await checkAchievements(playerId, { statKeys: ['totalSalvages'] });
-    if (salvageAchievements.length > 0) {
-      const io = getIo();
-      for (const ach of salvageAchievements) {
-        await prisma.activityLog.create({
-          data: { playerId, activityType: 'achievement', turnsSpent: 0, result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue },
-        });
-        io?.to(playerId).emit('achievement_unlocked', { id: ach.id, title: ach.title, category: ach.category });
-      }
-    }
+    await emitAchievementNotifications(playerId, salvageAchievements);
 
     const log = await prisma.activityLog.create({
       data: {

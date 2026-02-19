@@ -1,4 +1,4 @@
-import { prisma } from '@adventure/database';
+import { Prisma, prisma } from '@adventure/database';
 import {
   ALL_ACHIEVEMENTS,
   ACHIEVEMENTS_BY_STAT_KEY,
@@ -6,6 +6,8 @@ import {
   ACHIEVEMENTS_BY_ID,
 } from '@adventure/shared';
 import type { AchievementDef, PlayerAchievementProgress } from '@adventure/shared';
+import { AppError } from '../middleware/errorHandler';
+import { getIo } from '../socket';
 
 // Maps MobFamily DB name to the family key used in achievement definitions
 const FAMILY_NAME_TO_KEY: Record<string, string> = {
@@ -151,54 +153,57 @@ export async function getPlayerAchievements(playerId: string): Promise<{
 
 export async function claimReward(playerId: string, achievementId: string) {
   const def = ACHIEVEMENTS_BY_ID.get(achievementId);
-  if (!def) throw new Error('Unknown achievement');
+  if (!def) throw new AppError(404, 'Unknown achievement', 'NOT_FOUND');
 
   const playerAch = await prisma.playerAchievement.findUnique({
     where: { playerId_achievementId: { playerId, achievementId } },
   });
 
-  if (!playerAch) throw new Error('Achievement not unlocked');
-  if (playerAch.rewardClaimed) throw new Error('Reward already claimed');
-
-  await prisma.playerAchievement.update({
-    where: { playerId_achievementId: { playerId, achievementId } },
-    data: { rewardClaimed: true },
-  });
+  if (!playerAch) throw new AppError(400, 'Achievement not unlocked', 'NOT_UNLOCKED');
+  if (playerAch.rewardClaimed) throw new AppError(400, 'Reward already claimed', 'ALREADY_CLAIMED');
 
   const rewards = def.rewards ?? [];
-  for (const reward of rewards) {
-    switch (reward.type) {
-      case 'attribute_points':
-        await prisma.player.update({
-          where: { id: playerId },
-          data: { attributePoints: { increment: reward.amount } },
-        });
-        break;
-      case 'turns':
-        await prisma.turnBank.update({
-          where: { playerId },
-          data: { currentTurns: { increment: reward.amount } },
-        });
-        break;
-      case 'item':
-        if (reward.itemTemplateId) {
-          const template = await prisma.itemTemplate.findUnique({
-            where: { id: reward.itemTemplateId },
+
+  await prisma.$transaction(async (tx) => {
+    await tx.playerAchievement.update({
+      where: { playerId_achievementId: { playerId, achievementId } },
+      data: { rewardClaimed: true },
+    });
+
+    for (const reward of rewards) {
+      switch (reward.type) {
+        case 'attribute_points':
+          await tx.player.update({
+            where: { id: playerId },
+            data: { attributePoints: { increment: reward.amount } },
           });
-          if (template) {
-            await prisma.item.create({
-              data: {
-                ownerId: playerId,
-                templateId: reward.itemTemplateId,
-                rarity: 'legendary',
-                quantity: reward.amount,
-              },
+          break;
+        case 'turns':
+          await tx.turnBank.update({
+            where: { playerId },
+            data: { currentTurns: { increment: reward.amount } },
+          });
+          break;
+        case 'item':
+          if (reward.itemTemplateId) {
+            const template = await tx.itemTemplate.findUnique({
+              where: { id: reward.itemTemplateId },
             });
+            if (template) {
+              await tx.item.create({
+                data: {
+                  ownerId: playerId,
+                  templateId: reward.itemTemplateId,
+                  rarity: 'legendary',
+                  quantity: reward.amount,
+                },
+              });
+            }
           }
-        }
-        break;
+          break;
+      }
     }
-  }
+  });
 
   return { success: true, rewards };
 }
@@ -206,12 +211,12 @@ export async function claimReward(playerId: string, achievementId: string) {
 export async function setActiveTitle(playerId: string, achievementId: string | null) {
   if (achievementId) {
     const def = ACHIEVEMENTS_BY_ID.get(achievementId);
-    if (!def?.titleReward) throw new Error('Achievement has no title reward');
+    if (!def?.titleReward) throw new AppError(400, 'Achievement has no title reward', 'NO_TITLE_REWARD');
 
     const playerAch = await prisma.playerAchievement.findUnique({
       where: { playerId_achievementId: { playerId, achievementId } },
     });
-    if (!playerAch) throw new Error('Achievement not unlocked');
+    if (!playerAch) throw new AppError(400, 'Achievement not unlocked', 'NOT_UNLOCKED');
   }
 
   const player = await prisma.player.update({
@@ -233,4 +238,28 @@ export async function getUnclaimedCount(playerId: string): Promise<number> {
     const def = ACHIEVEMENTS_BY_ID.get(u.achievementId);
     return def?.rewards?.length;
   }).length;
+}
+
+/** Log + emit socket notifications for newly unlocked achievements. */
+export async function emitAchievementNotifications(
+  playerId: string,
+  achievements: AchievementDef[],
+): Promise<void> {
+  if (achievements.length === 0) return;
+  const io = getIo();
+  for (const ach of achievements) {
+    await prisma.activityLog.create({
+      data: {
+        playerId,
+        activityType: 'achievement',
+        turnsSpent: 0,
+        result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue,
+      },
+    });
+    io?.to(playerId).emit('achievement_unlocked', {
+      id: ach.id,
+      title: ach.title,
+      category: ach.category,
+    });
+  }
 }

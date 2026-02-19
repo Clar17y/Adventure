@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '@adventure/database';
 import { authenticate } from '../middleware/auth';
 import {
@@ -7,6 +8,10 @@ import {
   setActiveTitle,
   getUnclaimedCount,
 } from '../services/achievementService';
+
+const setTitleSchema = z.object({
+  achievementId: z.string().nullable().optional(),
+});
 
 export const achievementsRouter = Router();
 achievementsRouter.use(authenticate);
@@ -63,7 +68,7 @@ achievementsRouter.get('/title', async (req, res, next) => {
 achievementsRouter.put('/title', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
-    const { achievementId } = req.body;
+    const { achievementId } = setTitleSchema.parse(req.body);
     const result = await setActiveTitle(playerId, achievementId ?? null);
     res.json(result);
   } catch (err) {

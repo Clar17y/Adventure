@@ -5,7 +5,7 @@ import { rollAndGrantLoot, enrichLootWithNames } from './lootService';
 import { addStackableItem } from './inventoryService';
 import { grantSkillXp } from './xpService';
 import { incrementStats, incrementFamilyKills } from './statsService';
-import { checkAchievements } from './achievementService';
+import { checkAchievements, emitAchievementNotifications } from './achievementService';
 
 export interface BossContributor {
   playerId: string;
@@ -151,18 +151,22 @@ export async function distributeBossLoot(
     }
 
     // --- Achievement stat tracking ---
-    await incrementStats(contributor.playerId, {
+    const bossStats: Record<string, number> = {
       totalBossKills: 1,
       totalBossDamage: contributor.totalDamage,
-    });
+    };
+    if (recipeUnlocked) bossStats.totalRecipesLearned = 1;
+    await incrementStats(contributor.playerId, bossStats);
     if (mobFamilyId) {
       await incrementFamilyKills(contributor.playerId, mobFamilyId);
     }
+    const bossAchKeys = ['totalBossKills'];
+    if (recipeUnlocked) bossAchKeys.push('totalRecipesLearned');
     const bossAchievements = await checkAchievements(contributor.playerId, {
-      statKeys: ['totalBossKills'],
+      statKeys: bossAchKeys,
       familyId: mobFamilyId || undefined,
     });
-    // Note: We don't emit socket events from services - the caller handles notifications
+    await emitAchievementNotifications(contributor.playerId, bossAchievements);
 
     result[contributor.playerId] = {
       loot: lootReward,

@@ -498,6 +498,16 @@ const GENERAL_ACHIEVEMENTS: AchievementDef[] = [
     threshold: 1,
     secret: true,
   },
+  {
+    id: 'secret_legendary_crit',
+    category: 'crafting',
+    title: 'Golden Hands',
+    description: 'Craft a legendary item through a critical success',
+    titleReward: 'Golden Hands',
+    statKey: 'totalLegendariesCrafted',
+    threshold: 1,
+    secret: true,
+  },
 ];
 
 // --- Family achievements (generated for all 19 families) ---

@@ -173,6 +173,44 @@ function getNextEncounterMob(mobs: EncounterMobState[]): EncounterMobState | nul
   return alive[0] ?? null;
 }
 
+function getNextEncounterMobInRoom(mobs: EncounterMobState[], roomNumber: number): EncounterMobState | null {
+  const alive = mobs.filter((mob) => mob.status === 'alive' && mob.room === roomNumber);
+  if (alive.length === 0) return null;
+  alive.sort((a, b) => {
+    const roleDiff = roleOrder(a.role) - roleOrder(b.role);
+    if (roleDiff !== 0) return roleDiff;
+    return a.slot - b.slot;
+  });
+  return alive[0] ?? null;
+}
+
+function getRoomState(mobs: EncounterMobState[], roomNumber: number): {
+  total: number;
+  alive: number;
+  defeated: number;
+} {
+  const roomMobs = mobs.filter(m => m.room === roomNumber);
+  let alive = 0, defeated = 0;
+  for (const m of roomMobs) {
+    if (m.status === 'alive') alive++;
+    if (m.status === 'defeated') defeated++;
+  }
+  return { total: roomMobs.length, alive, defeated };
+}
+
+function getMaxRoom(mobs: EncounterMobState[]): number {
+  return Math.max(...mobs.map(m => m.room), 1);
+}
+
+function getNextUnfinishedRoom(mobs: EncounterMobState[], startRoom: number): number | null {
+  const maxRoom = getMaxRoom(mobs);
+  for (let r = startRoom; r <= maxRoom; r++) {
+    const state = getRoomState(mobs, r);
+    if (state.alive > 0) return r;
+  }
+  return null;
+}
+
 function applyEncounterSiteDecayInMemory(mobs: EncounterMobState[], discoveredAt: Date, now: Date): {
   mobs: EncounterMobState[];
   changed: boolean;
@@ -488,6 +526,11 @@ combatRouter.post('/start', async (req, res, next) => {
     let consumedEncounterMobSlot = null as null | number;
     let encounterSiteCleared = false;
     let siteCompletionRewards = null as null | Awaited<ReturnType<typeof grantEncounterSiteChestRewardsTx>>;
+    let siteStrategy = null as null | string;
+    let siteCurrentRoom = 1;
+    let siteFullClearActive = true;
+    let roomCarryHpOverride = null as null | number;
+    let roomCleared = false;
 
     if (body.encounterSiteId) {
       const site = await prismaAny.encounterSite.findFirst({
@@ -501,21 +544,38 @@ combatRouter.post('/start', async (req, res, next) => {
         throw new AppError(404, 'Encounter site not found', 'NOT_FOUND');
       }
 
+      if (!site.clearStrategy) {
+        throw new AppError(400, 'Select a clearing strategy before fighting', 'STRATEGY_NOT_SET');
+      }
+
       const decayed = await applyEncounterSiteDecayAndPersist({
         id: site.id,
         playerId: site.playerId,
         discoveredAt: site.discoveredAt,
         mobs: site.mobs,
       }, new Date());
-      if (!decayed || !decayed.nextMob) {
+      if (!decayed) {
         throw new AppError(410, 'Encounter site has decayed', 'SITE_DECAYED');
       }
 
+      const currentRoom = site.currentRoom ?? 1;
+      const nextMob = getNextEncounterMobInRoom(decayed.mobs, currentRoom);
+      if (!nextMob) {
+        throw new AppError(400, 'No mobs remaining in current room', 'ROOM_EMPTY');
+      }
+
       consumedEncounterSiteId = site.id;
-      consumedEncounterMobSlot = decayed.nextMob.slot;
+      consumedEncounterMobSlot = nextMob.slot;
       zoneId = site.zoneId;
-      mobTemplateId = decayed.nextMob.mobTemplateId;
-      mobPrefix = decayed.nextMob.prefix ?? null;
+      mobTemplateId = nextMob.mobTemplateId;
+      mobPrefix = nextMob.prefix ?? null;
+
+      siteStrategy = site.clearStrategy;
+      siteCurrentRoom = currentRoom;
+      siteFullClearActive = site.fullClearActive ?? true;
+      if (site.roomCarryHp !== null && site.roomCarryHp !== undefined) {
+        roomCarryHpOverride = site.roomCarryHp;
+      }
     }
 
     if (!zoneId) {
@@ -606,6 +666,12 @@ combatRouter.post('/start', async (req, res, next) => {
       equipmentStats
     );
 
+    // Apply room carry HP override for encounter site room chains
+    if (roomCarryHpOverride !== null) {
+      await setHp(playerId, roomCarryHpOverride);
+      playerStats.hp = roomCarryHpOverride;
+    }
+
     const baseMob: MobTemplate = {
       ...mob,
       spellPattern: Array.isArray(mob.spellPattern) ? (mob.spellPattern as MobTemplate['spellPattern']) : [],
@@ -682,8 +748,41 @@ combatRouter.post('/start', async (req, res, next) => {
         }
 
         target.status = 'defeated';
-        const counts = countEncounterSiteState(mobs);
-        if (counts.alive <= 0) {
+
+        // Room-aware post-combat logic
+        const roomState = getRoomState(mobs, siteCurrentRoom);
+        let newCurrentRoom = siteCurrentRoom;
+        let newRoomCarryHp: number | null = combatResult.combatantAHpRemaining;
+        let siteCleared = false;
+
+        if (roomState.alive <= 0) {
+          // Room is cleared
+          roomCleared = true;
+
+          if (siteStrategy === 'full_clear' && siteFullClearActive) {
+            // Full clear: auto-advance to next room
+            const nextRoom = getNextUnfinishedRoom(mobs, siteCurrentRoom + 1);
+            if (nextRoom) {
+              newCurrentRoom = nextRoom;
+              // HP carries to next room
+            } else {
+              siteCleared = true;
+            }
+          } else {
+            // Room by room: check if all rooms are done
+            const overallCounts = countEncounterSiteState(mobs);
+            if (overallCounts.alive <= 0) {
+              siteCleared = true;
+            } else {
+              const nextRoom = getNextUnfinishedRoom(mobs, siteCurrentRoom + 1);
+              if (nextRoom) newCurrentRoom = nextRoom;
+              newRoomCarryHp = null; // Player can heal between rooms
+            }
+          }
+        }
+        // else: Room not cleared yet, HP carries to next mob in room
+
+        if (siteCleared) {
           siteCompletionRewards = await grantEncounterSiteChestRewardsTx(tx, {
             playerId,
             mobFamilyId: site.mobFamilyId,
@@ -694,7 +793,11 @@ combatRouter.post('/start', async (req, res, next) => {
         } else {
           await txAny.encounterSite.update({
             where: { id: consumedEncounterSiteId },
-            data: { mobs: serializeEncounterSiteMobs(mobs) },
+            data: {
+              mobs: serializeEncounterSiteMobs(mobs),
+              currentRoom: newCurrentRoom,
+              roomCarryHp: newRoomCarryHp,
+            },
           });
         }
       }
@@ -732,6 +835,43 @@ combatRouter.post('/start', async (req, res, next) => {
         respawnedTo = await respawnToHomeTown(playerId);
       } else {
         await setHp(playerId, fleeResult.remainingHp);
+      }
+    }
+
+    // Handle defeat in room context: reset room or downgrade strategy
+    if (combatResult.outcome === 'defeat' && consumedEncounterSiteId) {
+      const siteForReset = await prismaAny.encounterSite.findFirst({
+        where: { id: consumedEncounterSiteId, playerId },
+      });
+
+      if (siteForReset) {
+        const siteMobs = parseEncounterSiteMobs(siteForReset.mobs);
+
+        if (siteStrategy === 'full_clear' && siteFullClearActive) {
+          // Full clear failed: downgrade to room_by_room, keep kill progress
+          await prismaAny.encounterSite.update({
+            where: { id: consumedEncounterSiteId },
+            data: {
+              clearStrategy: 'room_by_room',
+              fullClearActive: false,
+              roomCarryHp: null,
+            },
+          });
+        } else {
+          // Room by room: reset current room's mobs to alive
+          const resetMobs = siteMobs.map(m =>
+            m.room === siteCurrentRoom && m.status === 'defeated'
+              ? { ...m, status: 'alive' as const }
+              : m
+          );
+          await prismaAny.encounterSite.update({
+            where: { id: consumedEncounterSiteId },
+            data: {
+              mobs: serializeEncounterSiteMobs(resetMobs),
+              roomCarryHp: null,
+            },
+          });
+        }
       }
     }
 
@@ -854,6 +994,12 @@ combatRouter.post('/start', async (req, res, next) => {
             }
           : null,
         ...(respawnedTo ? { respawnedTo } : {}),
+        room: consumedEncounterSiteId ? {
+          currentRoom: siteCurrentRoom,
+          roomCleared,
+          siteStrategy,
+          fullClearActive: siteFullClearActive,
+        } : undefined,
       },
       rewards: {
         xp: xpAwarded,

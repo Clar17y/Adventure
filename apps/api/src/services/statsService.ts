@@ -46,7 +46,7 @@ export async function setStatsMax(playerId: string, maxValues: StatsMaxValues) {
   const updateData: Record<string, number> = {};
 
   for (const [key, value] of Object.entries(maxValues)) {
-    if (value != null && value > (stats as Record<string, number>)[key]) {
+    if (value != null && value > (stats as unknown as Record<string, number>)[key]) {
       updateData[key] = value;
     }
   }

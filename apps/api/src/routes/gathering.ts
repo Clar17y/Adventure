@@ -8,6 +8,9 @@ import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { addStackableItemTx } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
+import { incrementStats, setStatsMax } from '../services/statsService';
+import { checkAchievements } from '../services/achievementService';
+import { getIo } from '../socket';
 import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
 import { applyResourceEventModifiers } from '@adventure/game-engine';
 
@@ -345,6 +348,30 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     // XP: 5 XP per action
     const rawXp = actions * 5;
     const xpGrant = await grantSkillXp(playerId, skillRequired, rawXp);
+
+    // --- Achievement stat tracking ---
+    await incrementStats(playerId, {
+      totalGatheringActions: actions,
+      totalTurnsSpent: turnsSpent,
+    });
+    if (xpGrant.newLevel) await setStatsMax(playerId, { highestSkillLevel: xpGrant.newLevel });
+    if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) {
+      await setStatsMax(playerId, { highestCharacterLevel: xpGrant.characterLevelAfter });
+    }
+
+    const gatherAchKeys = ['totalGatheringActions'];
+    if (xpGrant.newLevel) gatherAchKeys.push('highestSkillLevel');
+    if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) gatherAchKeys.push('highestCharacterLevel');
+    const gatherAchievements = await checkAchievements(playerId, { statKeys: gatherAchKeys });
+    if (gatherAchievements.length > 0) {
+      const io = getIo();
+      for (const ach of gatherAchievements) {
+        await prisma.activityLog.create({
+          data: { playerId, activityType: 'achievement', turnsSpent: 0, result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue },
+        });
+        io?.to(playerId).emit('achievement_unlocked', { id: ach.id, title: ach.title, category: ach.category });
+      }
+    }
 
     const log = await prisma.activityLog.create({
       data: {

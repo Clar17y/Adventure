@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma, prisma } from '@adventure/database';
 import { authenticate } from '../middleware/auth';
 import {
   getLadder,
@@ -12,6 +13,9 @@ import {
   getNotifications,
   markNotificationsRead,
 } from '../services/pvpService';
+import { incrementStats, setStatsMax } from '../services/statsService';
+import { checkAchievements } from '../services/achievementService';
+import { getIo } from '../socket';
 
 export const pvpRouter = Router();
 pvpRouter.use(authenticate);
@@ -96,6 +100,37 @@ pvpRouter.post('/challenge', async (req, res, next) => {
     const playerId = req.player!.playerId;
     const body = challengeSchema.parse(req.body);
     const result = await challenge(playerId, req.player!.username, body.targetId);
+
+    // --- Achievement stat tracking ---
+    if (result.winnerId === playerId) {
+      await incrementStats(playerId, { totalPvpWins: 1 });
+      const pvpRating = await prisma.pvpRating.findUnique({ where: { playerId } });
+      if (pvpRating) {
+        await setStatsMax(playerId, { bestPvpWinStreak: pvpRating.winStreak });
+      }
+      const pvpAchievements = await checkAchievements(playerId, {
+        statKeys: ['totalPvpWins', 'bestPvpWinStreak'],
+      });
+      if (pvpAchievements.length > 0) {
+        const io = getIo();
+        for (const ach of pvpAchievements) {
+          await prisma.activityLog.create({
+            data: {
+              playerId,
+              activityType: 'achievement',
+              turnsSpent: 0,
+              result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue,
+            },
+          });
+          io?.to(playerId).emit('achievement_unlocked', {
+            id: ach.id,
+            title: ach.title,
+            category: ach.category,
+          });
+        }
+      }
+    }
+
     res.json(result);
   } catch (err) {
     next(err);

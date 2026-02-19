@@ -4,6 +4,8 @@ import { randomIntInclusive } from '../utils/random';
 import { rollAndGrantLoot, enrichLootWithNames } from './lootService';
 import { addStackableItem } from './inventoryService';
 import { grantSkillXp } from './xpService';
+import { incrementStats, incrementFamilyKills } from './statsService';
+import { checkAchievements } from './achievementService';
 
 export interface BossContributor {
   playerId: string;
@@ -147,6 +149,20 @@ export async function distributeBossLoot(
     if (mobFamilyId && Math.random() < WORLD_EVENT_CONSTANTS.BOSS_RECIPE_DROP_CHANCE) {
       recipeUnlocked = await rollBossRecipeDrop(contributor.playerId, mobFamilyId);
     }
+
+    // --- Achievement stat tracking ---
+    await incrementStats(contributor.playerId, {
+      totalBossKills: 1,
+      totalBossDamage: contributor.totalDamage,
+    });
+    if (mobFamilyId) {
+      await incrementFamilyKills(contributor.playerId, mobFamilyId);
+    }
+    const bossAchievements = await checkAchievements(contributor.playerId, {
+      statKeys: ['totalBossKills'],
+      familyId: mobFamilyId || undefined,
+    });
+    // Note: We don't emit socket events from services - the caller handles notifications
 
     result[contributor.playerId] = {
       loot: lootReward,

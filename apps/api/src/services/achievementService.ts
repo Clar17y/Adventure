@@ -67,7 +67,7 @@ export async function checkAchievements(
 
     let progress = 0;
     if (achievement.statKey) {
-      progress = (stats as Record<string, number>)[achievement.statKey] ?? 0;
+      progress = (stats as unknown as Record<string, number>)[achievement.statKey] ?? 0;
     } else if (achievement.familyKey && options.familyId) {
       progress = familyKillMap.get(options.familyId) ?? 0;
     }
@@ -120,7 +120,7 @@ export async function getPlayerAchievements(playerId: string): Promise<{
 
     let progress = 0;
     if (def.statKey && stats) {
-      progress = (stats as Record<string, number>)[def.statKey] ?? 0;
+      progress = (stats as unknown as Record<string, number>)[def.statKey] ?? 0;
     } else if (def.familyKey) {
       progress = familyKillsByKey.get(def.familyKey) ?? 0;
     }

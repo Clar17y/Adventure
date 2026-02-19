@@ -43,6 +43,8 @@ import { emitSystemMessage } from '../services/systemMessageService';
 import { persistMobHp } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
+import { incrementStats, incrementFamilyKills } from '../services/statsService';
+import { checkAchievements } from '../services/achievementService';
 
 export const explorationRouter = Router();
 
@@ -1014,6 +1016,89 @@ explorationRouter.post('/start', async (req, res, next) => {
         encounterSites: createdEncounterSites,
       };
     });
+
+    // --- Achievement stat tracking ---
+    const explorationStatsIncrement: Record<string, number> = {};
+    if (spentTurns > 0) explorationStatsIncrement.totalTurnsSpent = spentTurns;
+
+    // Count kills and zone discoveries from events
+    let ambushKillCount = 0;
+    let zoneExitCount = 0;
+    // Build mob template → family ID lookup from pre-fetched zone families
+    const mobTemplateToFamilyId = new Map<string, string>();
+    for (const zf of zoneFamilies) {
+      for (const member of zf.mobFamily.members) {
+        mobTemplateToFamilyId.set(member.mobTemplate.id, zf.mobFamilyId);
+      }
+    }
+    // Track family kills from ambush victories
+    const familyKillCounts = new Map<string, number>();
+
+    for (const ev of events) {
+      if (ev.type === 'ambush_victory') {
+        ambushKillCount++;
+        const mobTemplateId = (ev.details as Record<string, unknown>)?.mobTemplateId as string | undefined;
+        if (mobTemplateId) {
+          const familyId = mobTemplateToFamilyId.get(mobTemplateId);
+          if (familyId) {
+            familyKillCounts.set(familyId, (familyKillCounts.get(familyId) ?? 0) + 1);
+          }
+        }
+      } else if (ev.type === 'zone_exit') {
+        zoneExitCount++;
+      }
+    }
+
+    if (ambushKillCount > 0) explorationStatsIncrement.totalKills = ambushKillCount;
+    if (zoneExitCount > 0) explorationStatsIncrement.totalZonesDiscovered = zoneExitCount;
+
+    if (Object.keys(explorationStatsIncrement).length > 0) {
+      await incrementStats(playerId, explorationStatsIncrement);
+    }
+
+    for (const [familyId, count] of familyKillCounts) {
+      await incrementFamilyKills(playerId, familyId, count);
+    }
+
+    const explorationAchievementKeys: string[] = [];
+    if (explorationStatsIncrement.totalTurnsSpent) explorationAchievementKeys.push('totalTurnsSpent');
+    if (ambushKillCount > 0) explorationAchievementKeys.push('totalKills');
+    if (zoneExitCount > 0) explorationAchievementKeys.push('totalZonesDiscovered');
+
+    if (explorationAchievementKeys.length > 0 || familyKillCounts.size > 0) {
+      // Check stat-based achievements
+      const newAchievements: Array<{ id: string; title: string; category: string }> = [];
+
+      if (explorationAchievementKeys.length > 0) {
+        const statAchievements = await checkAchievements(playerId, { statKeys: explorationAchievementKeys });
+        newAchievements.push(...statAchievements);
+      }
+
+      // Check family-based achievements
+      for (const [familyId] of familyKillCounts) {
+        const familyAchievements = await checkAchievements(playerId, { familyId });
+        newAchievements.push(...familyAchievements);
+      }
+
+      if (newAchievements.length > 0) {
+        const io = getIo();
+        for (const ach of newAchievements) {
+          await prisma.activityLog.create({
+            data: {
+              playerId,
+              activityType: 'achievement',
+              turnsSpent: 0,
+              result: { achievementId: ach.id, title: ach.title } as unknown as Prisma.InputJsonValue,
+            },
+          });
+          io?.to(playerId).emit('achievement_unlocked', {
+            id: ach.id,
+            title: ach.title,
+            category: ach.category,
+          });
+        }
+      }
+    }
 
     if (events.length === 0) {
       events.push({

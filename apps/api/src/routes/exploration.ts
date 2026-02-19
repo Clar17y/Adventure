@@ -11,6 +11,7 @@ import {
   mobToCombatantStats,
   rollMobPrefix,
   runCombat,
+  generateRoomAssignments,
   selectTierWithBleedthrough,
   simulateExploration,
   validateExplorationTurns,
@@ -79,6 +80,7 @@ interface EncounterMobSlot {
   role: EncounterMobRole;
   prefix: string | null;
   status: EncounterMobStatus;
+  room: number;
 }
 
 interface NarrativeEvent {
@@ -271,62 +273,51 @@ function buildEncounterSiteMobs(
     return pickFamilyMemberByRole(zoneMembers, role, fallbackRoles);
   }
 
-  const { min, max } = getEncounterRange(size);
-  const total = randomIntInclusive(min, max);
+  const { rooms, totalMobs } = generateRoomAssignments(size);
 
+  // Role composition based on total mobs and site size
   let bossCount = 0;
   let eliteCount = 0;
-  if (size === 'medium') {
-    eliteCount = 1;
-  } else if (size === 'large') {
-    bossCount = 1;
-    eliteCount = 2;
-  }
+  if (size === 'medium') eliteCount = 1;
+  else if (size === 'large') { bossCount = 1; eliteCount = 2; }
 
-  let trashCount = Math.max(0, total - eliteCount - bossCount);
-  if (size === 'small' && trashCount < 2) {
-    trashCount = Math.max(2, total);
-  }
+  const trashCount = Math.max(0, totalMobs - eliteCount - bossCount);
 
+  // Build role queue
+  const roleQueue: EncounterMobRole[] = [
+    ...Array(trashCount).fill('trash' as const),
+    ...Array(eliteCount).fill('elite' as const),
+    ...Array(bossCount).fill('boss' as const),
+  ];
+
+  // Assign mobs to rooms sequentially
   const mobs: EncounterMobSlot[] = [];
   let slot = 0;
+  let roleIndex = 0;
 
-  for (let i = 0; i < trashCount; i++) {
-    const member = pickMemberWithBleedthrough('trash', ['elite', 'boss']);
-    if (!member) continue;
-    mobs.push({
-      slot: slot++,
-      mobTemplateId: member.mobTemplate.id,
-      role: 'trash',
-      prefix: rollMobPrefix(),
-      status: 'alive',
-    });
+  for (const room of rooms) {
+    for (let i = 0; i < room.mobCount && roleIndex < roleQueue.length; i++) {
+      const role = roleQueue[roleIndex]!;
+      const fallbacks: EncounterMobRole[] = role === 'trash'
+        ? ['elite', 'boss'] : role === 'elite'
+        ? ['trash', 'boss'] : ['elite', 'trash'];
+
+      const member = pickMemberWithBleedthrough(role, fallbacks);
+      if (!member) { roleIndex++; continue; }
+
+      mobs.push({
+        slot: slot++,
+        mobTemplateId: member.mobTemplate.id,
+        role,
+        prefix: rollMobPrefix(),
+        status: 'alive',
+        room: room.roomNumber,
+      });
+      roleIndex++;
+    }
   }
 
-  for (let i = 0; i < eliteCount; i++) {
-    const member = pickMemberWithBleedthrough('elite', ['trash', 'boss']);
-    if (!member) continue;
-    mobs.push({
-      slot: slot++,
-      mobTemplateId: member.mobTemplate.id,
-      role: 'elite',
-      prefix: rollMobPrefix(),
-      status: 'alive',
-    });
-  }
-
-  for (let i = 0; i < bossCount; i++) {
-    const member = pickMemberWithBleedthrough('boss', ['elite', 'trash']);
-    if (!member) continue;
-    mobs.push({
-      slot: slot++,
-      mobTemplateId: member.mobTemplate.id,
-      role: 'boss',
-      prefix: rollMobPrefix(),
-      status: 'alive',
-    });
-  }
-
+  // Fallback: if no mobs were generated
   if (mobs.length === 0 && zoneMembers.length > 0) {
     const member = zoneMembers[0]!;
     mobs.push({
@@ -335,6 +326,7 @@ function buildEncounterSiteMobs(
       role: 'trash',
       prefix: rollMobPrefix(),
       status: 'alive',
+      room: 1,
     });
   }
 

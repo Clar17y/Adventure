@@ -102,6 +102,7 @@ interface EncounterMobState {
   role: EncounterMobRole;
   prefix: string | null;
   status: EncounterMobStatus;
+  room: number;
 }
 
 function parseEncounterSiteMobs(raw: unknown): EncounterMobState[] {
@@ -118,6 +119,7 @@ function parseEncounterSiteMobs(raw: unknown): EncounterMobState[] {
     const role = row.role === 'trash' || row.role === 'elite' || row.role === 'boss' ? row.role : null;
     const status = row.status === 'alive' || row.status === 'defeated' || row.status === 'decayed' ? row.status : null;
     const prefix = typeof row.prefix === 'string' ? row.prefix : null;
+    const room = typeof row.room === 'number' ? Math.floor(row.room) : 1;
     if (slot === null || !mobTemplateId || !role || !status) continue;
 
     parsed.push({
@@ -126,6 +128,7 @@ function parseEncounterSiteMobs(raw: unknown): EncounterMobState[] {
       role,
       prefix,
       status,
+      room,
     });
   }
 

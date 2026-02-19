@@ -54,7 +54,8 @@ export type Screen =
   | 'rest'
   | 'arena'
   | 'worldEvents'
-  | 'achievements';
+  | 'achievements'
+  | 'leaderboard';
 
 export interface PendingEncounter {
   encounterSiteId: string;
@@ -725,7 +726,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }, []);
 
   const getActiveTab = () => {
-    if (['home', 'skills', 'zones', 'bestiary', 'rest', 'worldEvents', 'achievements'].includes(activeScreen)) return 'home';
+    if (['home', 'skills', 'zones', 'bestiary', 'rest', 'worldEvents', 'achievements', 'leaderboard'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
     if (['combat', 'arena'].includes(activeScreen)) return 'combat';

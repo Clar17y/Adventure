@@ -20,10 +20,13 @@ import { pvpRouter } from './routes/pvp';
 import { worldEventsRouter } from './routes/worldEvents';
 import { bossRouter } from './routes/boss';
 import { achievementsRouter } from './routes/achievements';
+import { leaderboardRouter } from './routes/leaderboard';
 import { errorHandler } from './middleware/errorHandler';
 import { createSocketServer, getIo } from './socket';
 import { checkAndResolveDueBossRounds } from './services/bossEncounterService';
 import { cleanupFullyHealedMobs } from './services/persistedMobService';
+import { refreshAllLeaderboards } from './services/leaderboardService';
+import { LEADERBOARD_CONSTANTS } from '@adventure/shared';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -96,6 +99,7 @@ app.use('/api/v1/pvp', pvpRouter);
 app.use('/api/v1/events', worldEventsRouter);
 app.use('/api/v1/boss', bossRouter);
 app.use('/api/v1/achievements', achievementsRouter);
+app.use('/api/v1/leaderboard', leaderboardRouter);
 
 // Error handler
 app.use(errorHandler);
@@ -119,4 +123,14 @@ server.listen(PORT, () => {
       console.error('Persisted mob cleanup error:', err);
     });
   }, 300_000);
+
+  // Leaderboard refresh (every 15 minutes)
+  refreshAllLeaderboards().catch((err) => {
+    console.error('Initial leaderboard refresh error:', err);
+  });
+  setInterval(() => {
+    refreshAllLeaderboards().catch((err) => {
+      console.error('Leaderboard refresh error:', err);
+    });
+  }, LEADERBOARD_CONSTANTS.REFRESH_INTERVAL_MS);
 });

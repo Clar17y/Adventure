@@ -20,6 +20,7 @@ import { Rest } from '@/components/screens/Rest';
 import { WorldEvents } from '@/components/screens/WorldEvents';
 import { Achievements } from '@/components/screens/Achievements';
 import { AchievementToast } from '@/components/AchievementToast';
+import { Leaderboard } from '@/components/screens/Leaderboard';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
@@ -822,6 +823,8 @@ export default function GamePage() {
             onSetTitle={handleSetActiveTitle}
           />
         );
+      case 'leaderboard':
+        return <Leaderboard playerId={player?.id ?? null} />;
       default:
         return null;
     }
@@ -851,6 +854,7 @@ export default function GamePage() {
               { id: 'bestiary', label: 'Bestiary', badge: 0 },
               { id: 'worldEvents', label: 'Events', badge: 0 },
               { id: 'achievements', label: 'Achievements', badge: achievementUnclaimedCount },
+              { id: 'leaderboard', label: 'Rankings', badge: 0 },
             ].map((tab) => (
               <button
                 key={tab.id}

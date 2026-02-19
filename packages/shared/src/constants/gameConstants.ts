@@ -470,3 +470,13 @@ export const ZONE_EXPLORATION_CONSTANTS = {
   DEFAULT_TIERS: { '1': 0, '2': 25, '3': 50, '4': 75 } as Record<string, number>,
   NEWEST_TIER_WEIGHT_MULTIPLIER: 2,
 } as const;
+
+// =============================================================================
+// LEADERBOARD
+// =============================================================================
+
+export const LEADERBOARD_CONSTANTS = {
+  REFRESH_INTERVAL_MS: 900_000,
+  PAGE_SIZE: 25,
+  TOP_N: 25,
+} as const;

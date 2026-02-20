@@ -401,6 +401,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [pvpNotificationCount, setPvpNotificationCount] = useState(0);
   const [activeEvents, setActiveEvents] = useState<WorldEventResponse[]>([]);
   const [autoPotionThreshold, setAutoPotionThreshold] = useState(0);
+  const [combatLogSpeedMs, setCombatLogSpeedMs] = useState(800);
+  const [explorationSpeedMs, setExplorationSpeedMs] = useState(800);
+  const [autoSkipKnownCombat, setAutoSkipKnownCombat] = useState(false);
+  const [defaultExploreTurns, setDefaultExploreTurns] = useState(100);
+  const [quickRestHealPercent, setQuickRestHealPercent] = useState(100);
+  const [defaultRefiningMax, setDefaultRefiningMax] = useState(false);
   const [achievementData, setAchievementData] = useState<AchievementsResponse | null>(null);
   const [achievementUnclaimedCount, setAchievementUnclaimedCount] = useState(0);
   const [activeTitle, setActiveTitleState] = useState<string | null>(null);
@@ -487,6 +493,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         attributes: playerRes.data.player.attributes,
       });
       setAutoPotionThreshold(playerRes.data.player.autoPotionThreshold ?? 0);
+      setCombatLogSpeedMs(playerRes.data.player.combatLogSpeedMs ?? 800);
+      setExplorationSpeedMs(playerRes.data.player.explorationSpeedMs ?? 800);
+      setAutoSkipKnownCombat(playerRes.data.player.autoSkipKnownCombat ?? false);
+      setDefaultExploreTurns(playerRes.data.player.defaultExploreTurns ?? 100);
+      setQuickRestHealPercent(playerRes.data.player.quickRestHealPercent ?? 100);
+      setDefaultRefiningMax(playerRes.data.player.defaultRefiningMax ?? false);
     }
     if (skillsRes.data) setSkills(skillsRes.data.skills);
     if (hpRes.data) setHpState(hpRes.data);
@@ -1536,12 +1548,26 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     });
   };
 
-  const handleSetAutoPotionThreshold = async (value: number) => {
-    const prev = autoPotionThreshold;
-    setAutoPotionThreshold(value);
-    const res = await updatePlayerSettings({ autoPotionThreshold: value });
-    if (!res.data) setAutoPotionThreshold(prev);
+  const handleSetSetting = async <T>(key: string, value: T, setter: (v: T) => void, prev: T) => {
+    setter(value);
+    const res = await updatePlayerSettings({ [key]: value });
+    if (!res.data) setter(prev);
   };
+
+  const handleSetAutoPotionThreshold = (value: number) =>
+    handleSetSetting('autoPotionThreshold', value, setAutoPotionThreshold, autoPotionThreshold);
+  const handleSetCombatLogSpeed = (value: number) =>
+    handleSetSetting('combatLogSpeedMs', value, setCombatLogSpeedMs, combatLogSpeedMs);
+  const handleSetExplorationSpeed = (value: number) =>
+    handleSetSetting('explorationSpeedMs', value, setExplorationSpeedMs, explorationSpeedMs);
+  const handleSetAutoSkipKnownCombat = (value: boolean) =>
+    handleSetSetting('autoSkipKnownCombat', value, setAutoSkipKnownCombat, autoSkipKnownCombat);
+  const handleSetDefaultExploreTurns = (value: number) =>
+    handleSetSetting('defaultExploreTurns', value, setDefaultExploreTurns, defaultExploreTurns);
+  const handleSetQuickRestHealPercent = (value: number) =>
+    handleSetSetting('quickRestHealPercent', value, setQuickRestHealPercent, quickRestHealPercent);
+  const handleSetDefaultRefiningMax = (value: boolean) =>
+    handleSetSetting('defaultRefiningMax', value, setDefaultRefiningMax, defaultRefiningMax);
 
   const handleClaimAchievement = async (achievementId: string) => {
     const res = await claimAchievementReward(achievementId);
@@ -1616,6 +1642,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     pvpNotificationCount,
     autoPotionThreshold,
     setAutoPotionThreshold,
+    combatLogSpeedMs,
+    explorationSpeedMs,
+    autoSkipKnownCombat,
+    defaultExploreTurns,
+    quickRestHealPercent,
+    defaultRefiningMax,
     playbackActive,
     combatPlaybackData,
     combatPlaybackQueue,
@@ -1668,6 +1700,12 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     loadTurnsAndHp,
     loadPvpNotificationCount,
     handleSetAutoPotionThreshold,
+    handleSetCombatLogSpeed,
+    handleSetExplorationSpeed,
+    handleSetAutoSkipKnownCombat,
+    handleSetDefaultExploreTurns,
+    handleSetQuickRestHealPercent,
+    handleSetDefaultRefiningMax,
   };
 }
 

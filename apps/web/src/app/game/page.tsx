@@ -655,6 +655,7 @@ export default function GamePage() {
               recoveryCost={hpState.recoveryCost}
               zoneCraftingLevel={zoneCraftingLevel}
               zoneName={zoneCraftingName}
+              defaultMaxQuantity={activeCraftingSkill === 'refining' && defaultRefiningMax}
             />
           </div>
         );

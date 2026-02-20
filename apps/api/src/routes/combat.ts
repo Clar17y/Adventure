@@ -912,6 +912,7 @@ combatRouter.post('/start', async (req, res, next) => {
           materialRolls: siteCompletionRewards.materialRolls,
           loot: await enrichLootWithNames(siteCompletionRewards.loot),
           recipeUnlocked: siteCompletionRewards.recipeUnlocked,
+          fullClearBonus: siteStrategy === 'full_clear' && siteFullClearActive,
         }
       : null;
 

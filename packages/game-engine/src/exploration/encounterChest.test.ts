@@ -3,6 +3,7 @@ import {
   getChestMaterialRollRangeForEncounterSize,
   getChestRarityForEncounterSize,
   getChestRecipeChanceForEncounterSize,
+  getUpgradedChestSize,
   rollChestMaterialRolls,
   rollEncounterChestRecipeDrop,
 } from './encounterChest';
@@ -38,5 +39,17 @@ describe('encounterChest', () => {
     expect(rollEncounterChestRecipeDrop('medium', () => 0.01)).toBe(true);
     expect(rollEncounterChestRecipeDrop('medium', () => 0.02)).toBe(false);
     expect(rollEncounterChestRecipeDrop('large', () => 0.049)).toBe(true);
+  });
+});
+
+describe('getUpgradedChestSize', () => {
+  it('upgrades small to medium', () => {
+    expect(getUpgradedChestSize('small')).toBe('medium');
+  });
+  it('upgrades medium to large', () => {
+    expect(getUpgradedChestSize('medium')).toBe('large');
+  });
+  it('keeps large as large', () => {
+    expect(getUpgradedChestSize('large')).toBe('large');
   });
 });

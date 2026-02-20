@@ -38,3 +38,9 @@ export function rollEncounterChestRecipeDrop(
   const chance = Math.max(0, Math.min(1, getChestRecipeChanceForEncounterSize(size)));
   return rng() < chance;
 }
+
+export function getUpgradedChestSize(size: EncounterSiteSize): EncounterSiteSize {
+  if (size === 'small') return 'medium';
+  if (size === 'medium') return 'large';
+  return 'large';
+}

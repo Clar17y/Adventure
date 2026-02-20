@@ -787,6 +787,7 @@ combatRouter.post('/start', async (req, res, next) => {
             playerId,
             mobFamilyId: site.mobFamilyId,
             size: toEncounterSiteSize(site.size),
+            fullClearBonus: siteStrategy === 'full_clear' && siteFullClearActive,
           });
           await txAny.encounterSite.deleteMany({ where: { id: consumedEncounterSiteId, playerId } });
           encounterSiteCleared = true;

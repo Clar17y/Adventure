@@ -2,7 +2,7 @@
 
 ## Summary
 
-Player-facing achievement system with ~95 achievements across 7 categories plus 19 mob-family kill tiers. Achievements are code-defined constants; DB stores player progress only. Rewards are a mix of cosmetic titles (selectable, shown in PvP/leaderboard) and tangible rewards (XP, items, attribute points) for major milestones. Family-specific achievements at high kill tiers reward unique themed items for all 19 families.
+Player-facing achievement system with 107 achievements across 8 categories plus 19 mob-family kill tiers. Achievements are code-defined constants; DB stores player progress only. Rewards are a mix of cosmetic titles (selectable, shown in PvP/leaderboard) and tangible rewards (XP, items, attribute points) for major milestones. Family-specific achievements at high kill tiers reward unique themed items for all 19 families.
 
 ## Design Decisions
 
@@ -181,7 +181,7 @@ Secret achievements return `title: "???"`, `description: "???"` when not unlocke
 - PvP opponent data → add `activeTitle` to opponent info in arena matchups
 - Leaderboard entries → add `activeTitle` to meta stored in Redis
 
-## Starter Achievements (~38 general + 57 family = ~95 total)
+## Starter Achievements (50 general + 57 family = 107 total)
 
 ### Combat
 

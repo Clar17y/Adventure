@@ -1,5 +1,5 @@
 import { prisma } from '@adventure/database';
-import { CHAT_CONSTANTS } from '@adventure/shared';
+import { ACHIEVEMENTS_BY_ID, CHAT_CONSTANTS } from '@adventure/shared';
 import type { ChatChannelType, ChatMessageEvent, ChatMessageType } from '@adventure/shared';
 
 // In-memory rate limiter: key = "playerId:channelType" → last send timestamp
@@ -56,15 +56,34 @@ export async function getChannelHistory(
     take: CHAT_CONSTANTS.HISTORY_LIMIT,
   });
 
+  // Batch-lookup player titles for all unique player IDs
+  const playerIds = [...new Set(rows.map((r) => r.playerId))];
+  const players = await prisma.player.findMany({
+    where: { id: { in: playerIds } },
+    select: { id: true, activeTitle: true },
+  });
+  const titleMap = new Map<string, { title: string; tier?: number }>();
+  for (const p of players) {
+    if (p.activeTitle) {
+      const def = ACHIEVEMENTS_BY_ID.get(p.activeTitle);
+      if (def?.titleReward) titleMap.set(p.id, { title: def.titleReward, tier: def.tier });
+    }
+  }
+
   // Reverse so oldest first for display
-  return rows.reverse().map((r) => ({
-    id: r.id,
-    channelType: r.channelType as ChatChannelType,
-    channelId: r.channelId,
-    playerId: r.playerId,
-    username: r.username,
-    message: r.message,
-    messageType: (r.messageType ?? 'player') as ChatMessageType,
-    createdAt: r.createdAt.toISOString(),
-  }));
+  return rows.reverse().map((r) => {
+    const info = titleMap.get(r.playerId);
+    return {
+      id: r.id,
+      channelType: r.channelType as ChatChannelType,
+      channelId: r.channelId,
+      playerId: r.playerId,
+      username: r.username,
+      title: info?.title,
+      titleTier: info?.tier,
+      message: r.message,
+      messageType: (r.messageType ?? 'player') as ChatMessageType,
+      createdAt: r.createdAt.toISOString(),
+    };
+  });
 }

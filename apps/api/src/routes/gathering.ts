@@ -8,6 +8,8 @@ import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { addStackableItemTx } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
+import { incrementStats } from '../services/statsService';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
 import { applyResourceEventModifiers } from '@adventure/game-engine';
 
@@ -345,6 +347,18 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     // XP: 5 XP per action
     const rawXp = actions * 5;
     const xpGrant = await grantSkillXp(playerId, skillRequired, rawXp);
+
+    // --- Achievement tracking (counters + derived checks) ---
+    await incrementStats(playerId, {
+      totalGatheringActions: actions,
+      totalTurnsSpent: turnsSpent,
+    });
+
+    const gatherAchKeys = ['totalGatheringActions'];
+    if (xpGrant.newLevel) gatherAchKeys.push('highestSkillLevel');
+    if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) gatherAchKeys.push('highestCharacterLevel');
+    const gatherAchievements = await checkAchievements(playerId, { statKeys: gatherAchKeys });
+    await emitAchievementNotifications(playerId, gatherAchievements);
 
     const log = await prisma.activityLog.create({
       data: {

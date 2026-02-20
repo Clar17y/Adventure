@@ -45,6 +45,9 @@ model Player {
   lastTravelledFromZone  Zone?   @relation("breadcrumb_zone", fields: [lastTravelledFromZoneId], references: [id])
   homeTown               Zone?   @relation("home_town", fields: [homeTownId], references: [id])
 
+  // Active achievement title
+  activeTitle        String?   @map("active_title")
+
   turnBank           TurnBank?
   skills             PlayerSkill[]
   equipment          PlayerEquipment[]
@@ -63,6 +66,8 @@ model Player {
   pvpDefenses        PvpMatch[] @relation("PvpDefender")
   bossParticipants   BossParticipant[]
   persistedMobs      PersistedMob[]
+  stats              PlayerStats?
+  achievements       PlayerAchievement[]
 
   @@map("players")
 }
@@ -541,6 +546,7 @@ model PvpRating {
   losses       Int       @default(0)
   draws        Int       @default(0)
   winStreak    Int       @default(0) @map("win_streak")
+  bestWinStreak Int      @default(0) @map("best_win_streak")
   bestRating   Int       @default(1000) @map("best_rating")
   lastFoughtAt DateTime? @map("last_fought_at")
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -675,4 +681,38 @@ model PersistedMob {
 
   @@index([playerId, zoneId])
   @@map("persisted_mobs")
+}
+
+// =============================================================================
+// ACHIEVEMENTS
+// =============================================================================
+
+model PlayerStats {
+  playerId                String   @id @map("player_id")
+  totalCrafts             Int      @default(0) @map("total_crafts")
+  totalRaresCrafted       Int      @default(0) @map("total_rares_crafted")
+  totalEpicsCrafted       Int      @default(0) @map("total_epics_crafted")
+  totalLegendariesCrafted Int      @default(0) @map("total_legendaries_crafted")
+  totalSalvages           Int      @default(0) @map("total_salvages")
+  totalForgeUpgrades      Int      @default(0) @map("total_forge_upgrades")
+  totalGatheringActions   Int      @default(0) @map("total_gathering_actions")
+  totalTurnsSpent         Int      @default(0) @map("total_turns_spent")
+  totalDeaths             Int      @default(0) @map("total_deaths")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@map("player_stats")
+}
+
+model PlayerAchievement {
+  playerId      String   @map("player_id")
+  achievementId String   @map("achievement_id")
+  unlockedAt    DateTime @default(now()) @map("unlocked_at")
+  rewardClaimed Boolean  @default(false) @map("reward_claimed")
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([playerId, achievementId])
+  @@map("player_achievements")
 }

@@ -1,6 +1,6 @@
 import { Prisma, prisma } from '@adventure/database';
 import { buildPlayerCombatStats, calculateFleeResult, calculateMaxHp, runCombat } from '@adventure/game-engine';
-import { PVP_CONSTANTS, type Combatant, type CombatResult, type SkillType } from '@adventure/shared';
+import { PVP_CONSTANTS, ACHIEVEMENTS_BY_ID, type Combatant, type CombatResult, type SkillType } from '@adventure/shared';
 import { AppError } from '../middleware/errorHandler';
 import { calculateEloChange } from './eloService';
 import { getEquipmentStats } from './equipmentService';
@@ -53,19 +53,24 @@ export async function getLadder(playerId: string) {
       player: { characterLevel: { gte: PVP_CONSTANTS.MIN_CHARACTER_LEVEL } },
     },
     include: {
-      player: { select: { username: true, characterLevel: true } },
+      player: { select: { username: true, characterLevel: true, activeTitle: true } },
     },
     orderBy: { rating: 'desc' },
   });
 
   const opponents = candidates
     .filter((c) => !cooldownIds.has(c.playerId))
-    .map((c) => ({
-      playerId: c.playerId,
-      username: c.player.username,
-      rating: c.rating,
-      characterLevel: c.player.characterLevel,
-    }));
+    .map((c) => {
+      const titleDef = c.player.activeTitle ? ACHIEVEMENTS_BY_ID.get(c.player.activeTitle) : null;
+      return {
+        playerId: c.playerId,
+        username: c.player.username,
+        rating: c.rating,
+        characterLevel: c.player.characterLevel,
+        title: titleDef?.titleReward,
+        titleTier: titleDef?.tier,
+      };
+    });
 
   return {
     myRating: {
@@ -355,6 +360,7 @@ export async function challenge(
 
     // Update attacker rating (draws: no win/loss, preserve streak)
     const newAttackerRating = Math.max(0, attackerRating.rating + attackerRatingChange);
+    const newAttackerStreak = isDraw ? attackerRating.winStreak : attackerWon ? attackerRating.winStreak + 1 : 0;
     await tx.pvpRating.update({
       where: { playerId: attackerId },
       data: {
@@ -363,6 +369,7 @@ export async function challenge(
         losses: !isDraw && !attackerWon ? { increment: 1 } : undefined,
         draws: isDraw ? { increment: 1 } : undefined,
         winStreak: isDraw ? undefined : attackerWon ? { increment: 1 } : 0,
+        bestWinStreak: Math.max(attackerRating.bestWinStreak, newAttackerStreak),
         bestRating: Math.max(attackerRating.bestRating, newAttackerRating),
         lastFoughtAt: now,
       },
@@ -370,6 +377,7 @@ export async function challenge(
 
     // Update defender rating (draws: no win/loss, preserve streak)
     const newDefenderRating = Math.max(0, defenderRating.rating + defenderRatingChange);
+    const newDefenderStreak = isDraw ? defenderRating.winStreak : attackerWon ? 0 : defenderRating.winStreak + 1;
     await tx.pvpRating.update({
       where: { playerId: targetId },
       data: {
@@ -378,6 +386,7 @@ export async function challenge(
         losses: !isDraw && attackerWon ? { increment: 1 } : undefined,
         draws: isDraw ? { increment: 1 } : undefined,
         winStreak: isDraw ? undefined : attackerWon ? 0 : { increment: 1 },
+        bestWinStreak: Math.max(defenderRating.bestWinStreak, newDefenderStreak),
         bestRating: Math.max(defenderRating.bestRating, newDefenderRating),
         lastFoughtAt: now,
       },

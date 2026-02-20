@@ -6,6 +6,11 @@ import {
   equip,
   forgeReroll,
   forgeUpgrade,
+  getAchievements,
+  getAchievementUnclaimedCount,
+  getActiveTitle,
+  claimAchievementReward,
+  setActiveTitle,
   getBestiary,
   getCraftingRecipes,
   getEquipment,
@@ -29,8 +34,10 @@ import {
   startExploration,
   travelToZone,
   unequip,
+  type AchievementsResponse,
   type WorldEventResponse,
 } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 
 export type Screen =
   | 'home'
@@ -48,6 +55,7 @@ export type Screen =
   | 'rest'
   | 'arena'
   | 'worldEvents'
+  | 'achievements'
   | 'leaderboard';
 
 export interface PendingEncounter {
@@ -392,6 +400,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [pvpNotificationCount, setPvpNotificationCount] = useState(0);
   const [activeEvents, setActiveEvents] = useState<WorldEventResponse[]>([]);
   const [autoPotionThreshold, setAutoPotionThreshold] = useState(0);
+  const [achievementData, setAchievementData] = useState<AchievementsResponse | null>(null);
+  const [achievementUnclaimedCount, setAchievementUnclaimedCount] = useState(0);
+  const [activeTitle, setActiveTitleState] = useState<string | null>(null);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
     mobDisplayName: string;
@@ -433,6 +444,19 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (result.data) {
       setPvpNotificationCount(result.data.count);
     }
+  }, []);
+
+  const loadAchievements = useCallback(async () => {
+    const res = await getAchievements();
+    if (res.data) {
+      setAchievementData(res.data);
+      setAchievementUnclaimedCount(res.data.unclaimedCount);
+    }
+  }, []);
+
+  const loadAchievementUnclaimedCount = useCallback(async () => {
+    const res = await getAchievementUnclaimedCount();
+    if (res.data) setAchievementUnclaimedCount(res.data.unclaimedCount);
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -501,12 +525,31 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (isAuthenticated) {
       void loadAll();
       void loadPvpNotificationCount();
+      void loadAchievementUnclaimedCount();
+      void getActiveTitle().then((res) => {
+        if (res.data) setActiveTitleState(res.data.activeTitle);
+      });
       const interval = setInterval(() => void loadTurnsAndHp(), 10000);
       // Poll PvP notifications less frequently (60s)
       const pvpInterval = setInterval(() => void loadPvpNotificationCount(), 60000);
-      return () => { clearInterval(interval); clearInterval(pvpInterval); };
+      const achievementPollInterval = setInterval(() => void loadAchievementUnclaimedCount(), 60_000);
+      return () => { clearInterval(interval); clearInterval(pvpInterval); clearInterval(achievementPollInterval); };
     }
-  }, [isAuthenticated, loadAll, loadTurnsAndHp, loadPvpNotificationCount]);
+  }, [isAuthenticated, loadAll, loadTurnsAndHp, loadPvpNotificationCount, loadAchievementUnclaimedCount]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const socket = getSocket();
+    const handleAchievementUnlocked = (data: { id: string; title: string; category: string }) => {
+      const showToast = (window as unknown as Record<string, unknown>).__showAchievementToast as
+        | ((toast: { id: string; title: string; category: string }) => void)
+        | undefined;
+      if (showToast) showToast(data);
+      void loadAchievementUnclaimedCount();
+    };
+    socket.on('achievement_unlocked', handleAchievementUnlocked);
+    return () => { socket.off('achievement_unlocked', handleAchievementUnlocked); };
+  }, [isAuthenticated, loadAchievementUnclaimedCount]);
 
   const refreshPendingEncounters = useCallback(async (options?: { background?: boolean }) => {
     if (!isAuthenticated) return;
@@ -693,7 +736,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }, []);
 
   const getActiveTab = () => {
-    if (['home', 'skills', 'zones', 'bestiary', 'rest', 'worldEvents', 'leaderboard'].includes(activeScreen)) return 'home';
+    if (['home', 'skills', 'zones', 'bestiary', 'rest', 'worldEvents', 'achievements', 'leaderboard'].includes(activeScreen)) return 'home';
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
     if (['combat', 'arena'].includes(activeScreen)) return 'combat';
@@ -1426,6 +1469,21 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (!res.data) setAutoPotionThreshold(prev);
   };
 
+  const handleClaimAchievement = async (achievementId: string) => {
+    const res = await claimAchievementReward(achievementId);
+    if (res.data) {
+      await loadAchievements();
+      await loadAll();
+    }
+  };
+
+  const handleSetActiveTitle = async (achievementId: string | null) => {
+    const res = await setActiveTitle(achievementId);
+    if (res.data) {
+      setActiveTitleState(res.data.activeTitle);
+    }
+  };
+
   return {
     // Navigation
     activeScreen,
@@ -1488,6 +1546,14 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     combatPlaybackData,
     explorationPlaybackData,
     travelPlaybackData,
+
+    // Achievements
+    achievementData,
+    achievementUnclaimedCount,
+    activeTitle,
+    handleClaimAchievement,
+    handleSetActiveTitle,
+    loadAchievements,
 
     // World Events
     activeEvents,

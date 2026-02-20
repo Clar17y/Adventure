@@ -23,6 +23,7 @@ import {
 import { CombatPlayback } from '@/components/combat/CombatPlayback';
 import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
 import { PVP_CONSTANTS } from '@adventure/shared';
+import { rarityFromTier, RARITY_COLORS } from '@/lib/rarity';
 import { Swords, Eye, Trophy, Bell, ChevronLeft, ChevronRight, Medal } from 'lucide-react';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
 import { getLeaderboard, type LeaderboardResponse } from '@/lib/api';
@@ -372,8 +373,15 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
           <PixelCard key={opponent.playerId} padding="sm">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <div className="text-[var(--rpg-text-primary)] font-semibold truncate">
-                  {opponent.username}
+                <div className="flex items-center gap-1">
+                  <span className="text-[var(--rpg-text-primary)] font-semibold truncate">
+                    {opponent.username}
+                  </span>
+                  {opponent.title && (
+                    <span className="text-[10px] shrink-0" style={{ color: RARITY_COLORS[rarityFromTier(opponent.titleTier ?? 1)] }}>
+                      &lt;{opponent.title}&gt;
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-[var(--rpg-text-secondary)]">
                   Rating: {opponent.rating} | Lv.{opponent.characterLevel}

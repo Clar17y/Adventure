@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { itemImageSrc, monsterImageSrc, resourceImageSrc, skillIconSrc, zoneImageSrc } from '@/lib/assets';
@@ -18,6 +18,8 @@ import { Forge } from '@/components/screens/Forge';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { WorldEvents } from '@/components/screens/WorldEvents';
+import { Achievements } from '@/components/screens/Achievements';
+import { AchievementToast } from '@/components/AchievementToast';
 import { Leaderboard } from '@/components/screens/Leaderboard';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
@@ -253,9 +255,22 @@ export default function GamePage() {
     zoneCraftingName,
     loadTurnsAndHp,
     loadPvpNotificationCount,
+    achievementData,
+    achievementUnclaimedCount,
+    activeTitle,
+    handleClaimAchievement,
+    handleSetActiveTitle,
+    loadAchievements,
   } = useGameController({ isAuthenticated });
 
+  const [achievementCategory, setAchievementCategory] = useState<string | null>(null);
   const chat = useChat({ isAuthenticated, currentZoneId: activeZoneId });
+
+  useEffect(() => {
+    if (activeScreen === 'achievements') {
+      void loadAchievements();
+    }
+  }, [activeScreen, loadAchievements]);
 
   if (isLoading) {
     return (
@@ -801,6 +816,18 @@ export default function GamePage() {
             onNavigate={(s) => setActiveScreen(s as Screen)}
           />
         );
+      case 'achievements':
+        return (
+          <Achievements
+            achievements={achievementData?.achievements ?? []}
+            unclaimedCount={achievementUnclaimedCount}
+            activeTitle={activeTitle}
+            onClaim={handleClaimAchievement}
+            onSetTitle={handleSetActiveTitle}
+            initialCategory={achievementCategory}
+            onCategoryViewed={() => setAchievementCategory(null)}
+          />
+        );
       case 'leaderboard':
         return <Leaderboard playerId={player?.id ?? null} />;
       default:
@@ -826,23 +853,29 @@ export default function GamePage() {
         {getActiveTab() === 'home' && (
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
             {[
-              { id: 'home', label: 'Dashboard' },
-              { id: 'skills', label: 'Skills' },
-              { id: 'zones', label: 'Map' },
-              { id: 'bestiary', label: 'Bestiary' },
-              { id: 'worldEvents', label: 'Events' },
-              { id: 'leaderboard', label: 'Rankings' },
+              { id: 'home', label: 'Dashboard', badge: 0 },
+              { id: 'zones', label: 'Map', badge: 0 },
+              { id: 'worldEvents', label: 'Events', badge: 0 },
+              { id: 'achievements', label: 'Achievements', badge: achievementUnclaimedCount },
+              { id: 'leaderboard', label: 'Rankings', badge: 0 },
+              { id: 'bestiary', label: 'Bestiary', badge: 0 },
+              { id: 'skills', label: 'Skills', badge: 0 },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveScreen(tab.id as Screen)}
-                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                className={`relative px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
                   activeScreen === tab.id
                     ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
                     : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)]'
                 }`}
               >
                 {tab.label}
+                {tab.badge > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 text-xs rounded-full bg-[var(--rpg-red)] text-white font-bold">
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -943,7 +976,12 @@ export default function GamePage() {
         playerId={player?.id ?? null}
         pinnedMessage={chat.activeChannel === 'world' ? chat.pinnedWorld : chat.pinnedZone}
       />
-      <BottomNav activeTab={getActiveTab()} onNavigate={handleNavigate} />
+      <BottomNav
+        activeTab={getActiveTab()}
+        onNavigate={handleNavigate}
+        badgeTabs={achievementUnclaimedCount > 0 ? new Set(['home']) : undefined}
+      />
+      <AchievementToast onNavigate={(category) => { setAchievementCategory(category); setActiveScreen('achievements'); }} />
     </>
   );
 }

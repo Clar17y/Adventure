@@ -79,12 +79,16 @@ describe('chatService', () => {
   });
 
   describe('getChannelHistory', () => {
-    it('returns messages in chronological order', async () => {
+    it('returns messages in chronological order with player titles', async () => {
       const rows = [
         { id: '2', channelType: 'world', channelId: 'world', playerId: 'p1', username: 'A', message: 'Second', messageType: 'player', createdAt: new Date('2025-01-02') },
         { id: '1', channelType: 'world', channelId: 'world', playerId: 'p2', username: 'B', message: 'First', messageType: 'player', createdAt: new Date('2025-01-01') },
       ];
       mockPrisma.chatMessage.findMany.mockResolvedValue(rows);
+      mockPrisma.player.findMany.mockResolvedValue([
+        { id: 'p1', activeTitle: 'combat_kills_500' },
+        { id: 'p2', activeTitle: null },
+      ]);
 
       const result = await getChannelHistory('world', 'world');
 
@@ -92,11 +96,13 @@ describe('chatService', () => {
       // Reversed from desc to chronological
       expect(result[0].message).toBe('First');
       expect(result[1].message).toBe('Second');
-      expect(result[0].createdAt).toBe('2025-01-01T00:00:00.000Z');
+      expect(result[0].title).toBeUndefined();
+      expect(result[1].title).toBe('The Warrior');
     });
 
     it('queries with correct limit and ordering', async () => {
       mockPrisma.chatMessage.findMany.mockResolvedValue([]);
+      mockPrisma.player.findMany.mockResolvedValue([]);
 
       await getChannelHistory('zone', 'zone:z1');
 

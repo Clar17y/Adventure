@@ -626,6 +626,7 @@ export interface CombatResultResponse {
 }
 
 export interface CombatFightResult {
+  mobName: string;
   mobDisplayName: string;
   mobTemplateId: string;
   mobPrefix: string | null;
@@ -649,6 +650,7 @@ export interface CombatResponse {
     zoneId: string;
     mobTemplateId: string;
     mobPrefix: string | null;
+    mobName: string;
     mobDisplayName: string;
     encounterSiteId: string | null;
     encounterSiteCleared?: boolean;

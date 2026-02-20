@@ -120,6 +120,7 @@ export interface LastCombatLogEntry {
 export interface LastCombat {
   mobTemplateId: string;
   mobPrefix: string | null;
+  mobName: string;
   mobDisplayName: string;
   outcome: string;
   combatantAMaxHp: number;
@@ -405,6 +406,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [activeTitle, setActiveTitleState] = useState<string | null>(null);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackQueue, setCombatPlaybackQueue] = useState<Array<{
+    mobName: string;
     mobDisplayName: string;
     outcome: string;
     combatantAMaxHp: number;
@@ -965,6 +967,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       // Build playback queue from fights[] or single-element queue for zone combat
       if (data.combat.fights && data.combat.fights.length > 0) {
         const queue = data.combat.fights.map((fight) => ({
+          mobName: fight.mobName ?? data.combat.mobName,
           mobDisplayName: fight.mobDisplayName,
           outcome: fight.outcome,
           combatantAMaxHp: fight.playerMaxHp,
@@ -998,6 +1001,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         setCombatPlaybackIndex(0);
       } else {
         setCombatPlaybackQueue([{
+          mobName: data.combat.mobName,
           mobDisplayName: data.combat.mobDisplayName,
           outcome: data.combat.outcome,
           combatantAMaxHp: data.combat.playerMaxHp,
@@ -1087,6 +1091,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setLastCombat({
         mobTemplateId: '',
         mobPrefix: null,
+        mobName: lastFight.mobName,
         mobDisplayName: lastFight.mobDisplayName,
         outcome: lastFight.outcome,
         combatantAMaxHp: lastFight.combatantAMaxHp,
@@ -1115,6 +1120,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           setLastCombat({
             mobTemplateId: '',
             mobPrefix: null,
+            mobName: lastFight.mobName,
             mobDisplayName: lastFight.mobDisplayName,
             outcome: lastFight.outcome,
             combatantAMaxHp: lastFight.combatantAMaxHp,

@@ -52,8 +52,11 @@ describe('itemImageSrc', () => {
   });
 
   it('applies name overrides', () => {
-    expect(itemImageSrc('Wooden Sword', 'weapon')).toBe('/assets/items/item_iron_sword-pixelated-128.png');
     expect(itemImageSrc('Leather Cap', 'armor')).toBe('/assets/items/item_iron_helmet-pixelated-128.png');
+  });
+
+  it('resolves wooden sword to its own asset', () => {
+    expect(itemImageSrc('Wooden Sword', 'weapon')).toBe('/assets/items/item_wooden_sword-pixelated-128.png');
   });
 
   it('handles apostrophes in names', () => {

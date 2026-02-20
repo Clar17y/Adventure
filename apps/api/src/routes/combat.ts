@@ -537,6 +537,7 @@ combatRouter.post('/sites/:id/strategy', async (req, res, next) => {
 });
 
 interface FightResult {
+  mobName: string;
   mobDisplayName: string;
   mobTemplateId: string;
   mobPrefix: string | null;
@@ -712,6 +713,7 @@ async function handleEncounterSiteRoomCombat(req: Request, res: Response, player
     }
 
     fightResults.push({
+      mobName: prefixedMob.name,
       mobDisplayName: prefixedMob.mobDisplayName ?? prefixedMob.name,
       mobTemplateId: prefixedMob.id,
       mobPrefix: prefixedMob.mobPrefix,
@@ -995,6 +997,7 @@ async function handleEncounterSiteRoomCombat(req: Request, res: Response, player
         fullClearActive: siteFullClearActive,
       },
       fights: fightResults.map(f => ({
+        mobName: f.mobName,
         mobDisplayName: f.mobDisplayName,
         mobTemplateId: f.mobTemplateId,
         mobPrefix: f.mobPrefix,
@@ -1337,6 +1340,7 @@ combatRouter.post('/start', async (req, res, next) => {
         zoneId,
         mobTemplateId: prefixedMob.id,
         mobPrefix,
+        mobName: baseMob.name,
         mobDisplayName: prefixedMob.mobDisplayName,
         encounterSiteId: null,
         encounterSiteCleared: false,

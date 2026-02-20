@@ -412,7 +412,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
               type: 'ambush_victory',
               description: `Ambushed by ${prefixedMob.mobDisplayName}! You defeated it. (+${xpGain} XP)`,
               details: {
-                mobName: prefixedMob.mobDisplayName,
+                mobName: baseMob.name,
                 mobDisplayName: prefixedMob.mobDisplayName,
                 outcome: combatResult.outcome,
                 playerMaxHp: combatResult.combatantAMaxHp,
@@ -472,7 +472,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
                 type: 'ambush_defeat',
                 description: `Ambushed by ${prefixedMob.mobDisplayName}! You were knocked out.`,
                 details: {
-                  mobName: prefixedMob.mobDisplayName,
+                  mobName: baseMob.name,
                   mobDisplayName: prefixedMob.mobDisplayName,
                   outcome: combatResult.outcome,
                   playerMaxHp: combatResult.combatantAMaxHp,
@@ -562,7 +562,7 @@ zonesRouter.post('/travel', async (req, res, next) => {
                 type: 'ambush_defeat',
                 description: `Ambushed by ${prefixedMob.mobDisplayName}! You escaped with ${currentHp} HP.`,
                 details: {
-                  mobName: prefixedMob.mobDisplayName,
+                  mobName: baseMob.name,
                   mobDisplayName: prefixedMob.mobDisplayName,
                   outcome: combatResult.outcome,
                   playerMaxHp: combatResult.combatantAMaxHp,

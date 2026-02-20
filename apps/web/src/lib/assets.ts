@@ -39,7 +39,6 @@ export function resourceImageSrc(resourceType: string): string {
 
 const itemNameOverrides: Record<string, string> = {
   // Seeded / common names that don't have 1:1 assets
-  'wooden_sword': 'iron_sword',
   'leather_cap': 'iron_helmet',
 };
 

@@ -37,6 +37,8 @@ export interface PlayerAchievementProgress {
   threshold: number;
   secret?: boolean;
   tier?: number;
+  statKey?: string;
+  familyKey?: string;
   progress: number;
   unlocked: boolean;
   unlockedAt?: string;

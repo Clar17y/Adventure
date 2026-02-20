@@ -8,6 +8,7 @@ import {
 import type { AchievementDef, PlayerAchievementProgress } from '@adventure/shared';
 import { AppError } from '../middleware/errorHandler';
 import { getIo } from '../socket';
+import { resolveAllStats, resolveFamilyKills, resolveAllFamilyKills, resolveStats } from './statsService';
 
 // Maps MobFamily DB name to the family key used in achievement definitions
 const FAMILY_NAME_TO_KEY: Record<string, string> = {
@@ -29,16 +30,14 @@ export async function checkAchievements(
   playerId: string,
   options: CheckOptions,
 ): Promise<AchievementDef[]> {
-  const [stats, familyStats, unlocked] = await Promise.all([
-    prisma.playerStats.findUnique({ where: { playerId } }),
-    prisma.playerFamilyStats.findMany({ where: { playerId } }),
+  // Resolve only the stats we need for the requested keys
+  const neededStatKeys = options.statKeys ?? [];
+  const [resolvedStats, unlocked] = await Promise.all([
+    neededStatKeys.length > 0 ? resolveStats(playerId, neededStatKeys) : Promise.resolve({} as Record<string, number>),
     prisma.playerAchievement.findMany({ where: { playerId }, select: { achievementId: true } }),
   ]);
 
-  if (!stats) return [];
-
   const unlockedSet = new Set(unlocked.map((u) => u.achievementId));
-  const familyKillMap = new Map(familyStats.map((f) => [f.mobFamilyId, f.kills]));
 
   // Collect candidate achievements to check
   const candidates: AchievementDef[] = [];
@@ -50,13 +49,16 @@ export async function checkAchievements(
     }
   }
 
+  let familyKey: string | undefined;
+  let familyKills = 0;
   if (options.familyId) {
     const family = await prisma.mobFamily.findUnique({ where: { id: options.familyId } });
     if (family) {
-      const familyKey = FAMILY_NAME_TO_KEY[family.name];
+      familyKey = FAMILY_NAME_TO_KEY[family.name];
       if (familyKey) {
         const matching = ACHIEVEMENTS_BY_FAMILY_KEY.get(familyKey) ?? [];
         candidates.push(...matching);
+        familyKills = await resolveFamilyKills(playerId, options.familyId);
       }
     }
   }
@@ -69,9 +71,9 @@ export async function checkAchievements(
 
     let progress = 0;
     if (achievement.statKey) {
-      progress = (stats as unknown as Record<string, number>)[achievement.statKey] ?? 0;
+      progress = resolvedStats[achievement.statKey] ?? 0;
     } else if (achievement.familyKey && options.familyId) {
-      progress = familyKillMap.get(options.familyId) ?? 0;
+      progress = familyKills;
     }
 
     if (progress >= achievement.threshold) {
@@ -90,23 +92,24 @@ export async function getPlayerAchievements(playerId: string): Promise<{
   achievements: PlayerAchievementProgress[];
   unclaimedCount: number;
 }> {
-  const [stats, familyStats, unlocked] = await Promise.all([
-    prisma.playerStats.findUnique({ where: { playerId } }),
-    prisma.playerFamilyStats.findMany({ where: { playerId } }),
+  const [allStats, unlocked, families] = await Promise.all([
+    resolveAllStats(playerId),
     prisma.playerAchievement.findMany({ where: { playerId } }),
+    prisma.mobFamily.findMany({ select: { id: true, name: true } }),
   ]);
 
-  // Build family kill map by family key (need to resolve IDs)
-  const families = await prisma.mobFamily.findMany({ select: { id: true, name: true } });
+  // Build family kill map by family key
   const familyIdToKey = new Map<string, string>();
   for (const f of families) {
     const key = FAMILY_NAME_TO_KEY[f.name];
     if (key) familyIdToKey.set(f.id, key);
   }
+
+  const familyKillsById = await resolveAllFamilyKills(playerId);
   const familyKillsByKey = new Map<string, number>();
-  for (const fs of familyStats) {
-    const key = familyIdToKey.get(fs.mobFamilyId);
-    if (key) familyKillsByKey.set(key, fs.kills);
+  for (const [id, kills] of familyKillsById) {
+    const key = familyIdToKey.get(id);
+    if (key) familyKillsByKey.set(key, kills);
   }
 
   const unlockedMap = new Map(unlocked.map((u) => [u.achievementId, u]));
@@ -121,8 +124,8 @@ export async function getPlayerAchievements(playerId: string): Promise<{
     }
 
     let progress = 0;
-    if (def.statKey && stats) {
-      progress = (stats as unknown as Record<string, number>)[def.statKey] ?? 0;
+    if (def.statKey) {
+      progress = (allStats as Record<string, number>)[def.statKey] ?? 0;
     } else if (def.familyKey) {
       progress = familyKillsByKey.get(def.familyKey) ?? 0;
     }
@@ -140,6 +143,8 @@ export async function getPlayerAchievements(playerId: string): Promise<{
       threshold: def.threshold,
       secret: def.secret,
       tier: def.tier,
+      statKey: def.statKey,
+      familyKey: def.familyKey,
       progress: Math.min(progress, def.threshold),
       unlocked: isUnlocked,
       unlockedAt: playerAch?.unlockedAt?.toISOString(),

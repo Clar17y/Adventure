@@ -14,3 +14,6 @@ export * from './constants/gameConstants';
 export * from './constants/mobPrefixes';
 export * from './constants/worldEventTemplates';
 export * from './constants/achievementDefinitions';
+
+// Utils
+export * from './utils/achievementChains';

@@ -29,6 +29,7 @@ export function createSocketServer(
   io.use(authenticateSocket);
 
   io.on('connection', (socket) => {
+    socket.join(socket.data.playerId);
     registerChatHandlers(io, socket);
   });
 

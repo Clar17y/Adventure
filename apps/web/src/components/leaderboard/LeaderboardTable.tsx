@@ -2,6 +2,7 @@
 
 import type { LeaderboardEntry } from '@/lib/api';
 import { Bot, Medal } from 'lucide-react';
+import { rarityFromTier, RARITY_COLORS } from '@/lib/rarity';
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[];
@@ -91,6 +92,11 @@ export function LeaderboardTable({
                     <span className={`truncate ${isMe ? 'text-[var(--rpg-gold)] font-semibold' : 'text-[var(--rpg-text-primary)]'}`}>
                       {entry.username}
                     </span>
+                    {entry.title && (
+                      <span className="text-[10px] shrink-0" style={{ color: RARITY_COLORS[rarityFromTier(entry.titleTier ?? 1)] }}>
+                        &lt;{entry.title}&gt;
+                      </span>
+                    )}
                     {entry.isBot && <Bot className="w-3.5 h-3.5 text-[var(--rpg-text-secondary)] shrink-0" />}
                   </div>
                   <span className="text-xs text-[var(--rpg-text-secondary)]">Lv.{entry.characterLevel}</span>
@@ -124,6 +130,11 @@ export function LeaderboardTable({
               </div>
               <div className="min-w-0">
                 <span className="text-[var(--rpg-gold)] font-semibold truncate">{myRank.username}</span>
+                {myRank.title && (
+                  <span className="text-[10px] ml-1" style={{ color: RARITY_COLORS[rarityFromTier(myRank.titleTier ?? 1)] }}>
+                    &lt;{myRank.title}&gt;
+                  </span>
+                )}
                 <span className="text-xs text-[var(--rpg-text-secondary)] ml-1">Lv.{myRank.characterLevel}</span>
               </div>
             </div>

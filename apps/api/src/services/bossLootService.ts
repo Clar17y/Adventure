@@ -4,6 +4,7 @@ import { randomIntInclusive } from '../utils/random';
 import { rollAndGrantLoot, enrichLootWithNames } from './lootService';
 import { addStackableItem } from './inventoryService';
 import { grantSkillXp } from './xpService';
+import { checkAchievements, emitAchievementNotifications } from './achievementService';
 
 export interface BossContributor {
   playerId: string;
@@ -147,6 +148,15 @@ export async function distributeBossLoot(
     if (mobFamilyId && Math.random() < WORLD_EVENT_CONSTANTS.BOSS_RECIPE_DROP_CHANCE) {
       recipeUnlocked = await rollBossRecipeDrop(contributor.playerId, mobFamilyId);
     }
+
+    // --- Achievement check (boss stats derived from source tables) ---
+    const bossAchKeys = ['totalBossKills', 'totalBossDamage'];
+    if (recipeUnlocked) bossAchKeys.push('totalRecipesLearned');
+    const bossAchievements = await checkAchievements(contributor.playerId, {
+      statKeys: bossAchKeys,
+      familyId: mobFamilyId || undefined,
+    });
+    await emitAchievementNotifications(contributor.playerId, bossAchievements);
 
     result[contributor.playerId] = {
       loot: lootReward,

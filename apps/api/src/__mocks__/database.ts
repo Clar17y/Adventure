@@ -1,5 +1,13 @@
 import { vi } from 'vitest';
 
+// Minimal Prisma namespace mock for tagged template SQL queries
+export const Prisma = {
+  sql(strings: TemplateStringsArray, ...values: unknown[]) {
+    return { strings, values };
+  },
+  join: vi.fn(),
+};
+
 // Deep mock factory for Prisma model methods
 function mockModel() {
   return {
@@ -35,5 +43,11 @@ export const prisma = {
   playerZoneDiscovery: mockModel(),
   playerZoneExploration: mockModel(),
   chatMessage: mockModel(),
+  playerStats: mockModel(),
+  playerAchievement: mockModel(),
+  mobFamily: mockModel(),
+  activityLog: mockModel(),
+  pvpRating: mockModel(),
   $transaction: vi.fn((fn: (tx: any) => Promise<any>) => fn(prisma)),
+  $queryRaw: vi.fn(),
 };

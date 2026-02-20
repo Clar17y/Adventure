@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import { prisma } from '@adventure/database';
-import { CHAT_CONSTANTS } from '@adventure/shared';
+import { ACHIEVEMENTS_BY_ID, CHAT_CONSTANTS } from '@adventure/shared';
 import type { ChatChannelType, ChatMessageEvent, ChatPresenceEvent, ChatPinnedMessageEvent } from '@adventure/shared';
 import { checkRateLimit, saveMessage } from '../services/chatService';
 
@@ -87,13 +87,18 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       return;
     }
 
-    const saved = await saveMessage({
-      channelType: channelType as ChatChannelType,
-      channelId,
-      playerId,
-      username,
-      message: trimmed,
-    });
+    const [saved, player] = await Promise.all([
+      saveMessage({
+        channelType: channelType as ChatChannelType,
+        channelId,
+        playerId,
+        username,
+        message: trimmed,
+      }),
+      prisma.player.findUnique({ where: { id: playerId }, select: { activeTitle: true } }),
+    ]);
+
+    const titleDef = player?.activeTitle ? ACHIEVEMENTS_BY_ID.get(player.activeTitle) : null;
 
     const event: ChatMessageEvent = {
       id: saved.id,
@@ -101,6 +106,8 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       channelId,
       playerId,
       username,
+      title: titleDef?.titleReward,
+      titleTier: titleDef?.tier,
       message: trimmed,
       createdAt: saved.createdAt.toISOString(),
       role: role as ChatMessageEvent['role'],

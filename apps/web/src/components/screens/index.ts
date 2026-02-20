@@ -10,3 +10,4 @@ export { Crafting } from './Crafting';
 export { Forge } from './Forge';
 export { Gathering } from './Gathering';
 export { WorldEvents } from './WorldEvents';
+export { Achievements } from './Achievements';

@@ -19,6 +19,7 @@ import { chatRouter } from './routes/chat';
 import { pvpRouter } from './routes/pvp';
 import { worldEventsRouter } from './routes/worldEvents';
 import { bossRouter } from './routes/boss';
+import { achievementsRouter } from './routes/achievements';
 import { leaderboardRouter } from './routes/leaderboard';
 import { errorHandler } from './middleware/errorHandler';
 import { createSocketServer, getIo } from './socket';
@@ -97,6 +98,7 @@ app.use('/api/v1/chat', chatRouter);
 app.use('/api/v1/pvp', pvpRouter);
 app.use('/api/v1/events', worldEventsRouter);
 app.use('/api/v1/boss', bossRouter);
+app.use('/api/v1/achievements', achievementsRouter);
 app.use('/api/v1/leaderboard', leaderboardRouter);
 
 // Error handler

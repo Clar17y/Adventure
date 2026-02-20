@@ -22,6 +22,7 @@ import {
   mine,
   repairItem,
   salvage,
+  selectSiteStrategy,
   useItem,
   updatePlayerSettings,
   startCombatFromEncounterSite,
@@ -65,6 +66,10 @@ export interface PendingEncounter {
   nextMobPrefix: string | null;
   nextMobDisplayName: string | null;
   discoveredAt: string;
+  clearStrategy: string | null;
+  currentRoom: number;
+  totalRooms: number;
+  roomMobCounts: Array<{ room: number; alive: number; total: number }>;
 }
 
 export interface LastCombatLogEntry {
@@ -134,6 +139,7 @@ export interface LastCombat {
         recipeName: string;
         soulbound: boolean;
       } | null;
+      fullClearBonus?: boolean;
     } | null;
     skillXp: {
       skillType: string;
@@ -560,6 +566,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           nextMobPrefix: site.nextMobPrefix,
           nextMobDisplayName: site.nextMobDisplayName,
           discoveredAt: site.discoveredAt,
+          clearStrategy: site.clearStrategy,
+          currentRoom: site.currentRoom,
+          totalRooms: site.totalRooms,
+          roomMobCounts: site.roomMobCounts,
         }))
       );
       setPendingEncounterPagination(res.data.pagination);
@@ -952,9 +962,32 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       logDurabilityWarnings(data.rewards.durabilityLost);
 
+      if (data.combat.room?.roomCleared && data.combat.room.siteStrategy === 'room_by_room') {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Room ${data.combat.room.currentRoom} cleared! You can rest before the next room.`,
+        });
+      }
+
       await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters(), loadBestiary()]);
     });
   };
+
+  const handleSelectStrategy = useCallback(async (
+    encounterSiteId: string,
+    strategy: 'full_clear' | 'room_by_room'
+  ) => {
+    setBusyAction('strategy');
+    try {
+      await selectSiteStrategy(encounterSiteId, strategy);
+      await refreshPendingEncounters();
+    } catch (err) {
+      pushLog({ timestamp: nowStamp(), type: 'danger', message: `Failed to select strategy: ${(err as Error).message}` });
+    } finally {
+      setBusyAction(null);
+    }
+  }, [refreshPendingEncounters]);
 
   const handleCombatPlaybackComplete = () => {
     if (combatPlaybackData) {
@@ -1467,6 +1500,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleExplorationPlaybackComplete,
     handlePlaybackSkip,
     handleStartCombat,
+    handleSelectStrategy,
     handleCombatPlaybackComplete,
     handleTravelPlaybackComplete,
     handleTravelPlaybackSkip,

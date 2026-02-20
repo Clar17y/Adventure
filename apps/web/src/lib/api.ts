@@ -639,6 +639,12 @@ export interface CombatResponse {
     playerMaxHp: number;
     mobMaxHp: number;
     log: CombatLogEntryResponse[];
+    room?: {
+      currentRoom: number;
+      roomCleared: boolean;
+      siteStrategy: string;
+      fullClearActive: boolean;
+    };
   };
   rewards: {
     xp: number;
@@ -663,6 +669,7 @@ export interface CombatResponse {
         recipeName: string;
         soulbound: boolean;
       } | null;
+      fullClearBonus?: boolean;
     } | null;
     durabilityLost: Array<{ itemId: string; amount: number; itemName?: string; newDurability?: number; maxDurability?: number; isBroken?: boolean; crossedWarningThreshold?: boolean }>;
     skillXp: SkillXpGrantResponse | null;
@@ -755,6 +762,10 @@ export interface EncounterSitesResponse {
     nextMobPrefix: string | null;
     nextMobDisplayName: string | null;
     discoveredAt: string;
+    clearStrategy: string | null;
+    currentRoom: number;
+    totalRooms: number;
+    roomMobCounts: Array<{ room: number; alive: number; total: number }>;
   }>;
   pagination: {
     page: number;
@@ -780,6 +791,19 @@ export async function getEncounterSites(query: EncounterSitesQuery = {}) {
 
   const suffix = params.toString();
   return fetchApi<EncounterSitesResponse>(`/api/v1/combat/sites${suffix ? `?${suffix}` : ''}`);
+}
+
+export async function selectSiteStrategy(
+  encounterSiteId: string,
+  strategy: 'full_clear' | 'room_by_room'
+) {
+  return fetchApi<{ success: boolean; encounterSiteId: string; strategy: string }>(
+    `/api/v1/combat/sites/${encounterSiteId}/strategy`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ strategy }),
+    }
+  );
 }
 
 export async function abandonEncounterSites(zoneId?: string) {

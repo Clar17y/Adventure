@@ -223,6 +223,7 @@ export default function GamePage() {
     handleExplorationPlaybackComplete,
     handlePlaybackSkip,
     handleStartCombat,
+    handleSelectStrategy,
     handleCombatPlaybackComplete,
     handleTravelPlaybackComplete,
     handleTravelPlaybackSkip,
@@ -724,6 +725,7 @@ export default function GamePage() {
             lastCombat={lastCombat}
             bestiaryMobs={bestiaryMobs.map((mob) => ({ id: mob.id, isDiscovered: mob.isDiscovered }))}
             onStartCombat={handleStartCombat}
+            onSelectStrategy={handleSelectStrategy}
             onPendingEncounterPageChange={handlePendingEncounterPageChange}
             onPendingEncounterZoneFilterChange={handlePendingEncounterZoneFilterChange}
             onPendingEncounterMobFilterChange={handlePendingEncounterMobFilterChange}

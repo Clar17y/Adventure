@@ -39,6 +39,7 @@ interface CombatScreenProps {
   lastCombat: LastCombat | null;
   bestiaryMobs: Array<{ id: string; isDiscovered: boolean }>;
   onStartCombat: (encounterSiteId: string) => void | Promise<void>;
+  onSelectStrategy?: (encounterSiteId: string, strategy: 'full_clear' | 'room_by_room') => void | Promise<void>;
   onPendingEncounterPageChange: (page: number) => void;
   onPendingEncounterZoneFilterChange: (zoneId: string) => void;
   onPendingEncounterMobFilterChange: (mobTemplateId: string) => void;
@@ -72,6 +73,7 @@ export function CombatScreen({
   lastCombat,
   bestiaryMobs,
   onStartCombat,
+  onSelectStrategy,
   onPendingEncounterPageChange,
   onPendingEncounterZoneFilterChange,
   onPendingEncounterMobFilterChange,

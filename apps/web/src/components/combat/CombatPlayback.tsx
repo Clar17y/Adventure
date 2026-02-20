@@ -10,6 +10,7 @@ type Phase = 'playing' | 'finished-auto' | 'finished-manual';
 
 interface CombatPlaybackProps {
   mobDisplayName: string;
+  mobImageSrc?: string;
   outcome: string;
   playerMaxHp: number;
   playerStartHp: number;
@@ -24,6 +25,7 @@ interface CombatPlaybackProps {
 
 export function CombatPlayback({
   mobDisplayName,
+  mobImageSrc,
   outcome,
   playerMaxHp,
   playerStartHp,
@@ -127,7 +129,12 @@ export function CombatPlayback({
   return (
     <div>
       {/* Header */}
-      <div className="text-center font-bold text-[var(--rpg-text-primary)]">{mobDisplayName}</div>
+      <div className="flex items-center justify-center gap-2 font-bold text-[var(--rpg-text-primary)]">
+        {mobImageSrc && (
+          <img src={mobImageSrc} alt={mobDisplayName} className="w-10 h-10 rounded object-cover" />
+        )}
+        {mobDisplayName}
+      </div>
 
       {/* HP Bars */}
       <div className="space-y-3 my-4">

@@ -53,7 +53,7 @@ export async function getLadder(playerId: string) {
       player: { characterLevel: { gte: PVP_CONSTANTS.MIN_CHARACTER_LEVEL } },
     },
     include: {
-      player: { select: { username: true, characterLevel: true, activeTitle: true } },
+      player: { select: { username: true, characterLevel: true, role: true, activeTitle: true } },
     },
     orderBy: { rating: 'desc' },
   });
@@ -67,6 +67,7 @@ export async function getLadder(playerId: string) {
         username: c.player.username,
         rating: c.rating,
         characterLevel: c.player.characterLevel,
+        isAdmin: c.player.role === 'admin',
         title: titleDef?.titleReward,
         titleTier: titleDef?.tier,
       };
@@ -338,8 +339,18 @@ export async function challenge(
   // Calculate Elo changes — scoreA: 1 = win, 0.5 = draw, 0 = loss (from attacker perspective)
   const score = isDraw ? 0.5 : attackerWon ? 1 : 0;
   const elo = calculateEloChange(attackerRating.rating, defenderRating.rating, PVP_CONSTANTS.K_FACTOR, score);
-  const attackerRatingChange = elo.deltaA;
-  const defenderRatingChange = elo.deltaB;
+  let attackerRatingChange = elo.deltaA;
+  let defenderRatingChange = elo.deltaB;
+
+  // Zero ELO changes when an admin is involved (friendly match)
+  const [attackerPlayer, defenderPlayer] = await Promise.all([
+    prisma.player.findUnique({ where: { id: attackerId }, select: { role: true } }),
+    prisma.player.findUnique({ where: { id: targetId }, select: { role: true } }),
+  ]);
+  if (attackerPlayer?.role === 'admin' || defenderPlayer?.role === 'admin') {
+    attackerRatingChange = 0;
+    defenderRatingChange = 0;
+  }
   const now = new Date();
 
   // Execute everything in a transaction

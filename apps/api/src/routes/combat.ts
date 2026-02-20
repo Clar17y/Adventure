@@ -328,6 +328,10 @@ combatRouter.get('/sites', async (req, res, next) => {
       nextMobTemplateId: string | null;
       nextMobPrefix: string | null;
       discoveredAt: string;
+      clearStrategy: string | null;
+      currentRoom: number;
+      totalRooms: number;
+      roomMobCounts: Array<{ room: number; alive: number; total: number }>;
     }> = [];
 
     for (const site of sites) {
@@ -338,6 +342,16 @@ combatRouter.get('/sites', async (req, res, next) => {
         mobs: site.mobs,
       }, now);
       if (!decayed) continue;
+
+      const roomNumbers = [...new Set(decayed.mobs.map(m => m.room ?? 1))].sort((a, b) => a - b);
+      const roomMobCounts = roomNumbers.map(room => {
+        const roomMobs = decayed.mobs.filter(m => (m.room ?? 1) === room);
+        return {
+          room,
+          alive: roomMobs.filter(m => m.status === 'alive').length,
+          total: roomMobs.length,
+        };
+      });
 
       activeSites.push({
         encounterSiteId: site.id,
@@ -354,6 +368,10 @@ combatRouter.get('/sites', async (req, res, next) => {
         nextMobTemplateId: decayed.nextMob?.mobTemplateId ?? null,
         nextMobPrefix: decayed.nextMob?.prefix ?? null,
         discoveredAt: site.discoveredAt.toISOString(),
+        clearStrategy: site.clearStrategy ?? null,
+        currentRoom: site.currentRoom ?? 1,
+        totalRooms: roomNumbers.length,
+        roomMobCounts,
       });
     }
 
@@ -411,6 +429,10 @@ combatRouter.get('/sites', async (req, res, next) => {
           nextMobPrefix: site.nextMobPrefix,
           nextMobDisplayName,
           discoveredAt: site.discoveredAt,
+          clearStrategy: site.clearStrategy,
+          currentRoom: site.currentRoom,
+          totalRooms: site.totalRooms,
+          roomMobCounts: site.roomMobCounts,
         };
       }),
       pagination: {

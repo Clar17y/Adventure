@@ -713,7 +713,7 @@ async function handleEncounterSiteRoomCombat(req: Request, res: Response, player
     }
 
     fightResults.push({
-      mobName: prefixedMob.name,
+      mobName: template.name as string,
       mobDisplayName: prefixedMob.mobDisplayName ?? prefixedMob.name,
       mobTemplateId: prefixedMob.id,
       mobPrefix: prefixedMob.mobPrefix,

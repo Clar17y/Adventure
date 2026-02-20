@@ -779,10 +779,10 @@ export default function GamePage() {
             availableTurns={turns}
           />
         );
-      case 'profile':
+      case 'settings':
         return (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Profile</h2>
+            <h2 className="text-xl font-bold text-[var(--rpg-text-primary)]">Settings</h2>
             <p className="text-[var(--rpg-text-secondary)]">Username: {player?.username}</p>
 
             <PixelCard>

@@ -44,7 +44,7 @@ export type Screen =
   | 'explore'
   | 'inventory'
   | 'combat'
-  | 'profile'
+  | 'settings'
   | 'skills'
   | 'equipment'
   | 'zones'
@@ -745,7 +745,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (['explore', 'gathering', 'crafting', 'forge'].includes(activeScreen)) return 'explore';
     if (['inventory', 'equipment'].includes(activeScreen)) return 'inventory';
     if (['combat', 'arena'].includes(activeScreen)) return 'combat';
-    return 'profile';
+    return 'settings';
   };
 
   const nowStamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

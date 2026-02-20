@@ -797,6 +797,7 @@ combatRouter.post('/start', async (req, res, next) => {
         zoneId,
         mobTemplateId: prefixedMob.id,
         mobPrefix,
+        mobName: baseMob.name,
         mobDisplayName: prefixedMob.mobDisplayName,
         encounterSiteId: consumedEncounterSiteId,
         encounterSiteCleared,

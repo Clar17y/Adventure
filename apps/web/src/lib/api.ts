@@ -632,6 +632,7 @@ export interface CombatResponse {
     zoneId: string;
     mobTemplateId: string;
     mobPrefix: string | null;
+    mobName: string;
     mobDisplayName: string;
     encounterSiteId: string | null;
     encounterSiteCleared?: boolean;

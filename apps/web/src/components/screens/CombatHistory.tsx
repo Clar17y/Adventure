@@ -10,6 +10,7 @@ import {
   type CombatResultResponse,
 } from '@/lib/api';
 import { formatCombatShareText, resolveMobMaxHp, resolvePlayerMaxHp } from '@/lib/combatShare';
+import { monsterImageSrc } from '@/lib/assets';
 import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
 import { CombatRewardsSummary } from '@/components/combat/CombatRewardsSummary';
 import { Pagination } from '@/components/common/Pagination';
@@ -314,10 +315,19 @@ export function CombatHistory() {
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm text-[var(--rpg-text-primary)] font-semibold truncate">
-                    <span className={outcomeColor(entry.outcome)}>{outcomeIcon(entry.outcome)}</span>
-                    {' '}
-                    {entry.mobDisplayName ?? entry.mobName ?? 'Unknown Mob'}
+                  <div className="flex items-center gap-2 text-sm text-[var(--rpg-text-primary)] font-semibold truncate">
+                    {entry.mobName && (
+                      <img
+                        src={monsterImageSrc(entry.mobName)}
+                        alt={entry.mobName}
+                        className="w-8 h-8 rounded object-cover shrink-0"
+                      />
+                    )}
+                    <span className="truncate">
+                      <span className={outcomeColor(entry.outcome)}>{outcomeIcon(entry.outcome)}</span>
+                      {' '}
+                      {entry.mobDisplayName ?? entry.mobName ?? 'Unknown Mob'}
+                    </span>
                   </div>
                   <div className={`text-xs font-semibold ${outcomeColor(entry.outcome)}`}>
                     {formatOutcome(entry.outcome)}
@@ -347,7 +357,14 @@ export function CombatHistory() {
       {selectedEntry && (
         <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="text-[var(--rpg-text-primary)] font-semibold">
+            <div className="flex items-center gap-2 text-[var(--rpg-text-primary)] font-semibold">
+              {(selectedDetail?.mobName ?? selectedEntry.mobName) && (
+                <img
+                  src={monsterImageSrc((selectedDetail?.mobName ?? selectedEntry.mobName)!)}
+                  alt={selectedDetail?.mobDisplayName ?? selectedEntry.mobName ?? 'Mob'}
+                  className="w-8 h-8 rounded object-cover shrink-0"
+                />
+              )}
               {selectedDetail?.mobDisplayName ?? selectedEntry.mobDisplayName ?? selectedEntry.mobName ?? 'Combat'} Log
             </div>
             <div className="flex items-center gap-2">

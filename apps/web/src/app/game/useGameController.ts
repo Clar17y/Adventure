@@ -115,6 +115,7 @@ export interface LastCombatLogEntry {
 export interface LastCombat {
   mobTemplateId: string;
   mobPrefix: string | null;
+  mobName: string;
   mobDisplayName: string;
   outcome: string;
   combatantAMaxHp: number;
@@ -399,6 +400,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [activeTitle, setActiveTitleState] = useState<string | null>(null);
   const [playbackActive, setPlaybackActive] = useState(false);
   const [combatPlaybackData, setCombatPlaybackData] = useState<{
+    mobName: string;
     mobDisplayName: string;
     outcome: string;
     combatantAMaxHp: number;
@@ -951,6 +953,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       // Store for animated playback instead of setting lastCombat directly
       setCombatPlaybackData({
+        mobName: data.combat.mobName,
         mobDisplayName: data.combat.mobDisplayName,
         outcome: data.combat.outcome,
         combatantAMaxHp: data.combat.playerMaxHp,
@@ -1005,6 +1008,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setLastCombat({
         mobTemplateId: '',
         mobPrefix: null,
+        mobName: combatPlaybackData.mobName,
         mobDisplayName: combatPlaybackData.mobDisplayName,
         outcome: combatPlaybackData.outcome,
         combatantAMaxHp: combatPlaybackData.combatantAMaxHp,

@@ -218,6 +218,8 @@ export default function GamePage() {
     pvpNotificationCount,
     playbackActive,
     combatPlaybackData,
+    combatPlaybackQueue,
+    combatPlaybackIndex,
     explorationPlaybackData,
     travelPlaybackData,
     currentZone,
@@ -748,6 +750,10 @@ export default function GamePage() {
             onPendingEncounterSortChange={handlePendingEncounterSortChange}
             combatPlaybackData={combatPlaybackData}
             onCombatPlaybackComplete={handleCombatPlaybackComplete}
+            fightProgress={combatPlaybackQueue && combatPlaybackQueue.length > 1
+              ? { current: combatPlaybackIndex + 1, total: combatPlaybackQueue.length }
+              : null
+            }
           />
         );
       case 'arena':

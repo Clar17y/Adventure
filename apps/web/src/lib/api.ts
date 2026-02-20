@@ -625,6 +625,23 @@ export interface CombatResultResponse {
   };
 }
 
+export interface CombatFightResult {
+  mobDisplayName: string;
+  mobTemplateId: string;
+  mobPrefix: string | null;
+  outcome: string;
+  playerMaxHp: number;
+  playerStartHp: number;
+  mobMaxHp: number;
+  log: CombatLogEntryResponse[];
+  playerHpRemaining: number;
+  potionsConsumed: Array<{ tier: number; healAmount: number; round: number; templateId?: string }>;
+  xp: number;
+  loot: Array<{ itemTemplateId: string; quantity: number; rarity?: string; itemName?: string | null }>;
+  durabilityLost: Array<{ itemId: string; amount: number; itemName?: string; newDurability?: number; maxDurability?: number; isBroken?: boolean; crossedWarningThreshold?: boolean }>;
+  skillXp: SkillXpGrantResponse | null;
+}
+
 export interface CombatResponse {
   logId: string;
   turns: { currentTurns: number; timeToCapMs: number | null; lastRegenAt: string };
@@ -645,6 +662,7 @@ export interface CombatResponse {
       siteStrategy: string;
       fullClearActive: boolean;
     };
+    fights?: CombatFightResult[];
   };
   rewards: {
     xp: number;

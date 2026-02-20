@@ -993,6 +993,7 @@ explorationRouter.post('/start', async (req, res, next) => {
       }> = [];
 
       for (const discovery of pendingSites) {
+        const distinctRooms = new Set(discovery.mobs.map(m => m.room)).size;
         const site = await txAny.encounterSite.create({
           data: {
             playerId,
@@ -1001,6 +1002,7 @@ explorationRouter.post('/start', async (req, res, next) => {
             name: discovery.siteName,
             size: discovery.size,
             mobs: { mobs: discovery.mobs },
+            ...(distinctRooms <= 1 ? { clearStrategy: 'full_clear', fullClearActive: true } : {}),
           },
           select: {
             id: true,

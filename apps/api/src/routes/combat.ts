@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@adventure/database';
 import {
@@ -21,6 +21,7 @@ import {
   type CombatOptions,
   type LootDrop,
   type MobTemplate,
+  type PotionConsumed,
 } from '@adventure/shared';
 import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
@@ -184,6 +185,16 @@ function getNextEncounterMobInRoom(mobs: EncounterMobState[], roomNumber: number
     return a.slot - b.slot;
   });
   return alive[0] ?? null;
+}
+
+function getAllAliveMobsInRoom(mobs: EncounterMobState[], roomNumber: number): EncounterMobState[] {
+  return mobs
+    .filter((mob) => mob.status === 'alive' && mob.room === roomNumber)
+    .sort((a, b) => {
+      const roleDiff = roleOrder(a.role) - roleOrder(b.role);
+      if (roleDiff !== 0) return roleDiff;
+      return a.slot - b.slot;
+    });
 }
 
 function getRoomState(mobs: EncounterMobState[], roomNumber: number): {
@@ -525,16 +536,539 @@ combatRouter.post('/sites/:id/strategy', async (req, res, next) => {
   }
 });
 
+interface FightResult {
+  mobDisplayName: string;
+  mobTemplateId: string;
+  mobPrefix: string | null;
+  outcome: string;
+  playerMaxHp: number;
+  playerStartHp: number;
+  mobMaxHp: number;
+  log: unknown[];
+  playerHpRemaining: number;
+  potionsConsumed: PotionConsumed[];
+  xp: number;
+  loot: LootDropWithName[];
+  durabilityLost: Awaited<ReturnType<typeof degradeEquippedDurability>>;
+  skillXp: Awaited<ReturnType<typeof grantSkillXp>> | null;
+}
+
+/**
+ * Handle encounter site room combat: fight ALL alive mobs in the current room sequentially.
+ */
+async function handleEncounterSiteRoomCombat(req: Request, res: Response, playerId: string, encounterSiteId: string, body: { attackSkill?: 'melee' | 'ranged' | 'magic' }) {
+  const hpState = await getHpState(playerId);
+  if (hpState.isRecovering) {
+    throw new AppError(400, 'Cannot fight while recovering. Spend recovery turns first.', 'IS_RECOVERING');
+  }
+  if (hpState.currentHp <= 0) {
+    throw new AppError(400, 'Cannot fight with 0 HP. Rest to recover health.', 'NO_HP');
+  }
+
+  const site = await prismaAny.encounterSite.findFirst({
+    where: { id: encounterSiteId, playerId },
+  });
+  if (!site) throw new AppError(404, 'Encounter site not found', 'NOT_FOUND');
+  if (!site.clearStrategy) throw new AppError(400, 'Select a clearing strategy before fighting', 'STRATEGY_NOT_SET');
+
+  const decayed = await applyEncounterSiteDecayAndPersist({
+    id: site.id,
+    playerId: site.playerId,
+    discoveredAt: site.discoveredAt,
+    mobs: site.mobs,
+  }, new Date());
+  if (!decayed) throw new AppError(410, 'Encounter site has decayed', 'SITE_DECAYED');
+
+  const siteStrategy = site.clearStrategy as 'full_clear' | 'room_by_room';
+  const siteFullClearActive = site.fullClearActive ?? true;
+  const currentRoom = site.currentRoom ?? 1;
+  const zoneId = site.zoneId as string;
+
+  // Get ALL alive mobs in the current room
+  const roomMobs = getAllAliveMobsInRoom(decayed.mobs, currentRoom);
+  if (roomMobs.length === 0) throw new AppError(400, 'No mobs remaining in current room', 'ROOM_EMPTY');
+
+  // Upfront turn cost for entire room
+  const totalTurnCost = roomMobs.length * COMBAT_CONSTANTS.ENCOUNTER_TURN_COST;
+
+  // Load zone
+  const zone = await prisma.zone.findUnique({ where: { id: zoneId } });
+  if (!zone) throw new AppError(404, 'Zone not found', 'NOT_FOUND');
+
+  const explorationProgress = await getExplorationPercent(playerId, zoneId);
+
+  // Batch-load mob templates
+  const mobTemplateIds = [...new Set(roomMobs.map(m => m.mobTemplateId))];
+  const mobTemplateRows = await prisma.mobTemplate.findMany({ where: { id: { in: mobTemplateIds } } });
+  const mobTemplateById = new Map(mobTemplateRows.map(t => [t.id, t]));
+
+  // Build player stats once
+  const requestedAttackSkill: AttackSkill | null = body.attackSkill ?? null;
+  const mainHandAttackSkill = await getMainHandAttackSkill(playerId);
+  const attackSkill: AttackSkill = mainHandAttackSkill ?? requestedAttackSkill ?? 'melee';
+  const [attackLevel, progression] = await Promise.all([
+    getSkillLevel(playerId, attackSkill),
+    getPlayerProgressionState(playerId),
+  ]);
+  const equipmentStats = await getEquipmentStats(playerId);
+
+  // Apply room carry HP
+  let currentPlayerHp = hpState.currentHp;
+  if (site.roomCarryHp !== null && site.roomCarryHp !== undefined) {
+    currentPlayerHp = site.roomCarryHp;
+    await setHp(playerId, currentPlayerHp);
+  }
+
+  // Build shared potion pool
+  const playerRecord = await prismaAny.player.findUnique({
+    where: { id: playerId },
+    select: { autoPotionThreshold: true },
+  });
+  const autoPotionThreshold = playerRecord?.autoPotionThreshold ?? 0;
+  const potionPool = autoPotionThreshold > 0 ? await buildPotionPool(playerId, hpState.maxHp) : [];
+  const allPotionsConsumed: PotionConsumed[] = [];
+
+  // Zone modifiers
+  const zoneModifiers = await getActiveZoneModifiers(zoneId);
+  const activeEventEffects = await getActiveEventSummaries(zoneId);
+
+  // Fight loop
+  const fightResults: FightResult[] = [];
+  let lastCombatResult: ReturnType<typeof runCombat> | null = null;
+  let lastPrefixedMob: (MobTemplate & { mobPrefix: string | null; mobDisplayName: string | null }) | null = null;
+  let lastBaseMob: MobTemplate | null = null;
+
+  for (const roomMob of roomMobs) {
+    const template = mobTemplateById.get(roomMob.mobTemplateId);
+    if (!template) continue;
+
+    const baseMob: MobTemplate = {
+      ...(template as unknown as MobTemplate),
+      spellPattern: Array.isArray((template as { spellPattern: unknown }).spellPattern)
+        ? ((template as { spellPattern: unknown }).spellPattern as MobTemplate['spellPattern'])
+        : [],
+    };
+    const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
+    const prefixedMob = applyMobPrefix(modifiedMob, roomMob.prefix ?? null);
+
+    const playerStartHp = currentPlayerHp;
+    const playerStats = buildPlayerCombatStats(
+      currentPlayerHp,
+      hpState.maxHp,
+      { attackStyle: attackSkill, skillLevel: attackLevel, attributes: progression.attributes },
+      equipmentStats
+    );
+
+    let combatOptions: CombatOptions | undefined;
+    if (autoPotionThreshold > 0 && potionPool.length > 0) {
+      combatOptions = { autoPotionThreshold, potions: [...potionPool] };
+    }
+
+    const combatantA: Combatant = { id: playerId, name: req.player!.username, stats: playerStats };
+    const combatantB: Combatant = {
+      id: prefixedMob.id,
+      name: prefixedMob.mobDisplayName ?? prefixedMob.name,
+      stats: mobToCombatantStats(prefixedMob),
+      spells: prefixedMob.spellPattern,
+    };
+
+    const combatResult = runCombat(combatantA, combatantB, combatOptions);
+    lastCombatResult = combatResult;
+    lastPrefixedMob = prefixedMob;
+    lastBaseMob = baseMob;
+
+    // Remove consumed potions from shared pool
+    for (const consumed of combatResult.potionsConsumed) {
+      const idx = potionPool.findIndex(p => p.templateId === consumed.templateId);
+      if (idx !== -1) potionPool.splice(idx, 1);
+      allPotionsConsumed.push(consumed);
+    }
+
+    // Per-mob post-combat rewards (only on victory)
+    let mobLoot: LootDropWithName[] = [];
+    let mobXpGrant: Awaited<ReturnType<typeof grantSkillXp>> | null = null;
+    const mobXpAwarded = combatResult.outcome === 'victory' ? Math.max(0, prefixedMob.xpReward) : 0;
+    const mobDurabilityLost = await degradeEquippedDurability(playerId);
+
+    if (combatResult.outcome === 'victory') {
+      await setHp(playerId, combatResult.combatantAHpRemaining);
+      const rawLoot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
+      mobLoot = await enrichLootWithNames(rawLoot);
+      mobXpGrant = await grantSkillXp(playerId, attackSkill, mobXpAwarded);
+
+      // Bestiary
+      await prisma.playerBestiary.upsert({
+        where: { playerId_mobTemplateId: { playerId, mobTemplateId: prefixedMob.id } },
+        create: { playerId, mobTemplateId: prefixedMob.id, kills: 1 },
+        update: { kills: { increment: 1 } },
+      });
+      if (prefixedMob.mobPrefix) {
+        await prismaAny.playerBestiaryPrefix.upsert({
+          where: { playerId_mobTemplateId_prefix: { playerId, mobTemplateId: prefixedMob.id, prefix: prefixedMob.mobPrefix } },
+          create: { playerId, mobTemplateId: prefixedMob.id, prefix: prefixedMob.mobPrefix, kills: 1 },
+          update: { kills: { increment: 1 } },
+        });
+      }
+    }
+
+    fightResults.push({
+      mobDisplayName: prefixedMob.mobDisplayName ?? prefixedMob.name,
+      mobTemplateId: prefixedMob.id,
+      mobPrefix: prefixedMob.mobPrefix,
+      outcome: combatResult.outcome,
+      playerMaxHp: combatResult.combatantAMaxHp,
+      playerStartHp,
+      mobMaxHp: combatResult.combatantBMaxHp,
+      log: combatResult.log,
+      playerHpRemaining: combatResult.combatantAHpRemaining,
+      potionsConsumed: combatResult.potionsConsumed,
+      xp: mobXpAwarded,
+      loot: mobLoot,
+      durabilityLost: mobDurabilityLost,
+      skillXp: mobXpGrant,
+    });
+
+    // Carry HP
+    currentPlayerHp = combatResult.combatantAHpRemaining;
+
+    // Stop on defeat
+    if (combatResult.outcome !== 'victory') break;
+  }
+
+  // --- Transaction: spend turns, mark defeated mobs, room/site clearing ---
+  const defeatedSlots = fightResults.filter(f => f.outcome === 'victory').map((_f, i) => roomMobs[i]!.slot);
+  let encounterSiteCleared = false;
+  let roomCleared = false;
+
+  const txResult = await prisma.$transaction(async (tx) => {
+    const txAny = tx as unknown as any;
+    const spent = await spendPlayerTurnsTx(tx, playerId, totalTurnCost);
+
+    const freshSite = await txAny.encounterSite.findFirst({
+      where: { id: encounterSiteId, playerId },
+      select: { id: true, playerId: true, mobFamilyId: true, size: true, discoveredAt: true, mobs: true },
+    });
+    if (!freshSite) throw new AppError(409, 'Encounter site is no longer available', 'ENCOUNTER_SITE_UNAVAILABLE');
+
+    const freshDecayed = applyEncounterSiteDecayInMemory(parseEncounterSiteMobs(freshSite.mobs), freshSite.discoveredAt, new Date());
+    const mobs = freshDecayed.mobs.map(m => ({ ...m }));
+
+    // Mark defeated mobs
+    for (const slot of defeatedSlots) {
+      const target = mobs.find(m => m.slot === slot);
+      if (target && target.status === 'alive') target.status = 'defeated';
+    }
+
+    // Room-aware post-combat logic
+    const roomState = getRoomState(mobs, currentRoom);
+    let newCurrentRoom = currentRoom;
+    let newRoomCarryHp: number | null = currentPlayerHp;
+    let siteCleared = false;
+
+    if (roomState.alive <= 0) {
+      roomCleared = true;
+      if (siteStrategy === 'full_clear' && siteFullClearActive) {
+        const nextRoom = getNextUnfinishedRoom(mobs, currentRoom + 1);
+        if (nextRoom) { newCurrentRoom = nextRoom; }
+        else { siteCleared = true; }
+      } else {
+        const overallCounts = countEncounterSiteState(mobs);
+        if (overallCounts.alive <= 0) {
+          siteCleared = true;
+        } else {
+          const nextRoom = getNextUnfinishedRoom(mobs, currentRoom + 1);
+          if (nextRoom) newCurrentRoom = nextRoom;
+          newRoomCarryHp = null;
+        }
+      }
+    }
+
+    let completionRewards: Awaited<ReturnType<typeof grantEncounterSiteChestRewardsTx>> | null = null;
+    if (siteCleared) {
+      completionRewards = await grantEncounterSiteChestRewardsTx(tx, {
+        playerId,
+        mobFamilyId: freshSite.mobFamilyId,
+        size: toEncounterSiteSize(freshSite.size),
+        fullClearBonus: siteStrategy === 'full_clear' && siteFullClearActive,
+      });
+      await txAny.encounterSite.deleteMany({ where: { id: encounterSiteId, playerId } });
+      encounterSiteCleared = true;
+    } else {
+      await txAny.encounterSite.update({
+        where: { id: encounterSiteId },
+        data: {
+          mobs: serializeEncounterSiteMobs(mobs),
+          currentRoom: newCurrentRoom,
+          roomCarryHp: newRoomCarryHp,
+        },
+      });
+    }
+
+    await deductConsumedPotions(playerId, allPotionsConsumed, tx);
+    return { turnSpend: spent, siteCompletionRewards: completionRewards };
+  });
+
+  const turnSpend = txResult.turnSpend;
+  const siteCompletionRewards = txResult.siteCompletionRewards;
+
+  // --- Defeat handling (last fight only) ---
+  const lastFight = fightResults[fightResults.length - 1];
+  let fleeResult: ReturnType<typeof calculateFleeResult> | null = null;
+  let respawnedTo: { townId: string; townName: string } | null = null;
+
+  if (lastFight && lastFight.outcome === 'defeat') {
+    fleeResult = calculateFleeResult({
+      evasionLevel: progression.attributes.evasion,
+      mobLevel: lastPrefixedMob!.level,
+      maxHp: hpState.maxHp,
+      currentGold: 0,
+    });
+
+    if (fleeResult.outcome === 'knockout') {
+      await enterRecoveringState(playerId, hpState.maxHp);
+      respawnedTo = await respawnToHomeTown(playerId);
+      await incrementStats(playerId, { totalDeaths: 1 });
+      const deathAchievements = await checkAchievements(playerId, { statKeys: ['totalDeaths'] });
+      await emitAchievementNotifications(playerId, deathAchievements);
+    } else {
+      await setHp(playerId, fleeResult.remainingHp);
+    }
+
+    // Defeat in room: downgrade full_clear or reset room
+    const siteForReset = await prismaAny.encounterSite.findFirst({ where: { id: encounterSiteId, playerId } });
+    if (siteForReset) {
+      if (siteStrategy === 'full_clear' && siteFullClearActive) {
+        await prismaAny.encounterSite.update({
+          where: { id: encounterSiteId },
+          data: { clearStrategy: 'room_by_room', fullClearActive: false, roomCarryHp: null },
+        });
+      } else {
+        const siteMobs = parseEncounterSiteMobs(siteForReset.mobs);
+        const resetMobs = siteMobs.map(m =>
+          m.room === currentRoom && m.status === 'defeated' ? { ...m, status: 'alive' as const } : m
+        );
+        await prismaAny.encounterSite.update({
+          where: { id: encounterSiteId },
+          data: { mobs: serializeEncounterSiteMobs(resetMobs), roomCarryHp: null },
+        });
+      }
+    }
+  }
+
+  // --- Achievement tracking ---
+  if (totalTurnCost > 0) {
+    await incrementStats(playerId, { totalTurnsSpent: totalTurnCost });
+  }
+
+  const victoriesCount = fightResults.filter(f => f.outcome === 'victory').length;
+  if (victoriesCount > 0) {
+    const achievementKeys = ['totalKills', 'totalUniqueMonsterKills', 'totalTurnsSpent', 'totalBestiaryCompleted'];
+    if (siteCompletionRewards?.recipeUnlocked) achievementKeys.push('totalRecipesLearned');
+
+    // Check skill level achievements from last XP grant
+    const lastXpGrant = [...fightResults].reverse().find(f => f.skillXp)?.skillXp;
+    if (lastXpGrant?.newLevel) achievementKeys.push('highestSkillLevel');
+    if (lastXpGrant?.characterLevelAfter && lastXpGrant.characterLevelAfter > (lastXpGrant.characterLevelBefore ?? 0)) {
+      achievementKeys.push('highestCharacterLevel');
+    }
+
+    // Resolve mob family
+    const firstMobTemplateId = fightResults[0]?.mobTemplateId;
+    let mobFamilyIdForAchievement: string | undefined;
+    if (firstMobTemplateId) {
+      const familyMember = await prismaAny.mobFamilyMember.findFirst({
+        where: { mobTemplateId: firstMobTemplateId },
+        select: { mobFamilyId: true },
+      });
+      if (familyMember?.mobFamilyId) mobFamilyIdForAchievement = familyMember.mobFamilyId;
+    }
+
+    const newAchievements = await checkAchievements(playerId, { statKeys: achievementKeys, familyId: mobFamilyIdForAchievement });
+    await emitAchievementNotifications(playerId, newAchievements);
+  } else {
+    const defeatAchievements = await checkAchievements(playerId, { statKeys: ['totalTurnsSpent'] });
+    await emitAchievementNotifications(playerId, defeatAchievements);
+  }
+
+  // --- Build aggregated rewards ---
+  const aggregatedLoot: LootDropWithName[] = [];
+  const aggregatedDurabilityLost: Awaited<ReturnType<typeof degradeEquippedDurability>> = [];
+  let aggregatedXp = 0;
+  for (const fight of fightResults) {
+    aggregatedXp += fight.xp;
+    aggregatedLoot.push(...fight.loot);
+    aggregatedDurabilityLost.push(...fight.durabilityLost);
+  }
+  const lastVictoryXpGrant = [...fightResults].reverse().find(f => f.skillXp)?.skillXp ?? null;
+
+  const siteCompletionWithNames = siteCompletionRewards
+    ? {
+        chestRarity: siteCompletionRewards.chestRarity,
+        materialRolls: siteCompletionRewards.materialRolls,
+        loot: await enrichLootWithNames(siteCompletionRewards.loot),
+        recipeUnlocked: siteCompletionRewards.recipeUnlocked,
+        fullClearBonus: siteStrategy === 'full_clear' && siteFullClearActive,
+      }
+    : null;
+
+  // --- Activity log ---
+  const combatLog = await prisma.activityLog.create({
+    data: {
+      playerId,
+      activityType: 'combat',
+      turnsSpent: totalTurnCost,
+      result: {
+        zoneId,
+        zoneName: zone.name,
+        mobTemplateId: lastPrefixedMob?.id ?? roomMobs[0]?.mobTemplateId,
+        mobName: lastBaseMob?.name,
+        mobPrefix: lastPrefixedMob?.mobPrefix,
+        mobDisplayName: lastPrefixedMob?.mobDisplayName,
+        source: 'encounter_site',
+        encounterSiteId,
+        encounterSiteCleared,
+        attackSkill,
+        outcome: lastCombatResult?.outcome ?? 'defeat',
+        playerMaxHp: lastCombatResult?.combatantAMaxHp ?? hpState.maxHp,
+        mobMaxHp: lastCombatResult?.combatantBMaxHp ?? 0,
+        log: lastCombatResult?.log ?? [],
+        potionsConsumed: allPotionsConsumed,
+        fightCount: fightResults.length,
+        rewards: {
+          xp: aggregatedXp,
+          baseXp: aggregatedXp,
+          loot: aggregatedLoot,
+          siteCompletion: siteCompletionWithNames,
+          durabilityLost: aggregatedDurabilityLost,
+          skillXp: lastVictoryXpGrant
+            ? {
+                skillType: lastVictoryXpGrant.skillType,
+                ...lastVictoryXpGrant.xpResult,
+                newTotalXp: lastVictoryXpGrant.newTotalXp,
+                newDailyXpGained: lastVictoryXpGrant.newDailyXpGained,
+                characterXpGain: lastVictoryXpGrant.characterXpGain,
+                characterXpAfter: lastVictoryXpGrant.characterXpAfter,
+                characterLevelBefore: lastVictoryXpGrant.characterLevelBefore,
+                characterLevelAfter: lastVictoryXpGrant.characterLevelAfter,
+                attributePointsAfter: lastVictoryXpGrant.attributePointsAfter,
+                characterLeveledUp: lastVictoryXpGrant.characterLeveledUp,
+              }
+            : null,
+        },
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  // --- Response with fights[] array ---
+  const lastFightResult = fightResults[fightResults.length - 1]!;
+  res.json({
+    logId: combatLog.id,
+    turns: turnSpend,
+    combat: {
+      zoneId,
+      mobTemplateId: lastFightResult.mobTemplateId,
+      mobPrefix: lastFightResult.mobPrefix,
+      mobDisplayName: lastFightResult.mobDisplayName,
+      encounterSiteId,
+      encounterSiteCleared,
+      attackSkill,
+      outcome: lastFightResult.outcome,
+      playerMaxHp: lastFightResult.playerMaxHp,
+      mobMaxHp: lastFightResult.mobMaxHp,
+      log: lastFightResult.log,
+      playerHpRemaining: lastFightResult.playerHpRemaining,
+      potionsConsumed: allPotionsConsumed,
+      fleeResult: fleeResult
+        ? {
+            outcome: fleeResult.outcome,
+            remainingHp: fleeResult.remainingHp,
+            goldLost: fleeResult.goldLost,
+            isRecovering: fleeResult.outcome === 'knockout',
+            recoveryCost: fleeResult.recoveryCost,
+          }
+        : null,
+      ...(respawnedTo ? { respawnedTo } : {}),
+      room: {
+        currentRoom,
+        roomCleared,
+        siteStrategy,
+        fullClearActive: siteFullClearActive,
+      },
+      fights: fightResults.map(f => ({
+        mobDisplayName: f.mobDisplayName,
+        mobTemplateId: f.mobTemplateId,
+        mobPrefix: f.mobPrefix,
+        outcome: f.outcome,
+        playerMaxHp: f.playerMaxHp,
+        playerStartHp: f.playerStartHp,
+        mobMaxHp: f.mobMaxHp,
+        log: f.log,
+        playerHpRemaining: f.playerHpRemaining,
+        potionsConsumed: f.potionsConsumed,
+        xp: f.xp,
+        loot: f.loot,
+        durabilityLost: f.durabilityLost,
+        skillXp: f.skillXp
+          ? {
+              skillType: f.skillXp.skillType,
+              ...f.skillXp.xpResult,
+              newTotalXp: f.skillXp.newTotalXp,
+              newDailyXpGained: f.skillXp.newDailyXpGained,
+              characterXpGain: f.skillXp.characterXpGain,
+              characterXpAfter: f.skillXp.characterXpAfter,
+              characterLevelBefore: f.skillXp.characterLevelBefore,
+              characterLevelAfter: f.skillXp.characterLevelAfter,
+              attributePointsAfter: f.skillXp.attributePointsAfter,
+              characterLeveledUp: f.skillXp.characterLeveledUp,
+            }
+          : null,
+      })),
+    },
+    rewards: {
+      xp: aggregatedXp,
+      loot: aggregatedLoot,
+      siteCompletion: siteCompletionWithNames,
+      durabilityLost: aggregatedDurabilityLost,
+      skillXp: lastVictoryXpGrant
+        ? {
+            skillType: lastVictoryXpGrant.skillType,
+            ...lastVictoryXpGrant.xpResult,
+            newTotalXp: lastVictoryXpGrant.newTotalXp,
+            newDailyXpGained: lastVictoryXpGrant.newDailyXpGained,
+            characterXpGain: lastVictoryXpGrant.characterXpGain,
+            characterXpAfter: lastVictoryXpGrant.characterXpAfter,
+            characterLevelBefore: lastVictoryXpGrant.characterLevelBefore,
+            characterLevelAfter: lastVictoryXpGrant.characterLevelAfter,
+            attributePointsAfter: lastVictoryXpGrant.attributePointsAfter,
+            characterLeveledUp: lastVictoryXpGrant.characterLeveledUp,
+          }
+        : null,
+    },
+    explorationProgress: {
+      turnsExplored: explorationProgress.turnsExplored,
+      percent: explorationProgress.percent,
+      turnsToExplore: explorationProgress.turnsToExplore,
+    },
+    activeEvents: activeEventEffects.length > 0 ? activeEventEffects : undefined,
+  });
+}
+
 /**
  * POST /api/v1/combat/start
- * Spend turns and run a single combat encounter.
+ * Spend turns and run combat. Encounter sites fight all mobs in the current room.
  */
 combatRouter.post('/start', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = startSchema.parse(req.body);
 
-    // Check if player can fight
+    // Encounter site → room combat loop
+    if (body.encounterSiteId) {
+      await handleEncounterSiteRoomCombat(req, res, playerId, body.encounterSiteId, body);
+      return;
+    }
+
+    // --- Zone combat (single mob, unchanged) ---
     const hpState = await getHpState(playerId);
     if (hpState.isRecovering) {
       throw new AppError(400, 'Cannot fight while recovering. Spend recovery turns first.', 'IS_RECOVERING');
@@ -543,65 +1077,7 @@ combatRouter.post('/start', async (req, res, next) => {
       throw new AppError(400, 'Cannot fight with 0 HP. Rest to recover health.', 'NO_HP');
     }
 
-    let zoneId = body.zoneId ?? null;
-    let mobTemplateId = body.mobTemplateId ?? null;
-    let mobPrefix = null as string | null;
-    let consumedEncounterSiteId = null as null | string;
-    let consumedEncounterMobSlot = null as null | number;
-    let encounterSiteCleared = false;
-    let siteCompletionRewards = null as null | Awaited<ReturnType<typeof grantEncounterSiteChestRewardsTx>>;
-    let siteStrategy = null as null | 'full_clear' | 'room_by_room';
-    let siteCurrentRoom = 1;
-    let siteFullClearActive = true;
-    let roomCarryHpOverride = null as null | number;
-    let roomCleared = false;
-
-    if (body.encounterSiteId) {
-      const site = await prismaAny.encounterSite.findFirst({
-        where: { id: body.encounterSiteId, playerId },
-        include: {
-          zone: { select: { id: true } },
-        },
-      });
-
-      if (!site) {
-        throw new AppError(404, 'Encounter site not found', 'NOT_FOUND');
-      }
-
-      if (!site.clearStrategy) {
-        throw new AppError(400, 'Select a clearing strategy before fighting', 'STRATEGY_NOT_SET');
-      }
-
-      const decayed = await applyEncounterSiteDecayAndPersist({
-        id: site.id,
-        playerId: site.playerId,
-        discoveredAt: site.discoveredAt,
-        mobs: site.mobs,
-      }, new Date());
-      if (!decayed) {
-        throw new AppError(410, 'Encounter site has decayed', 'SITE_DECAYED');
-      }
-
-      const currentRoom = site.currentRoom ?? 1;
-      const nextMob = getNextEncounterMobInRoom(decayed.mobs, currentRoom);
-      if (!nextMob) {
-        throw new AppError(400, 'No mobs remaining in current room', 'ROOM_EMPTY');
-      }
-
-      consumedEncounterSiteId = site.id;
-      consumedEncounterMobSlot = nextMob.slot;
-      zoneId = site.zoneId;
-      mobTemplateId = nextMob.mobTemplateId;
-      mobPrefix = nextMob.prefix ?? null;
-
-      siteStrategy = site.clearStrategy as typeof siteStrategy;
-      siteCurrentRoom = currentRoom;
-      siteFullClearActive = site.fullClearActive ?? true;
-      if (site.roomCarryHp !== null && site.roomCarryHp !== undefined) {
-        roomCarryHpOverride = site.roomCarryHp;
-      }
-    }
-
+    const zoneId = body.zoneId;
     if (!zoneId) {
       throw new AppError(400, 'zoneId is required', 'INVALID_REQUEST');
     }
@@ -615,8 +1091,8 @@ combatRouter.post('/start', async (req, res, next) => {
 
     let mob = null as null | (MobTemplate & { spellPattern: unknown });
 
-    if (mobTemplateId) {
-      const found = await prisma.mobTemplate.findUnique({ where: { id: mobTemplateId } });
+    if (body.mobTemplateId) {
+      const found = await prisma.mobTemplate.findUnique({ where: { id: body.mobTemplateId } });
       if (!found || found.zoneId !== zoneId) {
         throw new AppError(400, 'Invalid mobTemplateId for this zone', 'INVALID_MOB');
       }
@@ -626,7 +1102,6 @@ combatRouter.post('/start', async (req, res, next) => {
       const zoneTiers = (zone as unknown as { explorationTiers: Record<string, number> | null }).explorationTiers;
       const tiers = zoneTiers ?? ZONE_EXPLORATION_CONSTANTS.DEFAULT_TIERS;
 
-      // Determine current tier
       let currentTier = 0;
       for (const [tierStr, threshold] of Object.entries(tiers)) {
         const tier = Number(tierStr);
@@ -635,16 +1110,12 @@ combatRouter.post('/start', async (req, res, next) => {
         }
       }
 
-      // Select tier with bleedthrough
       const selectedTier = selectTierWithBleedthrough(currentTier, zoneTiers);
-
-      // Map mobs with tier info
       const mobsWithTier = mobs.map(m => ({
         ...m,
         explorationTier: (m as unknown as { explorationTier: number | null }).explorationTier ?? 1,
       }));
 
-      // Filter mobs to selected tier, fallback to current tier, then any
       let candidates = mobsWithTier.filter(m => m.explorationTier === selectedTier);
       if (candidates.length === 0) {
         candidates = mobsWithTier.filter(m => m.explorationTier === currentTier);
@@ -653,7 +1124,6 @@ combatRouter.post('/start', async (req, res, next) => {
         candidates = mobsWithTier;
       }
 
-      // Weight and pick (pass permissive tiers to bypass tier filtering in filterAndWeightMobsByTier)
       const allTiersUnlocked: Record<string, number> = {};
       for (const c of candidates) {
         allTiersUnlocked[String(c.explorationTier)] = 0;
@@ -666,9 +1136,7 @@ combatRouter.post('/start', async (req, res, next) => {
       mob = picked as unknown as MobTemplate & { spellPattern: unknown };
     }
 
-    if (!body.encounterSiteId) {
-      mobPrefix = rollMobPrefix();
-    }
+    let mobPrefix = rollMobPrefix();
 
     const requestedAttackSkill: AttackSkill | null = body.attackSkill ?? null;
     const mainHandAttackSkill = await getMainHandAttackSkill(playerId);
@@ -690,41 +1158,31 @@ combatRouter.post('/start', async (req, res, next) => {
       equipmentStats
     );
 
-    // Apply room carry HP override for encounter site room chains
-    if (roomCarryHpOverride !== null) {
-      await setHp(playerId, roomCarryHpOverride);
-      playerStats.hp = roomCarryHpOverride;
-    }
-
     const baseMob: MobTemplate = {
       ...mob,
       spellPattern: Array.isArray(mob.spellPattern) ? (mob.spellPattern as MobTemplate['spellPattern']) : [],
     };
-    // Apply world event modifiers to mob stats
     const zoneModifiers = await getActiveZoneModifiers(zoneId);
     const activeEventEffects = await getActiveEventSummaries(zoneId);
     const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
     const prefixedMob = applyMobPrefix(modifiedMob, mobPrefix);
     mobPrefix = prefixedMob.mobPrefix;
 
-    // Check for persisted mob reencounter (damaged mob from a previous fight)
+    // Persisted mob reencounter
     let persistedMobId: string | null = null;
     let mobHpOverride: { currentHp: number; maxHp: number } | null = null;
-    if (!body.encounterSiteId) {
-      const persisted = await checkPersistedMobReencounter(playerId, zoneId, prefixedMob.id);
-      if (persisted) {
-        persistedMobId = persisted.id;
-        mobHpOverride = { currentHp: persisted.currentHp, maxHp: persisted.maxHp };
-      }
+    const persisted = await checkPersistedMobReencounter(playerId, zoneId, prefixedMob.id);
+    if (persisted) {
+      persistedMobId = persisted.id;
+      mobHpOverride = { currentHp: persisted.currentHp, maxHp: persisted.maxHp };
     }
 
-    // Auto-potion setup
+    // Auto-potion
     const playerRecord = await prismaAny.player.findUnique({
       where: { id: playerId },
       select: { autoPotionThreshold: true },
     });
     const autoPotionThreshold = playerRecord?.autoPotionThreshold ?? 0;
-
     let combatOptions: CombatOptions | undefined;
     if (autoPotionThreshold > 0) {
       const potions = await buildPotionPool(playerId, hpState.maxHp);
@@ -732,11 +1190,7 @@ combatRouter.post('/start', async (req, res, next) => {
     }
 
     const finalMob = mobHpOverride ? { ...prefixedMob, ...mobHpOverride } : prefixedMob;
-    const combatantA: Combatant = {
-      id: playerId,
-      name: req.player!.username,
-      stats: playerStats,
-    };
+    const combatantA: Combatant = { id: playerId, name: req.player!.username, stats: playerStats };
     const combatantB: Combatant = {
       id: finalMob.id,
       name: finalMob.mobDisplayName ?? finalMob.name,
@@ -744,91 +1198,10 @@ combatRouter.post('/start', async (req, res, next) => {
       spells: finalMob.spellPattern,
     };
     const combatResult = runCombat(combatantA, combatantB, combatOptions);
+
     const turnSpend = await prisma.$transaction(async (tx) => {
-      const txAny = tx as unknown as any;
       const spent = await spendPlayerTurnsTx(tx, playerId, COMBAT_CONSTANTS.ENCOUNTER_TURN_COST);
-
-      if (consumedEncounterSiteId && combatResult.outcome === 'victory') {
-        const site = await txAny.encounterSite.findFirst({
-          where: { id: consumedEncounterSiteId, playerId },
-          select: {
-            id: true,
-            playerId: true,
-            mobFamilyId: true,
-            size: true,
-            discoveredAt: true,
-            mobs: true,
-          },
-        });
-        if (!site) {
-          throw new AppError(409, 'Encounter site is no longer available', 'ENCOUNTER_SITE_UNAVAILABLE');
-        }
-
-        const decayed = applyEncounterSiteDecayInMemory(parseEncounterSiteMobs(site.mobs), site.discoveredAt, new Date());
-        const mobs = decayed.mobs.map((mob) => ({ ...mob }));
-        const target = mobs.find((mob) => mob.slot === consumedEncounterMobSlot);
-        if (!target || target.status !== 'alive') {
-          throw new AppError(409, 'Encounter site target is no longer available', 'ENCOUNTER_SITE_TARGET_UNAVAILABLE');
-        }
-
-        target.status = 'defeated';
-
-        // Room-aware post-combat logic
-        const roomState = getRoomState(mobs, siteCurrentRoom);
-        let newCurrentRoom = siteCurrentRoom;
-        let newRoomCarryHp: number | null = combatResult.combatantAHpRemaining;
-        let siteCleared = false;
-
-        if (roomState.alive <= 0) {
-          // Room is cleared
-          roomCleared = true;
-
-          if (siteStrategy === 'full_clear' && siteFullClearActive) {
-            // Full clear: auto-advance to next room
-            const nextRoom = getNextUnfinishedRoom(mobs, siteCurrentRoom + 1);
-            if (nextRoom) {
-              newCurrentRoom = nextRoom;
-              // HP carries to next room
-            } else {
-              siteCleared = true;
-            }
-          } else {
-            // Room by room: check if all rooms are done
-            const overallCounts = countEncounterSiteState(mobs);
-            if (overallCounts.alive <= 0) {
-              siteCleared = true;
-            } else {
-              const nextRoom = getNextUnfinishedRoom(mobs, siteCurrentRoom + 1);
-              if (nextRoom) newCurrentRoom = nextRoom;
-              newRoomCarryHp = null; // Player can heal between rooms
-            }
-          }
-        }
-        // else: Room not cleared yet, HP carries to next mob in room
-
-        if (siteCleared) {
-          siteCompletionRewards = await grantEncounterSiteChestRewardsTx(tx, {
-            playerId,
-            mobFamilyId: site.mobFamilyId,
-            size: toEncounterSiteSize(site.size),
-            fullClearBonus: siteStrategy === 'full_clear' && siteFullClearActive,
-          });
-          await txAny.encounterSite.deleteMany({ where: { id: consumedEncounterSiteId, playerId } });
-          encounterSiteCleared = true;
-        } else {
-          await txAny.encounterSite.update({
-            where: { id: consumedEncounterSiteId },
-            data: {
-              mobs: serializeEncounterSiteMobs(mobs),
-              currentRoom: newCurrentRoom,
-              roomCarryHp: newRoomCarryHp,
-            },
-          });
-        }
-      }
-
       await deductConsumedPotions(playerId, combatResult.potionsConsumed, tx);
-
       return spent;
     });
 
@@ -842,23 +1215,20 @@ combatRouter.post('/start', async (req, res, next) => {
     const xpAwarded = Math.max(0, baseXp);
 
     if (combatResult.outcome === 'victory') {
-      // Update HP to remaining amount after combat
       await setHp(playerId, combatResult.combatantAHpRemaining);
       loot = await rollAndGrantLoot(playerId, prefixedMob.id, prefixedMob.level, prefixedMob.dropChanceMultiplier);
       xpGrant = await grantSkillXp(playerId, attackSkill, xpAwarded);
     } else if (combatResult.outcome === 'defeat') {
-      // Player lost - calculate flee outcome based on evasion vs mob level
       fleeResult = calculateFleeResult({
         evasionLevel: progression.attributes.evasion,
         mobLevel: prefixedMob.level,
         maxHp: hpState.maxHp,
-        currentGold: 0, // TODO: implement gold system
+        currentGold: 0,
       });
 
       if (fleeResult.outcome === 'knockout') {
         await enterRecoveringState(playerId, hpState.maxHp);
         respawnedTo = await respawnToHomeTown(playerId);
-
         await incrementStats(playerId, { totalDeaths: 1 });
         const deathAchievements = await checkAchievements(playerId, { statKeys: ['totalDeaths'] });
         await emitAchievementNotifications(playerId, deathAchievements);
@@ -867,119 +1237,49 @@ combatRouter.post('/start', async (req, res, next) => {
       }
     }
 
-    // Handle defeat in room context: reset room or downgrade strategy
-    if (combatResult.outcome === 'defeat' && consumedEncounterSiteId) {
-      const siteForReset = await prismaAny.encounterSite.findFirst({
-        where: { id: consumedEncounterSiteId, playerId },
-      });
-
-      if (siteForReset) {
-        const siteMobs = parseEncounterSiteMobs(siteForReset.mobs);
-
-        if (siteStrategy === 'full_clear' && siteFullClearActive) {
-          // Full clear failed: downgrade to room_by_room, keep kill progress
-          await prismaAny.encounterSite.update({
-            where: { id: consumedEncounterSiteId },
-            data: {
-              clearStrategy: 'room_by_room',
-              fullClearActive: false,
-              roomCarryHp: null,
-            },
-          });
-        } else {
-          // Room by room: reset current room's mobs to alive
-          const resetMobs = siteMobs.map(m =>
-            m.room === siteCurrentRoom && m.status === 'defeated'
-              ? { ...m, status: 'alive' as const }
-              : m
-          );
-          await prismaAny.encounterSite.update({
-            where: { id: consumedEncounterSiteId },
-            data: {
-              mobs: serializeEncounterSiteMobs(resetMobs),
-              roomCarryHp: null,
-            },
-          });
-        }
-      }
-    }
-
-    // Handle persisted mob HP
+    // Persisted mob HP
     if (combatResult.outcome === 'victory' && persistedMobId) {
       await removePersistedMob(persistedMobId);
-    } else if (combatResult.outcome === 'defeat' && combatResult.combatantBHpRemaining > 0 && !body.encounterSiteId) {
+    } else if (combatResult.outcome === 'defeat' && combatResult.combatantBHpRemaining > 0) {
       await persistMobHp(playerId, prefixedMob.id, zoneId, combatResult.combatantBHpRemaining, prefixedMob.hp);
     }
 
     const lootWithNames = await enrichLootWithNames(loot);
-    const siteCompletionWithNames = siteCompletionRewards
-      ? {
-          chestRarity: siteCompletionRewards.chestRarity,
-          materialRolls: siteCompletionRewards.materialRolls,
-          loot: await enrichLootWithNames(siteCompletionRewards.loot),
-          recipeUnlocked: siteCompletionRewards.recipeUnlocked,
-          fullClearBonus: siteStrategy === 'full_clear' && siteFullClearActive,
-        }
-      : null;
 
     const bestiaryEntry = await prisma.playerBestiary.upsert({
       where: { playerId_mobTemplateId: { playerId, mobTemplateId: prefixedMob.id } },
-      create: {
-        playerId,
-        mobTemplateId: prefixedMob.id,
-        kills: combatResult.outcome === 'victory' ? 1 : 0,
-      },
+      create: { playerId, mobTemplateId: prefixedMob.id, kills: combatResult.outcome === 'victory' ? 1 : 0 },
       update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
     });
 
     if (mobPrefix) {
       await prismaAny.playerBestiaryPrefix.upsert({
-        where: {
-          playerId_mobTemplateId_prefix: {
-            playerId,
-            mobTemplateId: prefixedMob.id,
-            prefix: mobPrefix,
-          },
-        },
-        create: {
-          playerId,
-          mobTemplateId: prefixedMob.id,
-          prefix: mobPrefix,
-          kills: combatResult.outcome === 'victory' ? 1 : 0,
-        },
+        where: { playerId_mobTemplateId_prefix: { playerId, mobTemplateId: prefixedMob.id, prefix: mobPrefix } },
+        create: { playerId, mobTemplateId: prefixedMob.id, prefix: mobPrefix, kills: combatResult.outcome === 'victory' ? 1 : 0 },
         update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
       });
     }
 
-    // --- Achievement tracking (counters + derived checks) ---
+    // Achievement tracking
     if (COMBAT_CONSTANTS.ENCOUNTER_TURN_COST > 0) {
       await incrementStats(playerId, { totalTurnsSpent: COMBAT_CONSTANTS.ENCOUNTER_TURN_COST });
     }
 
     if (combatResult.outcome === 'victory') {
-      // Resolve mob family for family achievement checks
       let mobFamilyIdForAchievement: string | undefined;
       const familyMember = await prismaAny.mobFamilyMember.findFirst({
         where: { mobTemplateId: prefixedMob.id },
         select: { mobFamilyId: true },
       });
-      if (familyMember?.mobFamilyId) {
-        mobFamilyIdForAchievement = familyMember.mobFamilyId;
-      }
+      if (familyMember?.mobFamilyId) mobFamilyIdForAchievement = familyMember.mobFamilyId;
 
-      // Check achievements (all kill/bestiary/skill stats are derived from source tables)
-      const achievementKeys = ['totalKills', 'totalUniqueMonsterKills', 'totalTurnsSpent'];
-      if (siteCompletionRewards?.recipeUnlocked) achievementKeys.push('totalRecipesLearned');
+      const achievementKeys = ['totalKills', 'totalUniqueMonsterKills', 'totalTurnsSpent', 'totalBestiaryCompleted'];
       if (xpGrant?.newLevel) achievementKeys.push('highestSkillLevel');
       if (xpGrant?.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) achievementKeys.push('highestCharacterLevel');
-      achievementKeys.push('totalBestiaryCompleted');
-      const newAchievements = await checkAchievements(playerId, {
-        statKeys: achievementKeys,
-        familyId: mobFamilyIdForAchievement,
-      });
+
+      const newAchievements = await checkAchievements(playerId, { statKeys: achievementKeys, familyId: mobFamilyIdForAchievement });
       await emitAchievementNotifications(playerId, newAchievements);
     } else {
-      // Defeat/escape: still check turn-spend achievements
       const defeatAchievements = await checkAchievements(playerId, { statKeys: ['totalTurnsSpent'] });
       await emitAchievementNotifications(playerId, defeatAchievements);
     }
@@ -996,9 +1296,9 @@ combatRouter.post('/start', async (req, res, next) => {
           mobName: baseMob.name,
           mobPrefix,
           mobDisplayName: prefixedMob.mobDisplayName,
-          source: consumedEncounterSiteId ? 'encounter_site' : 'zone_combat',
-          encounterSiteId: consumedEncounterSiteId,
-          encounterSiteCleared,
+          source: 'zone_combat',
+          encounterSiteId: null,
+          encounterSiteCleared: false,
           attackSkill,
           outcome: combatResult.outcome,
           playerMaxHp: combatResult.combatantAMaxHp,
@@ -1009,7 +1309,7 @@ combatRouter.post('/start', async (req, res, next) => {
             xp: xpAwarded,
             baseXp,
             loot: lootWithNames,
-            siteCompletion: siteCompletionWithNames,
+            siteCompletion: null,
             durabilityLost,
             skillXp: xpGrant
               ? {
@@ -1038,8 +1338,8 @@ combatRouter.post('/start', async (req, res, next) => {
         mobTemplateId: prefixedMob.id,
         mobPrefix,
         mobDisplayName: prefixedMob.mobDisplayName,
-        encounterSiteId: consumedEncounterSiteId,
-        encounterSiteCleared,
+        encounterSiteId: null,
+        encounterSiteCleared: false,
         attackSkill,
         outcome: combatResult.outcome,
         playerMaxHp: combatResult.combatantAMaxHp,
@@ -1057,17 +1357,11 @@ combatRouter.post('/start', async (req, res, next) => {
             }
           : null,
         ...(respawnedTo ? { respawnedTo } : {}),
-        room: consumedEncounterSiteId ? {
-          currentRoom: siteCurrentRoom,
-          roomCleared,
-          siteStrategy,
-          fullClearActive: siteFullClearActive,
-        } : undefined,
       },
       rewards: {
         xp: xpAwarded,
         loot: lootWithNames,
-        siteCompletion: siteCompletionWithNames,
+        siteCompletion: null,
         durabilityLost,
         skillXp: xpGrant
           ? {

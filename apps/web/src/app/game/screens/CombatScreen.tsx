@@ -54,6 +54,7 @@ interface CombatScreenProps {
     rewards: LastCombat['rewards'];
   } | null;
   onCombatPlaybackComplete?: () => void;
+  fightProgress?: { current: number; total: number } | null;
 }
 
 export function CombatScreen({
@@ -80,6 +81,7 @@ export function CombatScreen({
   onPendingEncounterSortChange,
   combatPlaybackData,
   onCombatPlaybackComplete,
+  fightProgress,
 }: CombatScreenProps) {
   const [activeView, setActiveView] = useState<'encounters' | 'history' | 'bossHistory'>('encounters');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
@@ -153,26 +155,30 @@ export function CombatScreen({
             </p>
             <div className="flex flex-col gap-3">
               <button
-                className="rpg-btn rpg-btn-primary w-full text-left p-3"
+                className="bg-[var(--rpg-gold)] hover:bg-[#e4b85b] text-[var(--rpg-background)] rounded-lg font-semibold transition-all w-full text-left p-3"
                 disabled={!!busyAction}
                 onClick={async () => {
+                  const siteId = strategyModalSite.encounterSiteId;
                   if (onSelectStrategy) {
-                    await onSelectStrategy(strategyModalSite.encounterSiteId, 'full_clear');
+                    await onSelectStrategy(siteId, 'full_clear');
                   }
                   setStrategyModalSite(null);
+                  void onStartCombat(siteId);
                 }}
               >
                 <span className="font-bold block">Full Clear</span>
                 <span className="text-xs opacity-80 block mt-1">Fight all rooms back-to-back. Better drops on success.</span>
               </button>
               <button
-                className="rpg-btn w-full text-left p-3"
+                className="bg-[var(--rpg-surface)] hover:bg-[var(--rpg-border)] text-[var(--rpg-text-primary)] border border-[var(--rpg-border)] rounded-lg font-semibold transition-all w-full text-left p-3"
                 disabled={!!busyAction}
                 onClick={async () => {
+                  const siteId = strategyModalSite.encounterSiteId;
                   if (onSelectStrategy) {
-                    await onSelectStrategy(strategyModalSite.encounterSiteId, 'room_by_room');
+                    await onSelectStrategy(siteId, 'room_by_room');
                   }
                   setStrategyModalSite(null);
+                  void onStartCombat(siteId);
                 }}
               >
                 <span className="font-bold block">Room by Room</span>
@@ -363,7 +369,13 @@ export function CombatScreen({
           {/* Combat Playback (animated) */}
           {combatPlaybackData && (
             <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3">
+              {fightProgress && fightProgress.total > 1 && (
+                <div className="text-sm text-[var(--rpg-gold)] font-semibold mb-2">
+                  Fight {fightProgress.current}/{fightProgress.total}
+                </div>
+              )}
               <CombatPlayback
+                key={fightProgress ? fightProgress.current : 0}
                 mobDisplayName={combatPlaybackData.mobDisplayName}
                 outcome={combatPlaybackData.outcome}
                 playerMaxHp={combatPlaybackData.combatantAMaxHp}

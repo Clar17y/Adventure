@@ -41,6 +41,27 @@ function StatusMsg({ msg }: { msg: { text: string; ok: boolean } | null }) {
   );
 }
 
+function useAdminAction() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const act = async (label: string, fn: () => Promise<{ data?: unknown; error?: { message: string } }>, confirm?: string) => {
+    if (busy) return;
+    if (confirm && !window.confirm(confirm)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fn();
+      if (res.error) setMsg({ text: `${label} failed: ${res.error.message}`, ok: false });
+      else setMsg({ text: `${label} succeeded`, ok: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return { busy, msg, setMsg, act };
+}
+
 // ── Player Tab ──────────────────────────────────────────────────────────────
 
 function PlayerTab() {
@@ -49,14 +70,7 @@ function PlayerTab() {
   const [xp, setXp] = useState(10000);
   const [attrPoints, setAttrPoints] = useState(10);
   const [attrs, setAttrs] = useState({ vitality: 0, strength: 0, dexterity: 0, intelligence: 0, luck: 0, evasion: 0 });
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-
-  const act = async (label: string, fn: () => Promise<{ data?: unknown; error?: { message: string } }>) => {
-    setMsg(null);
-    const res = await fn();
-    if (res.error) setMsg({ text: `${label} failed: ${res.error.message}`, ok: false });
-    else setMsg({ text: `${label} succeeded`, ok: true });
-  };
+  const { busy, msg, act } = useAdminAction();
 
   return (
     <div className="space-y-4">
@@ -65,7 +79,7 @@ function PlayerTab() {
         <div className="flex items-center gap-2">
           <input type="number" value={turns} onChange={(e) => setTurns(Number(e.target.value))}
             className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-32 text-[var(--rpg-text-primary)]" />
-          <PixelButton size="sm" onClick={() => act('Grant turns', () => adminGrantTurns(turns))}>Grant</PixelButton>
+          <PixelButton size="sm" disabled={busy} onClick={() => act('Grant turns', () => adminGrantTurns(turns))}>Grant</PixelButton>
         </div>
       </PixelCard>
 
@@ -74,7 +88,9 @@ function PlayerTab() {
         <div className="flex items-center gap-2">
           <input type="number" value={level} onChange={(e) => setLevel(Number(e.target.value))} min={1} max={100}
             className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-24 text-[var(--rpg-text-primary)]" />
-          <PixelButton size="sm" onClick={() => act('Set level', () => adminSetLevel(level))}>Set Level</PixelButton>
+          <PixelButton size="sm" disabled={busy} onClick={() => act('Set level', () => adminSetLevel(level), `Set character level to ${level}?`)}>
+            Set Level
+          </PixelButton>
         </div>
       </PixelCard>
 
@@ -83,7 +99,7 @@ function PlayerTab() {
         <div className="flex items-center gap-2">
           <input type="number" value={xp} onChange={(e) => setXp(Number(e.target.value))}
             className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-32 text-[var(--rpg-text-primary)]" />
-          <PixelButton size="sm" onClick={() => act('Grant XP', () => adminGrantXp(xp))}>Grant XP</PixelButton>
+          <PixelButton size="sm" disabled={busy} onClick={() => act('Grant XP', () => adminGrantXp(xp))}>Grant XP</PixelButton>
         </div>
       </PixelCard>
 
@@ -92,7 +108,9 @@ function PlayerTab() {
         <div className="flex items-center gap-2">
           <input type="number" value={attrPoints} onChange={(e) => setAttrPoints(Number(e.target.value))} min={0}
             className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-24 text-[var(--rpg-text-primary)]" />
-          <PixelButton size="sm" onClick={() => act('Set points', () => adminSetAttributes({ attributePoints: attrPoints }))}>Set Points</PixelButton>
+          <PixelButton size="sm" disabled={busy} onClick={() => act('Set points', () => adminSetAttributes({ attributePoints: attrPoints }))}>
+            Set Points
+          </PixelButton>
         </div>
       </PixelCard>
 
@@ -108,7 +126,8 @@ function PlayerTab() {
             </div>
           ))}
         </div>
-        <PixelButton size="sm" className="mt-3" onClick={() => act('Set attributes', () => adminSetAttributes({ attributes: attrs }))}>
+        <PixelButton size="sm" className="mt-3" disabled={busy}
+          onClick={() => act('Set attributes', () => adminSetAttributes({ attributes: attrs }), 'Overwrite all attribute values?')}>
           Set Attributes
         </PixelButton>
       </PixelCard>
@@ -127,8 +146,8 @@ function ItemsTab() {
   const [selectedId, setSelectedId] = useState('');
   const [rarity, setRarity] = useState('common');
   const [quantity, setQuantity] = useState(1);
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
+  const { busy, msg, act } = useAdminAction();
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -138,14 +157,6 @@ function ItemsTab() {
   };
 
   useEffect(() => { loadTemplates(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleGrant = async () => {
-    if (!selectedId) return;
-    setMsg(null);
-    const res = await adminGrantItem(selectedId, rarity, quantity);
-    if (res.error) setMsg({ text: `Grant failed: ${res.error.message}`, ok: false });
-    else setMsg({ text: 'Item granted!', ok: true });
-  };
 
   const selected = templates.find((t) => t.id === selectedId);
 
@@ -199,7 +210,9 @@ function ItemsTab() {
             </select>
             <input type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} min={1} max={1000}
               className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-20 text-[var(--rpg-text-primary)]" />
-            <PixelButton size="sm" onClick={handleGrant}>Grant</PixelButton>
+            <PixelButton size="sm" disabled={busy} onClick={() => act('Grant item', () => adminGrantItem(selectedId, rarity, quantity))}>
+              Grant
+            </PixelButton>
           </div>
         </PixelCard>
       )}
@@ -221,7 +234,7 @@ function WorldTab() {
   const [duration, setDuration] = useState(2);
   const [bossZoneId, setBossZoneId] = useState('');
   const [bossMobId, setBossMobId] = useState('');
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const { busy, msg, setMsg, act } = useAdminAction();
 
   useEffect(() => {
     adminGetEventTemplates().then((r) => { if (r.data) setEventTemplates(r.data.templates); });
@@ -243,18 +256,19 @@ function WorldTab() {
     });
   }, []);
 
-  const handleSpawnEvent = async () => {
-    if (selectedTemplate < 0 || !eventZoneId) return;
-    setMsg(null);
-    const res = await adminSpawnEvent(selectedTemplate, eventZoneId, duration);
-    if (res.error) setMsg({ text: `Spawn failed: ${res.error.message}`, ok: false });
-    else {
-      setMsg({ text: 'Event spawned!', ok: true });
-      adminGetActiveEvents().then((r) => { if (r.data) setActiveEvents(r.data.events); });
-    }
+  const refreshEvents = () => {
+    adminGetActiveEvents().then((r) => { if (r.data) setActiveEvents(r.data.events); });
   };
 
-  const handleCancel = async (id: string) => {
+  const handleSpawnEvent = async () => {
+    if (busy || selectedTemplate < 0 || !eventZoneId) return;
+    await act('Spawn event', () => adminSpawnEvent(selectedTemplate, eventZoneId, duration));
+    refreshEvents();
+  };
+
+  const handleCancel = async (id: string, title: string) => {
+    if (busy) return;
+    if (!window.confirm(`Cancel event "${title}"?`)) return;
     const res = await adminCancelEvent(id);
     if (res.error) setMsg({ text: `Cancel failed: ${res.error.message}`, ok: false });
     else {
@@ -264,14 +278,10 @@ function WorldTab() {
   };
 
   const handleSpawnBoss = async () => {
-    if (!bossMobId || !bossZoneId) return;
-    setMsg(null);
-    const res = await adminSpawnBoss(bossMobId, bossZoneId);
-    if (res.error) setMsg({ text: `Boss spawn failed: ${res.error.message}`, ok: false });
-    else {
-      setMsg({ text: 'Boss spawned!', ok: true });
-      adminGetActiveEvents().then((r) => { if (r.data) setActiveEvents(r.data.events); });
-    }
+    if (busy || !bossMobId || !bossZoneId) return;
+    const mob = mobs.find((m) => m.id === bossMobId);
+    await act('Spawn boss', () => adminSpawnBoss(bossMobId, bossZoneId), `Spawn ${mob?.name ?? 'boss'} in selected zone?`);
+    refreshEvents();
   };
 
   return (
@@ -294,7 +304,7 @@ function WorldTab() {
             <input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} min={0.1} max={168} step={0.5}
               className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-20 text-[var(--rpg-text-primary)]"
               title="Duration (hours)" />
-            <PixelButton size="sm" onClick={handleSpawnEvent}>Spawn</PixelButton>
+            <PixelButton size="sm" disabled={busy} onClick={handleSpawnEvent}>Spawn</PixelButton>
           </div>
         </div>
       </PixelCard>
@@ -309,7 +319,7 @@ function WorldTab() {
                 <div className="text-[var(--rpg-text-primary)] truncate">{e.title}</div>
                 <div className="text-xs text-[var(--rpg-text-secondary)]">{e.zoneName} | {e.effectType}</div>
               </div>
-              <PixelButton size="sm" variant="danger" onClick={() => handleCancel(e.id)}>Cancel</PixelButton>
+              <PixelButton size="sm" variant="danger" disabled={busy} onClick={() => handleCancel(e.id, e.title)}>Cancel</PixelButton>
             </div>
           ))}
         </div>
@@ -326,7 +336,7 @@ function WorldTab() {
             className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm flex-1 text-[var(--rpg-text-primary)]">
             {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
           </select>
-          <PixelButton size="sm" onClick={handleSpawnBoss}>Spawn</PixelButton>
+          <PixelButton size="sm" disabled={busy} onClick={handleSpawnBoss}>Spawn</PixelButton>
         </div>
       </PixelCard>
 
@@ -343,7 +353,7 @@ function ZonesTab() {
   const [encZoneId, setEncZoneId] = useState('');
   const [encFamilyId, setEncFamilyId] = useState('');
   const [encSize, setEncSize] = useState<'small' | 'medium' | 'large'>('medium');
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const { busy, msg, act } = useAdminAction();
 
   useEffect(() => {
     adminGetZones().then((r) => {
@@ -360,34 +370,15 @@ function ZonesTab() {
     });
   }, []);
 
-  const handleDiscover = async () => {
-    setMsg(null);
-    const res = await adminDiscoverAllZones();
-    if (res.error) setMsg({ text: `Discover failed: ${res.error.message}`, ok: false });
-    else setMsg({ text: `Discovered ${res.data?.discoveredCount ?? 0} zones`, ok: true });
-  };
-
-  const handleTeleport = async (zoneId: string) => {
-    setMsg(null);
-    const res = await adminTeleport(zoneId);
-    if (res.error) setMsg({ text: `Teleport failed: ${res.error.message}`, ok: false });
-    else setMsg({ text: 'Teleported!', ok: true });
-  };
-
-  const handleSpawnEncounter = async () => {
-    if (!encFamilyId || !encZoneId) return;
-    setMsg(null);
-    const res = await adminSpawnEncounter(encFamilyId, encZoneId, encSize);
-    if (res.error) setMsg({ text: `Spawn failed: ${res.error.message}`, ok: false });
-    else setMsg({ text: 'Encounter site spawned!', ok: true });
-  };
-
   return (
     <div className="space-y-4">
       <PixelCard>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-[var(--rpg-gold)]">Zones</h3>
-          <PixelButton size="sm" variant="gold" onClick={handleDiscover}>Discover All</PixelButton>
+          <PixelButton size="sm" variant="gold" disabled={busy}
+            onClick={() => act('Discover all', () => adminDiscoverAllZones(), 'Discover all zones on your account?')}>
+            Discover All
+          </PixelButton>
         </div>
         <div className="max-h-48 overflow-y-auto space-y-1">
           {zones.map((z) => (
@@ -398,7 +389,10 @@ function ZonesTab() {
                   Lv.{z.difficulty} | {z.zoneType}
                 </span>
               </div>
-              <PixelButton size="sm" onClick={() => handleTeleport(z.id)}>Teleport</PixelButton>
+              <PixelButton size="sm" disabled={busy}
+                onClick={() => act('Teleport', () => adminTeleport(z.id), `Teleport to ${z.name}?`)}>
+                Teleport
+              </PixelButton>
             </div>
           ))}
         </div>
@@ -424,7 +418,9 @@ function ZonesTab() {
               <option value="medium">Medium (4-6)</option>
               <option value="large">Large (7-10)</option>
             </select>
-            <PixelButton size="sm" onClick={handleSpawnEncounter}>Spawn Encounter</PixelButton>
+            <PixelButton size="sm" disabled={busy} onClick={() => act('Spawn encounter', () => adminSpawnEncounter(encFamilyId, encZoneId, encSize))}>
+              Spawn Encounter
+            </PixelButton>
           </div>
         </div>
       </PixelCard>

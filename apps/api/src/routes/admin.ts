@@ -12,7 +12,6 @@ import { xpForLevel, characterLevelFromXp, rollMobPrefix, rollBonusStatsForRarit
 import {
   CHARACTER_CONSTANTS,
   EXPLORATION_CONSTANTS,
-  WORLD_EVENT_CONSTANTS,
   WORLD_EVENT_TEMPLATES,
   type PlayerAttributes,
   type ItemRarity,
@@ -285,10 +284,10 @@ router.post('/boss/spawn', asyncHandler(async (req, res) => {
     zoneId,
     title: `${mob.name} Sighted`,
     description: `A fearsome ${mob.name} has appeared!`,
-    effectType: 'spawn_rate_up',
+    effectType: 'damage_up',
     effectValue: 0,
     targetMobId: mobTemplateId,
-    durationHours: WORLD_EVENT_CONSTANTS.RESOURCE_EVENT_DURATION_HOURS,
+    durationHours: 0,
     createdBy: 'system',
   });
 
@@ -296,6 +295,9 @@ router.post('/boss/spawn', asyncHandler(async (req, res) => {
     res.status(409).json({ error: { message: 'Could not spawn boss event (slot conflict)', code: 'SLOT_CONFLICT' } });
     return;
   }
+
+  // Bosses don't time-expire — managed by encounter lifecycle
+  await prisma.worldEvent.update({ where: { id: event.id }, data: { expiresAt: null } });
 
   const encounter = await createBossEncounter(event.id, mobTemplateId, mob.bossBaseHp ?? mob.hp);
   res.json({ success: true, event, encounter });

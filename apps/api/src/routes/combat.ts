@@ -548,7 +548,7 @@ combatRouter.post('/start', async (req, res, next) => {
     let consumedEncounterMobSlot = null as null | number;
     let encounterSiteCleared = false;
     let siteCompletionRewards = null as null | Awaited<ReturnType<typeof grantEncounterSiteChestRewardsTx>>;
-    let siteStrategy = null as null | string;
+    let siteStrategy = null as null | 'full_clear' | 'room_by_room';
     let siteCurrentRoom = 1;
     let siteFullClearActive = true;
     let roomCarryHpOverride = null as null | number;
@@ -592,7 +592,7 @@ combatRouter.post('/start', async (req, res, next) => {
       mobTemplateId = nextMob.mobTemplateId;
       mobPrefix = nextMob.prefix ?? null;
 
-      siteStrategy = site.clearStrategy;
+      siteStrategy = site.clearStrategy as typeof siteStrategy;
       siteCurrentRoom = currentRoom;
       siteFullClearActive = site.fullClearActive ?? true;
       if (site.roomCarryHp !== null && site.roomCarryHp !== undefined) {

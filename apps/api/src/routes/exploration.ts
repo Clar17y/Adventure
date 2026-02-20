@@ -283,7 +283,7 @@ function buildEncounterSiteMobs(
 
   const trashCount = Math.max(0, totalMobs - eliteCount - bossCount);
 
-  // Build role queue
+  // Build role queue — trash first, elites/bosses last so they land in final rooms
   const roleQueue: EncounterMobRole[] = [
     ...Array(trashCount).fill('trash' as const),
     ...Array(eliteCount).fill('elite' as const),
@@ -479,7 +479,20 @@ explorationRouter.post('/start', async (req, res, next) => {
           zoneTiers,
         );
         if (tieredMobs.length === 0) continue;
-        const mob = pickWeighted(tieredMobs, 'encounterWeight') as typeof tieredMobs[number] | null;
+
+        // Apply tier bleedthrough: select a target tier, filter to it, fall back to lower tiers
+        const highestUnlockedTier = Math.max(...tieredMobs.map(m => m.explorationTier));
+        const targetTier = selectTierWithBleedthrough(highestUnlockedTier, zoneTiers);
+        let candidates = tieredMobs.filter(m => m.explorationTier === targetTier);
+        if (candidates.length === 0) {
+          for (let t = targetTier - 1; t >= 1; t--) {
+            candidates = tieredMobs.filter(m => m.explorationTier === t);
+            if (candidates.length > 0) break;
+          }
+        }
+        if (candidates.length === 0) candidates = tieredMobs;
+
+        const mob = pickWeighted(candidates, 'encounterWeight') as typeof candidates[number] | null;
         if (!mob) continue;
 
         const baseMob: MobTemplate = {

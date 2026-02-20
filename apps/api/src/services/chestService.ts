@@ -83,7 +83,10 @@ export async function grantEncounterSiteChestRewardsTx(
     : params.size;
 
   const chestRarity = getChestRarityForEncounterSize(effectiveSize);
-  const materialRolls = rollChestMaterialRolls(effectiveSize);
+  const baseRolls = rollChestMaterialRolls(effectiveSize);
+  const materialRolls = params.fullClearBonus
+    ? Math.ceil(baseRolls * FULL_CLEAR_CONSTANTS.DROP_MULTIPLIER)
+    : baseRolls;
 
   const dropEntries = (await txAny.chestDropTable.findMany({
     where: {
@@ -101,11 +104,6 @@ export async function grantEncounterSiteChestRewardsTx(
     },
   })) as ChestDropEntry[];
 
-  const dropMultiplier = params.fullClearBonus ? FULL_CLEAR_CONSTANTS.DROP_MULTIPLIER : 1;
-  const adjustedEntries: ChestDropEntry[] = dropMultiplier !== 1
-    ? dropEntries.map(e => ({ ...e, dropChance: decimalLikeToNumber(e.dropChance) * dropMultiplier }))
-    : dropEntries;
-
   const lootByTemplate = new Map<string, LootDrop>();
   const addLoot = (drop: LootDrop): void => {
     const existing = lootByTemplate.get(drop.itemTemplateId);
@@ -117,7 +115,7 @@ export async function grantEncounterSiteChestRewardsTx(
   };
 
   for (let i = 0; i < materialRolls; i++) {
-    const picked = pickWeightedChestDrop(adjustedEntries);
+    const picked = pickWeightedChestDrop(dropEntries);
     if (!picked) continue;
 
     const quantity = Math.max(1, randomIntInclusive(picked.minQuantity, picked.maxQuantity));

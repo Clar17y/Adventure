@@ -15,6 +15,8 @@ export interface ChatMessageEvent {
   channelId: string;
   playerId: string;
   username: string;
+  title?: string;
+  titleTier?: number;
   message: string;
   createdAt: string;
   role?: ChatRole;

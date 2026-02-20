@@ -12,6 +12,7 @@ import {
   getNotifications,
   markNotificationsRead,
 } from '../services/pvpService';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 
 export const pvpRouter = Router();
 pvpRouter.use(authenticate);
@@ -96,6 +97,15 @@ pvpRouter.post('/challenge', async (req, res, next) => {
     const playerId = req.player!.playerId;
     const body = challengeSchema.parse(req.body);
     const result = await challenge(playerId, req.player!.username, body.targetId);
+
+    // --- Achievement check for the winner (stats derived from pvp_ratings table) ---
+    if (result.winnerId) {
+      const pvpAchievements = await checkAchievements(result.winnerId, {
+        statKeys: ['totalPvpWins', 'bestPvpWinStreak'],
+      });
+      await emitAchievementNotifications(result.winnerId, pvpAchievements);
+    }
+
     res.json(result);
   } catch (err) {
     next(err);

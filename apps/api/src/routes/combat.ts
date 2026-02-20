@@ -40,6 +40,8 @@ import {
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 import { getExplorationPercent } from '../services/zoneExplorationService';
+import { incrementStats } from '../services/statsService';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 
 export const combatRouter = Router();
 
@@ -654,6 +656,10 @@ combatRouter.post('/start', async (req, res, next) => {
       if (fleeResult.outcome === 'knockout') {
         await enterRecoveringState(playerId, hpState.maxHp);
         respawnedTo = await respawnToHomeTown(playerId);
+
+        await incrementStats(playerId, { totalDeaths: 1 });
+        const deathAchievements = await checkAchievements(playerId, { statKeys: ['totalDeaths'] });
+        await emitAchievementNotifications(playerId, deathAchievements);
       } else {
         await setHp(playerId, fleeResult.remainingHp);
       }
@@ -676,7 +682,7 @@ combatRouter.post('/start', async (req, res, next) => {
         }
       : null;
 
-    await prisma.playerBestiary.upsert({
+    const bestiaryEntry = await prisma.playerBestiary.upsert({
       where: { playerId_mobTemplateId: { playerId, mobTemplateId: prefixedMob.id } },
       create: {
         playerId,
@@ -703,6 +709,39 @@ combatRouter.post('/start', async (req, res, next) => {
         },
         update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
       });
+    }
+
+    // --- Achievement tracking (counters + derived checks) ---
+    if (COMBAT_CONSTANTS.ENCOUNTER_TURN_COST > 0) {
+      await incrementStats(playerId, { totalTurnsSpent: COMBAT_CONSTANTS.ENCOUNTER_TURN_COST });
+    }
+
+    if (combatResult.outcome === 'victory') {
+      // Resolve mob family for family achievement checks
+      let mobFamilyIdForAchievement: string | undefined;
+      const familyMember = await prismaAny.mobFamilyMember.findFirst({
+        where: { mobTemplateId: prefixedMob.id },
+        select: { mobFamilyId: true },
+      });
+      if (familyMember?.mobFamilyId) {
+        mobFamilyIdForAchievement = familyMember.mobFamilyId;
+      }
+
+      // Check achievements (all kill/bestiary/skill stats are derived from source tables)
+      const achievementKeys = ['totalKills', 'totalUniqueMonsterKills', 'totalTurnsSpent'];
+      if (siteCompletionRewards?.recipeUnlocked) achievementKeys.push('totalRecipesLearned');
+      if (xpGrant?.newLevel) achievementKeys.push('highestSkillLevel');
+      if (xpGrant?.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) achievementKeys.push('highestCharacterLevel');
+      achievementKeys.push('totalBestiaryCompleted');
+      const newAchievements = await checkAchievements(playerId, {
+        statKeys: achievementKeys,
+        familyId: mobFamilyIdForAchievement,
+      });
+      await emitAchievementNotifications(playerId, newAchievements);
+    } else {
+      // Defeat/escape: still check turn-spend achievements
+      const defeatAchievements = await checkAchievements(playerId, { statKeys: ['totalTurnsSpent'] });
+      await emitAchievementNotifications(playerId, defeatAchievements);
     }
 
     const combatLog = await prisma.activityLog.create({

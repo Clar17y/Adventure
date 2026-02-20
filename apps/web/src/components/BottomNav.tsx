@@ -7,6 +7,7 @@ import { uiIconSrc, type UiIconName } from '@/lib/assets';
 interface BottomNavProps {
   activeTab: string;
   onNavigate: (tab: string) => void;
+  badgeTabs?: Set<string>;
 }
 
 const navItems = [
@@ -17,7 +18,7 @@ const navItems = [
   { id: 'profile', label: 'Profile', icon: 'settings' as UiIconName },
 ];
 
-export function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
+export function BottomNav({ activeTab, onNavigate, badgeTabs = new Set() }: BottomNavProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-[var(--rpg-surface)] border-t border-[var(--rpg-border)] z-40 safe-area-bottom">
       <div className="max-w-lg mx-auto flex justify-around items-center h-16">
@@ -28,7 +29,7 @@ export function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
               key={item.id}
               onClick={() => onNavigate(item.id)}
               className={cn(
-                'flex flex-col items-center justify-center w-full h-full transition-colors',
+                'relative flex flex-col items-center justify-center w-full h-full transition-colors',
                 isActive ? 'text-[var(--rpg-gold)]' : 'text-[var(--rpg-text-secondary)]'
               )}
             >
@@ -39,6 +40,9 @@ export function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
                 height={40}
                 className={cn('image-rendering-pixelated', isActive ? '' : 'opacity-60')}
               />
+              {badgeTabs.has(item.id) && (
+                <span className="absolute top-1 right-1/4 w-2 h-2 rounded-full bg-[var(--rpg-red)]" />
+              )}
               <span className="text-xs mt-1">{item.label}</span>
             </button>
           );

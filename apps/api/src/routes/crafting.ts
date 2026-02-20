@@ -25,6 +25,8 @@ import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { getEquipmentStats } from '../services/equipmentService';
 import { spendPlayerTurnsTx } from '../services/turnBankService';
+import { incrementStats } from '../services/statsService';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 import {
   addStackableItemTx,
   consumeItemsByTemplateTx,
@@ -535,6 +537,29 @@ craftingRouter.post('/craft', async (req, res, next) => {
 
     const xpGrant = await grantSkillXp(playerId, recipe.skillType, recipe.xpReward * quantity);
 
+    // --- Achievement tracking (counters + derived checks) ---
+    const isRealCraft = recipe.resultTemplate.itemType !== 'resource';
+    const craftCounters: Record<string, number> = { totalTurnsSpent: totalTurnCost };
+    if (isRealCraft) {
+      craftCounters.totalCrafts = quantity;
+      for (const item of craftedItemDetails) {
+        if (item.rarity === 'rare') craftCounters.totalRaresCrafted = (craftCounters.totalRaresCrafted ?? 0) + 1;
+        if (item.rarity === 'epic') craftCounters.totalEpicsCrafted = (craftCounters.totalEpicsCrafted ?? 0) + 1;
+        if (item.rarity === 'legendary') craftCounters.totalLegendariesCrafted = (craftCounters.totalLegendariesCrafted ?? 0) + 1;
+      }
+    }
+    await incrementStats(playerId, craftCounters);
+
+    const craftAchKeys: string[] = [];
+    if (isRealCraft) craftAchKeys.push('totalCrafts');
+    if (craftCounters.totalRaresCrafted) craftAchKeys.push('totalRaresCrafted');
+    if (craftCounters.totalEpicsCrafted) craftAchKeys.push('totalEpicsCrafted');
+    if (craftCounters.totalLegendariesCrafted) craftAchKeys.push('totalLegendariesCrafted');
+    if (xpGrant.newLevel) craftAchKeys.push('highestSkillLevel');
+    if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) craftAchKeys.push('highestCharacterLevel');
+    const craftAchievements = await checkAchievements(playerId, { statKeys: craftAchKeys });
+    await emitAchievementNotifications(playerId, craftAchievements);
+
     const log = await prisma.activityLog.create({
       data: {
         playerId,
@@ -676,6 +701,11 @@ craftingRouter.post('/forge/upgrade', async (req, res, next) => {
     }
     const roll = Math.random();
     const success = roll < successChance;
+
+    // --- Achievement stat tracking ---
+    await incrementStats(playerId, { totalForgeUpgrades: 1 });
+    const forgeAchievements = await checkAchievements(playerId, { statKeys: ['totalForgeUpgrades'] });
+    await emitAchievementNotifications(playerId, forgeAchievements);
 
     const itemType = isItemType(item.template.itemType) ? item.template.itemType : null;
     if (!itemType) {
@@ -1069,6 +1099,11 @@ craftingRouter.post('/salvage', async (req, res, next) => {
 
       return { turnSpend: spent, returned: minted };
     });
+
+    // --- Achievement stat tracking ---
+    await incrementStats(playerId, { totalSalvages: 1 });
+    const salvageAchievements = await checkAchievements(playerId, { statKeys: ['totalSalvages'] });
+    await emitAchievementNotifications(playerId, salvageAchievements);
 
     const log = await prisma.activityLog.create({
       data: {

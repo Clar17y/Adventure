@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, type FormEvent } from 'react';
 import { MessageCircle, Send, X } from 'lucide-react';
 import { CHAT_CONSTANTS } from '@adventure/shared';
+import { rarityFromTier, RARITY_COLORS } from '@/lib/rarity';
 import type { ChatMessageEvent, ChatPresenceEvent, ChatPinnedMessageEvent } from '@adventure/shared';
 import type { ChatChannel } from '@/hooks/useChat';
 
@@ -59,10 +60,13 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Focus input when panel opens
+  // Focus input and scroll to bottom when panel opens
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        messagesEndRef.current?.scrollIntoView();
+      }, 100);
     }
   }, [isOpen]);
 
@@ -192,6 +196,14 @@ export function ChatPanel({
                 }>
                   {msg.username}
                 </span>
+                {msg.title && (
+                  <span
+                    className="text-[10px] ml-0.5"
+                    style={{ color: RARITY_COLORS[rarityFromTier(msg.titleTier ?? 1)] }}
+                  >
+                    &lt;{msg.title}&gt;
+                  </span>
+                )}
                 <span className="text-[var(--rpg-text-secondary)]">: </span>
                 <span className="text-[var(--rpg-text-primary)]">{msg.message}</span>
               </div>

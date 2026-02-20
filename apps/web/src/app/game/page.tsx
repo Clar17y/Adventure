@@ -29,6 +29,7 @@ import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
 import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
 import { Sword, Shield, Crosshair, Sparkles, Pickaxe, Hammer, Leaf, FlaskConical, Axe, Scissors, Anvil } from 'lucide-react';
+import AdminScreen from '@/components/screens/AdminScreen';
 import { ArenaScreen } from './screens/ArenaScreen';
 import { CombatScreen } from './screens/CombatScreen';
 import { useGameController, type Screen } from './useGameController';
@@ -828,6 +829,8 @@ export default function GamePage() {
         );
       case 'leaderboard':
         return <Leaderboard playerId={player?.id ?? null} />;
+      case 'admin':
+        return <AdminScreen />;
       default:
         return null;
     }
@@ -876,6 +879,18 @@ export default function GamePage() {
                 )}
               </button>
             ))}
+            {player?.role === 'admin' && (
+              <button
+                onClick={() => setActiveScreen('admin')}
+                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                  activeScreen === 'admin'
+                    ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                    : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)]'
+                }`}
+              >
+                Admin
+              </button>
+            )}
           </div>
         )}
 

@@ -60,9 +60,15 @@ authRouter.post('/register', async (req, res, next) => {
     // Hash password
     const passwordHash = await bcrypt.hash(body.password, 10);
 
-    // Find starter zone
-    const starterZone = await prisma.zone.findFirst({ where: { isStarter: true } });
-    if (!starterZone) throw new AppError(500, 'No starter zone configured', 'NO_STARTER_ZONE');
+    // Find starter town (for homeTownId) and first connected wild zone (for currentZoneId)
+    const starterTown = await prisma.zone.findFirst({ where: { isStarter: true } });
+    if (!starterTown) throw new AppError(500, 'No starter zone configured', 'NO_STARTER_ZONE');
+
+    const firstWildConnection = await prisma.zoneConnection.findFirst({
+      where: { fromId: starterTown.id },
+      include: { toZone: true },
+    });
+    const startingZone = firstWildConnection?.toZone ?? starterTown;
 
     // Create player with all related records
     const player = await prisma.player.create({
@@ -71,8 +77,8 @@ authRouter.post('/register', async (req, res, next) => {
         email: body.email,
         passwordHash,
         lastActiveAt: now,
-        currentZoneId: starterZone.id,
-        homeTownId: starterZone.id,
+        currentZoneId: startingZone.id,
+        homeTownId: starterTown.id,
         turnBank: {
           create: {
             currentTurns: TURN_CONSTANTS.STARTING_TURNS,

@@ -1,4 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { updateTutorialStep } from '@/lib/api';
+import {
+  TUTORIAL_STEP_WELCOME,
+  TUTORIAL_STEP_EXPLORE,
+  TUTORIAL_STEP_COMBAT,
+  TUTORIAL_STEP_GATHER,
+  TUTORIAL_STEP_TRAVEL,
+  TUTORIAL_STEP_CRAFT,
+  TUTORIAL_STEP_EQUIP,
+  TUTORIAL_STEP_DONE,
+  TUTORIAL_COMPLETED,
+  TUTORIAL_SKIPPED,
+  isTutorialActive,
+  TUTORIAL_STEPS,
+  type BottomTab,
+} from '@/lib/tutorial';
 import {
   allocatePlayerAttribute,
   craft,
@@ -394,6 +410,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [pvpNotificationCount, setPvpNotificationCount] = useState(0);
   const [activeEvents, setActiveEvents] = useState<WorldEventResponse[]>([]);
   const [autoPotionThreshold, setAutoPotionThreshold] = useState(0);
+  const [tutorialStep, setTutorialStep] = useState<number>(TUTORIAL_COMPLETED);
   const [achievementData, setAchievementData] = useState<AchievementsResponse | null>(null);
   const [achievementUnclaimedCount, setAchievementUnclaimedCount] = useState(0);
   const [activeTitle, setActiveTitleState] = useState<string | null>(null);
@@ -476,6 +493,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         attributes: playerRes.data.player.attributes,
       });
       setAutoPotionThreshold(playerRes.data.player.autoPotionThreshold ?? 0);
+      setTutorialStep(playerRes.data.player.tutorialStep ?? TUTORIAL_COMPLETED);
     }
     if (skillsRes.data) setSkills(skillsRes.data.skills);
     if (hpRes.data) setHpState(hpRes.data);
@@ -513,6 +531,18 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setZoneCraftingLevel(recipesRes.data.zoneCraftingLevel);
       setZoneCraftingName(recipesRes.data.zoneName);
     }
+  }, []);
+
+  const advanceTutorial = useCallback(async (fromStep: number) => {
+    if (tutorialStep !== fromStep) return;
+    const nextStep = fromStep + 1;
+    const res = await updateTutorialStep(nextStep);
+    if (res.data) setTutorialStep(res.data.tutorialStep);
+  }, [tutorialStep]);
+
+  const skipTutorial = useCallback(async () => {
+    const res = await updateTutorialStep(TUTORIAL_SKIPPED);
+    if (res.data) setTutorialStep(res.data.tutorialStep);
   }, []);
 
   useEffect(() => {
@@ -832,6 +862,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         playerMaxHp: maxHpBefore,
       });
       setPlaybackActive(true);
+      advanceTutorial(TUTORIAL_STEP_EXPLORE);
 
       // Refresh encounter sites and gathering nodes discovered during exploration.
       // Don't call loadAll() here — defer until playback completes so the zone
@@ -960,6 +991,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         rewards,
       });
       setPlaybackActive(true);
+      advanceTutorial(TUTORIAL_STEP_COMBAT);
 
       if (data.activeEvents?.length) {
         for (const evt of data.activeEvents) {
@@ -1082,6 +1114,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       pushLog(...newLogs);
       await Promise.all([loadAll(), loadGatheringNodes()]);
+      advanceTutorial(TUTORIAL_STEP_GATHER);
     });
   };
 
@@ -1159,6 +1192,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       pushLog(...newLogs);
       await loadAll();
+      advanceTutorial(TUTORIAL_STEP_CRAFT);
     });
   };
 
@@ -1280,6 +1314,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         return;
       }
       await loadAll();
+      advanceTutorial(TUTORIAL_STEP_EQUIP);
     });
   };
 
@@ -1306,6 +1341,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
+      if (data.zone.zoneType === 'town') advanceTutorial(TUTORIAL_STEP_TRAVEL);
 
       // Breadcrumb return — instant, no playback
       if (data.breadcrumbReturn) {
@@ -1521,6 +1557,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleClaimAchievement,
     handleSetActiveTitle,
     loadAchievements,
+
+    // Tutorial
+    tutorialStep, skipTutorial, advanceTutorial,
 
     // World Events
     activeEvents,

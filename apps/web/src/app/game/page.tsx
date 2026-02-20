@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { itemImageSrc, monsterImageSrc, resourceImageSrc, skillIconSrc, zoneImageSrc } from '@/lib/assets';
@@ -29,6 +29,14 @@ import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
 import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
 import { Sword, Shield, Crosshair, Sparkles, Pickaxe, Hammer, Leaf, FlaskConical, Axe, Scissors, Anvil } from 'lucide-react';
+import { TutorialBanner } from '@/components/TutorialBanner';
+import { TutorialDialog } from '@/components/TutorialDialog';
+import {
+  isTutorialActive,
+  TUTORIAL_STEPS,
+  TUTORIAL_STEP_WELCOME,
+  TUTORIAL_STEP_DONE,
+} from '@/lib/tutorial';
 import { ArenaScreen } from './screens/ArenaScreen';
 import { CombatScreen } from './screens/CombatScreen';
 import { useGameController, type Screen } from './useGameController';
@@ -260,6 +268,7 @@ export default function GamePage() {
     handleClaimAchievement,
     handleSetActiveTitle,
     loadAchievements,
+    tutorialStep, skipTutorial, advanceTutorial,
   } = useGameController({ isAuthenticated });
 
   const [achievementCategory, setAchievementCategory] = useState<string | null>(null);
@@ -833,6 +842,13 @@ export default function GamePage() {
     }
   };
 
+  const tutorialPulseTabs = React.useMemo(() => {
+    if (!isTutorialActive(tutorialStep)) return undefined;
+    const stepDef = TUTORIAL_STEPS[tutorialStep];
+    if (!stepDef?.pulseTab) return undefined;
+    return new Set([stepDef.pulseTab]);
+  }, [tutorialStep]);
+
   return (
     <>
       <AppShell turns={turns} username={player?.username}>
@@ -846,6 +862,11 @@ export default function GamePage() {
             You have broken equipment! Broken gear provides no stats. Visit your inventory to repair.
           </div>
         )}
+
+        <TutorialBanner
+          tutorialStep={tutorialStep}
+          onSkip={skipTutorial}
+        />
 
         {/* Sub-navigation for screens */}
         {getActiveTab() === 'home' && (
@@ -978,6 +999,17 @@ export default function GamePage() {
         activeTab={getActiveTab()}
         onNavigate={handleNavigate}
         badgeTabs={achievementUnclaimedCount > 0 ? new Set(['home']) : undefined}
+        pulseTabs={tutorialPulseTabs}
+      />
+      <TutorialDialog
+        tutorialStep={tutorialStep}
+        onDismiss={() => {
+          if (tutorialStep === TUTORIAL_STEP_WELCOME) {
+            advanceTutorial(TUTORIAL_STEP_WELCOME);
+          } else if (tutorialStep === TUTORIAL_STEP_DONE) {
+            advanceTutorial(TUTORIAL_STEP_DONE);
+          }
+        }}
       />
       <AchievementToast onNavigate={(category) => { setAchievementCategory(category); setActiveScreen('achievements'); }} />
     </>

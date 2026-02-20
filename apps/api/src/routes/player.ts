@@ -37,6 +37,7 @@ playerRouter.get('/', async (req, res, next) => {
         attributePoints: true,
         attributes: true,
         autoPotionThreshold: true,
+        tutorialStep: true,
         activeTitle: true,
       },
     });
@@ -146,6 +147,50 @@ playerRouter.patch('/settings', async (req, res, next) => {
     });
 
     res.json({ autoPotionThreshold: body.autoPotionThreshold });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const tutorialSchema = z.object({
+  step: z.number().int().min(-1).max(8),
+});
+
+/**
+ * PATCH /api/v1/player/tutorial
+ * Advance or skip the tutorial.
+ */
+playerRouter.patch('/tutorial', async (req, res, next) => {
+  try {
+    const playerId = req.player!.playerId;
+    const body = tutorialSchema.parse(req.body);
+
+    const player = await prismaAny.player.findUnique({
+      where: { id: playerId },
+      select: { tutorialStep: true },
+    });
+
+    if (!player) throw new AppError(404, 'Player not found', 'NOT_FOUND');
+
+    // Allow skip (-1) from any state, or advance by exactly 1
+    const isSkip = body.step === -1;
+    const isNextStep = body.step === player.tutorialStep + 1;
+
+    if (!isSkip && !isNextStep) {
+      throw new AppError(400, 'Invalid tutorial step', 'INVALID_STEP');
+    }
+
+    // Don't allow advancing past completed
+    if (player.tutorialStep >= 8 && !isSkip) {
+      throw new AppError(400, 'Tutorial already completed', 'TUTORIAL_COMPLETE');
+    }
+
+    await prismaAny.player.update({
+      where: { id: playerId },
+      data: { tutorialStep: body.step },
+    });
+
+    res.json({ tutorialStep: body.step });
   } catch (err) {
     next(err);
   }

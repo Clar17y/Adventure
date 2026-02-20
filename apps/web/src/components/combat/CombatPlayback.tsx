@@ -19,6 +19,8 @@ interface CombatPlaybackProps {
   rewards?: LastCombat['rewards'];
   playerLabel?: string;
   defeatButtonLabel?: string;
+  speedMs?: number;
+  autoSkip?: boolean;
   onComplete: () => void;
   onSkip: () => void;
 }
@@ -34,6 +36,8 @@ export function CombatPlayback({
   rewards,
   playerLabel = 'You',
   defeatButtonLabel,
+  speedMs = 800,
+  autoSkip = false,
   onComplete,
   onSkip,
 }: CombatPlaybackProps) {
@@ -46,13 +50,21 @@ export function CombatPlayback({
   const completeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logScrollRef = useRef<HTMLDivElement>(null);
 
+  // Auto-skip if the player has already seen this mob+prefix
+  useEffect(() => {
+    if (!autoSkip) return;
+    setRevealedCount(log.length);
+    setPhase(outcome === 'victory' ? 'finished-auto' : 'finished-manual');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Playback: reveal one entry every 800ms
   useEffect(() => {
     if (phase !== 'playing' || revealedCount >= log.length) return;
 
     playbackTimer.current = setTimeout(() => {
       setRevealedCount(prev => prev + 1);
-    }, 800);
+    }, speedMs);
 
     return () => {
       if (playbackTimer.current) clearTimeout(playbackTimer.current);

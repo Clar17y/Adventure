@@ -385,6 +385,9 @@ export default function GamePage() {
             onPlaybackComplete={handleExplorationPlaybackComplete}
             onPlaybackSkip={handlePlaybackSkip}
             onPushLog={pushLog}
+            combatSpeedMs={combatLogSpeedMs}
+            explorationSpeedMs={explorationSpeedMs}
+            defaultTurns={defaultExploreTurns}
           />
         );
       case 'inventory':
@@ -554,6 +557,8 @@ export default function GamePage() {
             onTravelPlaybackSkip={handleTravelPlaybackSkip}
             onPushLog={pushLog}
             activityLog={activityLog}
+            combatSpeedMs={combatLogSpeedMs}
+            explorationSpeedMs={explorationSpeedMs}
             onTravel={handleTravelToZone}
             onExploreCurrentZone={() => setActiveScreen('explore')}
           />
@@ -739,7 +744,15 @@ export default function GamePage() {
             />
           </div>
         );
-      case 'combat':
+      case 'combat': {
+        const shouldAutoSkipCombat = autoSkipKnownCombat && combatPlaybackData && (() => {
+          const mob = bestiaryMobs.find(m => m.id === combatPlaybackData.mobTemplateId);
+          if (!mob?.isDiscovered) return false;
+          if (combatPlaybackData.mobPrefix) {
+            return mob.prefixesEncountered.includes(combatPlaybackData.mobPrefix);
+          }
+          return true;
+        })();
         return (
           <CombatScreen
             hpState={hpState}
@@ -764,6 +777,8 @@ export default function GamePage() {
             onPendingEncounterMobFilterChange={handlePendingEncounterMobFilterChange}
             onPendingEncounterSortChange={handlePendingEncounterSortChange}
             combatPlaybackData={combatPlaybackData}
+            combatSpeedMs={combatLogSpeedMs}
+            autoSkipCombat={!!shouldAutoSkipCombat}
             onCombatPlaybackComplete={handleCombatPlaybackComplete}
             fightProgress={combatPlaybackQueue && combatPlaybackQueue.length > 1
               ? { current: combatPlaybackIndex + 1, total: combatPlaybackQueue.length }
@@ -771,6 +786,7 @@ export default function GamePage() {
             }
           />
         );
+      }
       case 'arena':
         return (
           <ArenaScreen
@@ -783,6 +799,7 @@ export default function GamePage() {
             onNotificationsChanged={() => void loadPvpNotificationCount()}
             onHpChanged={() => void loadTurnsAndHp()}
             onNavigate={(s) => setActiveScreen(s as Screen)}
+            combatSpeedMs={combatLogSpeedMs}
           />
         );
       case 'rest':

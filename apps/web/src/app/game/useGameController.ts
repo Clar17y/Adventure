@@ -414,6 +414,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [combatPlaybackQueue, setCombatPlaybackQueue] = useState<Array<{
     mobName: string;
     mobDisplayName: string;
+    mobTemplateId: string;
+    mobPrefix: string | null;
     outcome: string;
     combatantAMaxHp: number;
     playerStartHp: number;
@@ -981,6 +983,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         const queue = data.combat.fights.map((fight) => ({
           mobName: fight.mobName ?? data.combat.mobName,
           mobDisplayName: fight.mobDisplayName,
+          mobTemplateId: fight.mobTemplateId,
+          mobPrefix: fight.mobPrefix,
           outcome: fight.outcome,
           combatantAMaxHp: fight.playerMaxHp,
           playerStartHp: fight.playerStartHp,
@@ -1015,6 +1019,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         setCombatPlaybackQueue([{
           mobName: data.combat.mobName,
           mobDisplayName: data.combat.mobDisplayName,
+          mobTemplateId: data.combat.mobTemplateId,
+          mobPrefix: data.combat.mobPrefix,
           outcome: data.combat.outcome,
           combatantAMaxHp: data.combat.playerMaxHp,
           playerStartHp: hpBefore,
@@ -1101,8 +1107,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     if (lastFight) {
       const aggregatedRewards = pendingCombatRewardsRef.current ?? lastFight.rewards;
       setLastCombat({
-        mobTemplateId: '',
-        mobPrefix: null,
+        mobTemplateId: lastFight.mobTemplateId,
+        mobPrefix: lastFight.mobPrefix,
         mobName: lastFight.mobName,
         mobDisplayName: lastFight.mobDisplayName,
         outcome: lastFight.outcome,

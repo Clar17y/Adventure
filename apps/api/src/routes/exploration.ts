@@ -432,6 +432,7 @@ explorationRouter.post('/start', async (req, res, next) => {
 
     const hiddenCaches: Array<{ turnOccurred: number }> = [];
     let zoneExitDiscovered = false;
+    let wasKnockedOut = false;
 
     // Auto-potion setup for exploration ambushes
     const playerRecord = await prismaAny.player.findUnique({
@@ -619,6 +620,7 @@ explorationRouter.post('/start', async (req, res, next) => {
 
           if (fleeResult.outcome === 'knockout') {
             currentHp = 0;
+            wasKnockedOut = true;
             await enterRecoveringState(playerId, hpState.maxHp);
             respawnedTo = await respawnToHomeTown(playerId);
           } else {
@@ -1025,6 +1027,9 @@ explorationRouter.post('/start', async (req, res, next) => {
     if (spentTurns > 0) {
       await incrementStats(playerId, { totalTurnsSpent: spentTurns });
     }
+    if (wasKnockedOut) {
+      await incrementStats(playerId, { totalDeaths: 1 });
+    }
 
     // Build family IDs from ambush victories for family achievement checks
     const mobTemplateToFamilyId = new Map<string, string>();
@@ -1050,6 +1055,7 @@ explorationRouter.post('/start', async (req, res, next) => {
     if (ambushKillCount > 0) explorationAchievementKeys.push('totalKills', 'totalUniqueMonsterKills', 'totalBestiaryCompleted');
     if (zoneExitDiscovered) explorationAchievementKeys.push('totalZonesDiscovered');
     if (zoneJustFullyExplored) explorationAchievementKeys.push('totalZonesFullyExplored');
+    if (wasKnockedOut) explorationAchievementKeys.push('totalDeaths');
 
     const newAchievements: Awaited<ReturnType<typeof checkAchievements>> = [];
     if (explorationAchievementKeys.length > 0) {

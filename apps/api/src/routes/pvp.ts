@@ -98,12 +98,12 @@ pvpRouter.post('/challenge', async (req, res, next) => {
     const body = challengeSchema.parse(req.body);
     const result = await challenge(playerId, req.player!.username, body.targetId);
 
-    // --- Achievement check (stats derived from pvp_ratings table) ---
-    if (result.winnerId === playerId) {
-      const pvpAchievements = await checkAchievements(playerId, {
+    // --- Achievement check for the winner (stats derived from pvp_ratings table) ---
+    if (result.winnerId) {
+      const pvpAchievements = await checkAchievements(result.winnerId, {
         statKeys: ['totalPvpWins', 'bestPvpWinStreak'],
       });
-      await emitAchievementNotifications(playerId, pvpAchievements);
+      await emitAchievementNotifications(result.winnerId, pvpAchievements);
     }
 
     res.json(result);

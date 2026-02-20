@@ -712,11 +712,11 @@ combatRouter.post('/start', async (req, res, next) => {
     }
 
     // --- Achievement tracking (counters + derived checks) ---
-    if (combatResult.outcome === 'victory') {
-      if (COMBAT_CONSTANTS.ENCOUNTER_TURN_COST > 0) {
-        await incrementStats(playerId, { totalTurnsSpent: COMBAT_CONSTANTS.ENCOUNTER_TURN_COST });
-      }
+    if (COMBAT_CONSTANTS.ENCOUNTER_TURN_COST > 0) {
+      await incrementStats(playerId, { totalTurnsSpent: COMBAT_CONSTANTS.ENCOUNTER_TURN_COST });
+    }
 
+    if (combatResult.outcome === 'victory') {
       // Resolve mob family for family achievement checks
       let mobFamilyIdForAchievement: string | undefined;
       const familyMember = await prismaAny.mobFamilyMember.findFirst({
@@ -728,7 +728,7 @@ combatRouter.post('/start', async (req, res, next) => {
       }
 
       // Check achievements (all kill/bestiary/skill stats are derived from source tables)
-      const achievementKeys = ['totalKills', 'totalUniqueMonsterKills'];
+      const achievementKeys = ['totalKills', 'totalUniqueMonsterKills', 'totalTurnsSpent'];
       if (siteCompletionRewards?.recipeUnlocked) achievementKeys.push('totalRecipesLearned');
       if (xpGrant?.newLevel) achievementKeys.push('highestSkillLevel');
       if (xpGrant?.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) achievementKeys.push('highestCharacterLevel');
@@ -738,6 +738,10 @@ combatRouter.post('/start', async (req, res, next) => {
         familyId: mobFamilyIdForAchievement,
       });
       await emitAchievementNotifications(playerId, newAchievements);
+    } else {
+      // Defeat/escape: still check turn-spend achievements
+      const defeatAchievements = await checkAchievements(playerId, { statKeys: ['totalTurnsSpent'] });
+      await emitAchievementNotifications(playerId, defeatAchievements);
     }
 
     const combatLog = await prisma.activityLog.create({

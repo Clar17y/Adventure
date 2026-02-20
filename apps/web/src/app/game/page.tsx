@@ -265,10 +265,10 @@ export default function GamePage() {
   const chat = useChat({ isAuthenticated, currentZoneId: activeZoneId });
 
   useEffect(() => {
-    if (activeScreen === 'achievements' && !achievementData) {
+    if (activeScreen === 'achievements') {
       void loadAchievements();
     }
-  }, [activeScreen, achievementData, loadAchievements]);
+  }, [activeScreen, loadAchievements]);
 
   if (isLoading) {
     return (
@@ -849,12 +849,12 @@ export default function GamePage() {
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
             {[
               { id: 'home', label: 'Dashboard', badge: 0 },
-              { id: 'skills', label: 'Skills', badge: 0 },
               { id: 'zones', label: 'Map', badge: 0 },
-              { id: 'bestiary', label: 'Bestiary', badge: 0 },
               { id: 'worldEvents', label: 'Events', badge: 0 },
               { id: 'achievements', label: 'Achievements', badge: achievementUnclaimedCount },
               { id: 'leaderboard', label: 'Rankings', badge: 0 },
+              { id: 'bestiary', label: 'Bestiary', badge: 0 },
+              { id: 'skills', label: 'Skills', badge: 0 },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -971,8 +971,12 @@ export default function GamePage() {
         playerId={player?.id ?? null}
         pinnedMessage={chat.activeChannel === 'world' ? chat.pinnedWorld : chat.pinnedZone}
       />
-      <BottomNav activeTab={getActiveTab()} onNavigate={handleNavigate} />
-      <AchievementToast />
+      <BottomNav
+        activeTab={getActiveTab()}
+        onNavigate={handleNavigate}
+        badgeTabs={achievementUnclaimedCount > 0 ? new Set(['home']) : undefined}
+      />
+      <AchievementToast onNavigate={() => setActiveScreen('achievements')} />
     </>
   );
 }

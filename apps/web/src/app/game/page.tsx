@@ -18,6 +18,7 @@ import { Forge } from '@/components/screens/Forge';
 import { Gathering } from '@/components/screens/Gathering';
 import { Rest } from '@/components/screens/Rest';
 import { WorldEvents } from '@/components/screens/WorldEvents';
+import { Leaderboard } from '@/components/screens/Leaderboard';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
@@ -800,6 +801,8 @@ export default function GamePage() {
             onNavigate={(s) => setActiveScreen(s as Screen)}
           />
         );
+      case 'leaderboard':
+        return <Leaderboard playerId={player?.id ?? null} />;
       default:
         return null;
     }
@@ -828,6 +831,7 @@ export default function GamePage() {
               { id: 'zones', label: 'Map' },
               { id: 'bestiary', label: 'Bestiary' },
               { id: 'worldEvents', label: 'Events' },
+              { id: 'leaderboard', label: 'Rankings' },
             ].map((tab) => (
               <button
                 key={tab.id}

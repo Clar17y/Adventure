@@ -503,3 +503,13 @@ export const FULL_CLEAR_CONSTANTS = {
   RECIPE_MULTIPLIER: 1.5,
   CHEST_TIER_UPGRADE: true,
 } as const;
+
+// =============================================================================
+// LEADERBOARD
+// =============================================================================
+
+export const LEADERBOARD_CONSTANTS = {
+  REFRESH_INTERVAL_MS: 900_000,
+  PAGE_SIZE: 25,
+  TOP_N: 25,
+} as const;

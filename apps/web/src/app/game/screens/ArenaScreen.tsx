@@ -23,7 +23,9 @@ import {
 import { CombatPlayback } from '@/components/combat/CombatPlayback';
 import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
 import { PVP_CONSTANTS } from '@adventure/shared';
-import { Swords, Eye, Trophy, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Swords, Eye, Trophy, Bell, ChevronLeft, ChevronRight, Medal } from 'lucide-react';
+import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
+import { getLeaderboard, type LeaderboardResponse } from '@/lib/api';
 
 interface ArenaScreenProps {
   characterLevel: number;
@@ -37,7 +39,7 @@ interface ArenaScreenProps {
   onNavigate?: (screen: string) => void;
 }
 
-type ArenaView = 'ladder' | 'history' | 'notifications';
+type ArenaView = 'ladder' | 'history' | 'notifications' | 'rankings';
 
 export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId, isInTown = true, onTurnsChanged, onNotificationsChanged, onHpChanged, onNavigate }: ArenaScreenProps) {
   const [rating, setRating] = useState<PvpRatingResponse | null>(null);
@@ -55,6 +57,9 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<PvpMatchDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [rankingsData, setRankingsData] = useState<LeaderboardResponse | null>(null);
+  const [rankingsLoading, setRankingsLoading] = useState(false);
+  const [rankingsAroundMe, setRankingsAroundMe] = useState(false);
 
   const meetsLevel = characterLevel >= PVP_CONSTANTS.MIN_CHARACTER_LEVEL;
 
@@ -143,6 +148,15 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
       onHpChanged?.();
     }
   }
+
+  useEffect(() => {
+    if (activeView !== 'rankings') return;
+    setRankingsLoading(true);
+    void getLeaderboard('pvp_rating', rankingsAroundMe).then((res) => {
+      if (res.data) setRankingsData(res.data);
+      setRankingsLoading(false);
+    });
+  }, [activeView, rankingsAroundMe]);
 
   function handleViewChange(view: ArenaView) {
     setActiveView(view);
@@ -318,6 +332,7 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
         { id: 'ladder' as const, label: 'Ladder', icon: Swords },
         { id: 'history' as const, label: 'History', icon: Trophy },
         { id: 'notifications' as const, label: 'Alerts', icon: Bell, badge: notifications.length },
+        { id: 'rankings' as const, label: 'Rankings', icon: Medal },
       ]).map((tab) => (
         <button
           key={tab.id}
@@ -581,6 +596,28 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
       {activeView === 'ladder' && ladderView}
       {activeView === 'history' && historyView}
       {activeView === 'notifications' && notificationsView}
+      {activeView === 'rankings' && (
+        <PixelCard>
+          <LeaderboardTable
+            entries={rankingsData?.entries ?? []}
+            myRank={rankingsData?.myRank ?? null}
+            currentPlayerId={playerId}
+            loading={rankingsLoading}
+            totalPlayers={rankingsData?.totalPlayers ?? 0}
+            lastRefreshedAt={rankingsData?.lastRefreshedAt ?? null}
+            showAroundMe={rankingsAroundMe}
+            onToggleAroundMe={() => setRankingsAroundMe((v) => !v)}
+          />
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('leaderboard')}
+              className="w-full mt-3 py-2 text-sm text-[var(--rpg-gold)] hover:text-[var(--rpg-gold)]/80 transition-colors"
+            >
+              View All Leaderboards →
+            </button>
+          )}
+        </PixelCard>
+      )}
     </div>
   );
 }

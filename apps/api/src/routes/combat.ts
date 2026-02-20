@@ -40,7 +40,7 @@ import {
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
 import { getExplorationPercent } from '../services/zoneExplorationService';
-import { incrementStats, incrementFamilyKills, setStatsMax, checkBestiaryMobCompleted } from '../services/statsService';
+import { incrementStats } from '../services/statsService';
 import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 
 export const combatRouter = Router();
@@ -692,7 +692,6 @@ combatRouter.post('/start', async (req, res, next) => {
       update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
     });
 
-    let bestiaryMobJustCompleted = false;
     if (mobPrefix) {
       await prismaAny.playerBestiaryPrefix.upsert({
         where: {
@@ -710,29 +709,15 @@ combatRouter.post('/start', async (req, res, next) => {
         },
         update: combatResult.outcome === 'victory' ? { kills: { increment: 1 } } : {},
       });
-      if (combatResult.outcome === 'victory') {
-        bestiaryMobJustCompleted = await checkBestiaryMobCompleted(playerId, prefixedMob.id);
-      }
     }
 
-    // --- Achievement stat tracking ---
+    // --- Achievement tracking (counters + derived checks) ---
     if (combatResult.outcome === 'victory') {
-      const statsToIncrement: Record<string, number> = { totalKills: 1 };
-      if (COMBAT_CONSTANTS.ENCOUNTER_TURN_COST > 0) statsToIncrement.totalTurnsSpent = COMBAT_CONSTANTS.ENCOUNTER_TURN_COST;
-      // Check if first kill of this mob (new bestiary entry)
-      if (bestiaryEntry && Number(bestiaryEntry.kills) === 1) {
-        statsToIncrement.totalUniqueMonsterKills = 1;
+      if (COMBAT_CONSTANTS.ENCOUNTER_TURN_COST > 0) {
+        await incrementStats(playerId, { totalTurnsSpent: COMBAT_CONSTANTS.ENCOUNTER_TURN_COST });
       }
-      // Track recipe learned from encounter site chest
-      if (siteCompletionRewards?.recipeUnlocked) {
-        statsToIncrement.totalRecipesLearned = 1;
-      }
-      if (bestiaryMobJustCompleted) {
-        statsToIncrement.totalBestiaryCompleted = 1;
-      }
-      await incrementStats(playerId, statsToIncrement);
 
-      // Increment family kills
+      // Resolve mob family for family achievement checks
       let mobFamilyIdForAchievement: string | undefined;
       const familyMember = await prismaAny.mobFamilyMember.findFirst({
         where: { mobTemplateId: prefixedMob.id },
@@ -740,23 +725,14 @@ combatRouter.post('/start', async (req, res, next) => {
       });
       if (familyMember?.mobFamilyId) {
         mobFamilyIdForAchievement = familyMember.mobFamilyId;
-        await incrementFamilyKills(playerId, mobFamilyIdForAchievement!);
       }
 
-      // Track skill/character level highs
-      if (xpGrant?.newLevel) {
-        await setStatsMax(playerId, { highestSkillLevel: xpGrant.newLevel });
-      }
-      if (xpGrant?.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) {
-        await setStatsMax(playerId, { highestCharacterLevel: xpGrant.characterLevelAfter });
-      }
-
-      // Check achievements
+      // Check achievements (all kill/bestiary/skill stats are derived from source tables)
       const achievementKeys = ['totalKills', 'totalUniqueMonsterKills'];
       if (siteCompletionRewards?.recipeUnlocked) achievementKeys.push('totalRecipesLearned');
-      if (bestiaryMobJustCompleted) achievementKeys.push('totalBestiaryCompleted');
       if (xpGrant?.newLevel) achievementKeys.push('highestSkillLevel');
       if (xpGrant?.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) achievementKeys.push('highestCharacterLevel');
+      achievementKeys.push('totalBestiaryCompleted');
       const newAchievements = await checkAchievements(playerId, {
         statKeys: achievementKeys,
         familyId: mobFamilyIdForAchievement,

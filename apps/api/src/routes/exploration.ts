@@ -44,7 +44,7 @@ import { emitSystemMessage } from '../services/systemMessageService';
 import { persistMobHp } from '../services/persistedMobService';
 import { buildPotionPool, deductConsumedPotions } from '../services/potionService';
 import { getMainHandAttackSkill, getSkillLevel, type AttackSkill } from '../services/combatStatsService';
-import { incrementStats, incrementFamilyKills, checkBestiaryMobCompleted } from '../services/statsService';
+import { incrementStats } from '../services/statsService';
 import { checkAchievements } from '../services/achievementService';
 
 export const explorationRouter = Router();
@@ -1021,84 +1021,46 @@ explorationRouter.post('/start', async (req, res, next) => {
       };
     });
 
-    // --- Achievement stat tracking ---
-    const explorationStatsIncrement: Record<string, number> = {};
-    if (spentTurns > 0) explorationStatsIncrement.totalTurnsSpent = spentTurns;
+    // --- Achievement tracking (counter-only + derived checks) ---
+    if (spentTurns > 0) {
+      await incrementStats(playerId, { totalTurnsSpent: spentTurns });
+    }
 
-    // Count kills and zone discoveries from events
-    let ambushKillCount = 0;
-    let zoneExitCount = 0;
-    // Build mob template → family ID lookup from pre-fetched zone families
+    // Build family IDs from ambush victories for family achievement checks
     const mobTemplateToFamilyId = new Map<string, string>();
     for (const zf of zoneFamilies) {
       for (const member of zf.mobFamily.members) {
         mobTemplateToFamilyId.set(member.mobTemplate.id, zf.mobFamilyId);
       }
     }
-    // Track family kills from ambush victories
-    const familyKillCounts = new Map<string, number>();
-
-    const prefixedMobTemplateIds = new Set<string>();
+    const familyIds = new Set<string>();
+    let ambushKillCount = 0;
     for (const ev of events) {
       if (ev.type === 'ambush_victory') {
         ambushKillCount++;
         const mobTemplateId = (ev.details as Record<string, unknown>)?.mobTemplateId as string | undefined;
-        const mobPrefix = (ev.details as Record<string, unknown>)?.mobPrefix as string | undefined;
         if (mobTemplateId) {
-          if (mobPrefix) prefixedMobTemplateIds.add(mobTemplateId);
           const familyId = mobTemplateToFamilyId.get(mobTemplateId);
-          if (familyId) {
-            familyKillCounts.set(familyId, (familyKillCounts.get(familyId) ?? 0) + 1);
-          }
+          if (familyId) familyIds.add(familyId);
         }
-      } else if (ev.type === 'zone_exit') {
-        zoneExitCount++;
       }
     }
 
-    // Check bestiary completion for mobs with prefix kills this exploration
-    let bestiaryCompletedCount = 0;
-    for (const mtId of prefixedMobTemplateIds) {
-      if (await checkBestiaryMobCompleted(playerId, mtId)) bestiaryCompletedCount++;
-    }
-
-    if (ambushKillCount > 0) explorationStatsIncrement.totalKills = ambushKillCount;
-    if (zoneExitCount > 0) explorationStatsIncrement.totalZonesDiscovered = zoneExitCount;
-    if (zoneJustFullyExplored) explorationStatsIncrement.totalZonesFullyExplored = 1;
-    if (bestiaryCompletedCount > 0) explorationStatsIncrement.totalBestiaryCompleted = bestiaryCompletedCount;
-
-    if (Object.keys(explorationStatsIncrement).length > 0) {
-      await incrementStats(playerId, explorationStatsIncrement);
-    }
-
-    for (const [familyId, count] of familyKillCounts) {
-      await incrementFamilyKills(playerId, familyId, count);
-    }
-
-    const explorationAchievementKeys: string[] = [];
-    if (explorationStatsIncrement.totalTurnsSpent) explorationAchievementKeys.push('totalTurnsSpent');
-    if (ambushKillCount > 0) explorationAchievementKeys.push('totalKills');
-    if (zoneExitCount > 0) explorationAchievementKeys.push('totalZonesDiscovered');
+    const explorationAchievementKeys: string[] = ['totalTurnsSpent'];
+    if (ambushKillCount > 0) explorationAchievementKeys.push('totalKills', 'totalUniqueMonsterKills', 'totalBestiaryCompleted');
+    if (zoneExitDiscovered) explorationAchievementKeys.push('totalZonesDiscovered');
     if (zoneJustFullyExplored) explorationAchievementKeys.push('totalZonesFullyExplored');
-    if (bestiaryCompletedCount > 0) explorationAchievementKeys.push('totalBestiaryCompleted');
 
-    if (explorationAchievementKeys.length > 0 || familyKillCounts.size > 0) {
-      // Check stat-based achievements
-      const newAchievements: Awaited<ReturnType<typeof checkAchievements>> = [];
-
-      if (explorationAchievementKeys.length > 0) {
-        const statAchievements = await checkAchievements(playerId, { statKeys: explorationAchievementKeys });
-        newAchievements.push(...statAchievements);
-      }
-
-      // Check family-based achievements
-      for (const [familyId] of familyKillCounts) {
-        const familyAchievements = await checkAchievements(playerId, { familyId });
-        newAchievements.push(...familyAchievements);
-      }
-
-      await emitAchievementNotifications(playerId, newAchievements);
+    const newAchievements: Awaited<ReturnType<typeof checkAchievements>> = [];
+    if (explorationAchievementKeys.length > 0) {
+      const statAchievements = await checkAchievements(playerId, { statKeys: explorationAchievementKeys });
+      newAchievements.push(...statAchievements);
     }
+    for (const familyId of familyIds) {
+      const familyAchievements = await checkAchievements(playerId, { familyId });
+      newAchievements.push(...familyAchievements);
+    }
+    await emitAchievementNotifications(playerId, newAchievements);
 
     if (events.length === 0) {
       events.push({

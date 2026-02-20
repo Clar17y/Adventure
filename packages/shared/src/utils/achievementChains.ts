@@ -31,7 +31,9 @@ export function groupAchievementChains(
     const completedTiers = group.filter((a) => a.unlocked).length;
     const allComplete = completedTiers === group.length;
 
-    const active = group.find((a) => !a.unlocked) ?? group[group.length - 1];
+    // Priority: unclaimed reward first (so user can claim), then first incomplete, then last
+    const unclaimed = group.find((a) => a.unlocked && !a.rewardClaimed && (a.rewards?.length ?? 0) > 0);
+    const active = unclaimed ?? group.find((a) => !a.unlocked) ?? group[group.length - 1];
     const currentTier = group.indexOf(active) + 1;
 
     result.push({

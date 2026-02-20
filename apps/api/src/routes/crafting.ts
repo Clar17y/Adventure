@@ -25,7 +25,7 @@ import { authenticate } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { getEquipmentStats } from '../services/equipmentService';
 import { spendPlayerTurnsTx } from '../services/turnBankService';
-import { incrementStats, setStatsMax } from '../services/statsService';
+import { incrementStats } from '../services/statsService';
 import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 import {
   addStackableItemTx,
@@ -537,23 +537,24 @@ craftingRouter.post('/craft', async (req, res, next) => {
 
     const xpGrant = await grantSkillXp(playerId, recipe.skillType, recipe.xpReward * quantity);
 
-    // --- Achievement stat tracking ---
-    const craftStats: Record<string, number> = { totalCrafts: quantity, totalTurnsSpent: totalTurnCost };
-    for (const item of craftedItemDetails) {
-      if (item.rarity === 'rare') craftStats.totalRaresCrafted = (craftStats.totalRaresCrafted ?? 0) + 1;
-      if (item.rarity === 'epic') craftStats.totalEpicsCrafted = (craftStats.totalEpicsCrafted ?? 0) + 1;
-      if (item.rarity === 'legendary') craftStats.totalLegendariesCrafted = (craftStats.totalLegendariesCrafted ?? 0) + 1;
+    // --- Achievement tracking (counters + derived checks) ---
+    const isRealCraft = recipe.resultTemplate.itemType !== 'resource';
+    const craftCounters: Record<string, number> = { totalTurnsSpent: totalTurnCost };
+    if (isRealCraft) {
+      craftCounters.totalCrafts = quantity;
+      for (const item of craftedItemDetails) {
+        if (item.rarity === 'rare') craftCounters.totalRaresCrafted = (craftCounters.totalRaresCrafted ?? 0) + 1;
+        if (item.rarity === 'epic') craftCounters.totalEpicsCrafted = (craftCounters.totalEpicsCrafted ?? 0) + 1;
+        if (item.rarity === 'legendary') craftCounters.totalLegendariesCrafted = (craftCounters.totalLegendariesCrafted ?? 0) + 1;
+      }
     }
-    await incrementStats(playerId, craftStats);
-    if (xpGrant.newLevel) await setStatsMax(playerId, { highestSkillLevel: xpGrant.newLevel });
-    if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) {
-      await setStatsMax(playerId, { highestCharacterLevel: xpGrant.characterLevelAfter });
-    }
+    await incrementStats(playerId, craftCounters);
 
-    const craftAchKeys = ['totalCrafts'];
-    if (craftStats.totalRaresCrafted) craftAchKeys.push('totalRaresCrafted');
-    if (craftStats.totalEpicsCrafted) craftAchKeys.push('totalEpicsCrafted');
-    if (craftStats.totalLegendariesCrafted) craftAchKeys.push('totalLegendariesCrafted');
+    const craftAchKeys: string[] = [];
+    if (isRealCraft) craftAchKeys.push('totalCrafts');
+    if (craftCounters.totalRaresCrafted) craftAchKeys.push('totalRaresCrafted');
+    if (craftCounters.totalEpicsCrafted) craftAchKeys.push('totalEpicsCrafted');
+    if (craftCounters.totalLegendariesCrafted) craftAchKeys.push('totalLegendariesCrafted');
     if (xpGrant.newLevel) craftAchKeys.push('highestSkillLevel');
     if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) craftAchKeys.push('highestCharacterLevel');
     const craftAchievements = await checkAchievements(playerId, { statKeys: craftAchKeys });

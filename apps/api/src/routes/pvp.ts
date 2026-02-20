@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '@adventure/database';
 import { authenticate } from '../middleware/auth';
 import {
   getLadder,
@@ -13,7 +12,6 @@ import {
   getNotifications,
   markNotificationsRead,
 } from '../services/pvpService';
-import { incrementStats, setStatsMax } from '../services/statsService';
 import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 
 export const pvpRouter = Router();
@@ -100,13 +98,8 @@ pvpRouter.post('/challenge', async (req, res, next) => {
     const body = challengeSchema.parse(req.body);
     const result = await challenge(playerId, req.player!.username, body.targetId);
 
-    // --- Achievement stat tracking ---
+    // --- Achievement check (stats derived from pvp_ratings table) ---
     if (result.winnerId === playerId) {
-      await incrementStats(playerId, { totalPvpWins: 1 });
-      const pvpRating = await prisma.pvpRating.findUnique({ where: { playerId } });
-      if (pvpRating) {
-        await setStatsMax(playerId, { bestPvpWinStreak: pvpRating.winStreak });
-      }
       const pvpAchievements = await checkAchievements(playerId, {
         statKeys: ['totalPvpWins', 'bestPvpWinStreak'],
       });

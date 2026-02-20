@@ -10,7 +10,7 @@ interface Toast {
 }
 
 interface AchievementToastProps {
-  onNavigate?: () => void;
+  onNavigate?: (category: string) => void;
 }
 
 const MAX_VISIBLE = 5;
@@ -31,9 +31,9 @@ export function AchievementToast({ onNavigate }: AchievementToastProps) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const handleClick = (id: string) => {
-    dismiss(id);
-    onNavigate?.();
+  const handleClick = (toast: Toast) => {
+    dismiss(toast.id);
+    onNavigate?.(toast.category);
   };
 
   if (toasts.length === 0) return null;
@@ -47,7 +47,7 @@ export function AchievementToast({ onNavigate }: AchievementToastProps) {
         <div
           key={toast.id}
           className="bg-[var(--rpg-surface)] border border-[var(--rpg-gold)] rounded-lg px-4 py-3 shadow-lg animate-[slideIn_0.3s_ease-out] min-w-[250px] cursor-pointer hover:border-[var(--rpg-gold)]/80 transition-colors"
-          onClick={() => handleClick(toast.id)}
+          onClick={() => handleClick(toast)}
         >
           <div className="flex items-center gap-2">
             <span className="text-lg">&#x1F3C6;</span>

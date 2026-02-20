@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
 import { groupAchievementChains } from '@adventure/shared';
+import { rarityFromTier, RARITY_COLORS } from '@/lib/rarity';
 import type { PlayerAchievementProgress as SharedProgress } from '@adventure/shared';
 import type { PlayerAchievementProgress, AchievementRewardResponse } from '@/lib/api';
 
@@ -14,6 +15,8 @@ interface AchievementsProps {
   activeTitle: string | null;
   onClaim: (achievementId: string) => Promise<void>;
   onSetTitle: (achievementId: string | null) => Promise<void>;
+  initialCategory?: string | null;
+  onCategoryViewed?: () => void;
 }
 
 const CATEGORIES = [
@@ -55,9 +58,16 @@ function TierStars({ current, total }: { current: number; total: number }) {
   );
 }
 
-export function Achievements({ achievements, unclaimedCount, activeTitle, onClaim, onSetTitle }: AchievementsProps) {
-  const [activeCategory, setActiveCategory] = useState('all');
+export function Achievements({ achievements, unclaimedCount, activeTitle, onClaim, onSetTitle, initialCategory, onCategoryViewed }: AchievementsProps) {
+  const [activeCategory, setActiveCategory] = useState(initialCategory ?? 'all');
   const [claimingId, setClaimingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialCategory) {
+      setActiveCategory(initialCategory);
+      onCategoryViewed?.();
+    }
+  }, [initialCategory, onCategoryViewed]);
 
   // Chain grouping
   const chainEntries = groupAchievementChains(achievements as unknown as SharedProgress[]);
@@ -120,19 +130,23 @@ export function Achievements({ achievements, unclaimedCount, activeTitle, onClai
             >
               None
             </button>
-            {unlockedTitles.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => onSetTitle(a.id)}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
-                  activeTitle === a.id
-                    ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
-                    : 'bg-[var(--rpg-surface)] text-[var(--rpg-text-secondary)] hover:bg-[var(--rpg-border)]'
-                }`}
-              >
-                {a.titleReward}
-              </button>
-            ))}
+            {unlockedTitles.map((a) => {
+              const color = RARITY_COLORS[rarityFromTier(a.tier ?? 1)];
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => onSetTitle(a.id)}
+                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                    activeTitle === a.id
+                      ? 'bg-[var(--rpg-gold)] text-[var(--rpg-background)]'
+                      : 'bg-[var(--rpg-surface)] hover:bg-[var(--rpg-border)]'
+                  }`}
+                  style={activeTitle !== a.id ? { color } : undefined}
+                >
+                  {a.titleReward}
+                </button>
+              );
+            })}
           </div>
         </PixelCard>
       )}
@@ -179,7 +193,10 @@ export function Achievements({ achievements, unclaimedCount, activeTitle, onClai
                       </span>
                       <TierStars current={entry.completedTiers} total={entry.totalTiers} />
                       {achievement.titleReward && achievement.unlocked && (
-                        <span className="text-xs text-[var(--rpg-purple)] italic">
+                        <span
+                          className="text-xs italic"
+                          style={{ color: RARITY_COLORS[rarityFromTier(achievement.tier ?? 1)] }}
+                        >
                           &quot;{achievement.titleReward}&quot;
                         </span>
                       )}

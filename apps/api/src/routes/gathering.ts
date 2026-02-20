@@ -8,7 +8,7 @@ import { spendPlayerTurnsTx } from '../services/turnBankService';
 import { addStackableItemTx } from '../services/inventoryService';
 import { grantSkillXp } from '../services/xpService';
 import { getHpState } from '../services/hpService';
-import { incrementStats, setStatsMax } from '../services/statsService';
+import { incrementStats } from '../services/statsService';
 import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 import { getActiveZoneModifiers, getActiveEventSummaries } from '../services/worldEventService';
 import { applyResourceEventModifiers } from '@adventure/game-engine';
@@ -348,15 +348,11 @@ gatheringRouter.post('/mine', async (req, res, next) => {
     const rawXp = actions * 5;
     const xpGrant = await grantSkillXp(playerId, skillRequired, rawXp);
 
-    // --- Achievement stat tracking ---
+    // --- Achievement tracking (counters + derived checks) ---
     await incrementStats(playerId, {
       totalGatheringActions: actions,
       totalTurnsSpent: turnsSpent,
     });
-    if (xpGrant.newLevel) await setStatsMax(playerId, { highestSkillLevel: xpGrant.newLevel });
-    if (xpGrant.characterLevelAfter && xpGrant.characterLevelAfter > (xpGrant.characterLevelBefore ?? 0)) {
-      await setStatsMax(playerId, { highestCharacterLevel: xpGrant.characterLevelAfter });
-    }
 
     const gatherAchKeys = ['totalGatheringActions'];
     if (xpGrant.newLevel) gatherAchKeys.push('highestSkillLevel');

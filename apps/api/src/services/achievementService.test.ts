@@ -1,10 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@adventure/database', () => import('../__mocks__/database.js'));
+vi.mock('./statsService', () => ({
+  resolveStats: vi.fn(),
+  resolveAllStats: vi.fn(),
+  resolveFamilyKills: vi.fn(),
+  resolveAllFamilyKills: vi.fn(),
+  incrementStats: vi.fn(),
+}));
+
 import { prisma } from '@adventure/database';
 import { checkAchievements, claimReward, setActiveTitle, getPlayerAchievements } from './achievementService';
+import { resolveStats, resolveAllStats, resolveFamilyKills, resolveAllFamilyKills } from './statsService';
 
 const mockPrisma = prisma as unknown as Record<string, any>;
+const mockResolveStats = resolveStats as ReturnType<typeof vi.fn>;
+const mockResolveAllStats = resolveAllStats as ReturnType<typeof vi.fn>;
+const mockResolveFamilyKills = resolveFamilyKills as ReturnType<typeof vi.fn>;
+const mockResolveAllFamilyKills = resolveAllFamilyKills as ReturnType<typeof vi.fn>;
 
 describe('achievementService', () => {
   beforeEach(() => {
@@ -13,8 +26,7 @@ describe('achievementService', () => {
 
   describe('checkAchievements', () => {
     it('returns empty when no achievements are newly met', async () => {
-      mockPrisma.playerStats.findUnique.mockResolvedValue({ playerId: 'p1', totalKills: 5 });
-      mockPrisma.playerFamilyStats.findMany.mockResolvedValue([]);
+      mockResolveStats.mockResolvedValue({ totalKills: 5 });
       mockPrisma.playerAchievement.findMany.mockResolvedValue([]);
 
       const result = await checkAchievements('p1', { statKeys: ['totalKills'] });
@@ -22,8 +34,7 @@ describe('achievementService', () => {
     });
 
     it('unlocks achievement when threshold met', async () => {
-      mockPrisma.playerStats.findUnique.mockResolvedValue({ playerId: 'p1', totalKills: 100 });
-      mockPrisma.playerFamilyStats.findMany.mockResolvedValue([]);
+      mockResolveStats.mockResolvedValue({ totalKills: 100 });
       mockPrisma.playerAchievement.findMany.mockResolvedValue([]);
       mockPrisma.playerAchievement.create.mockResolvedValue({
         playerId: 'p1',
@@ -37,8 +48,7 @@ describe('achievementService', () => {
     });
 
     it('skips already-unlocked achievements', async () => {
-      mockPrisma.playerStats.findUnique.mockResolvedValue({ playerId: 'p1', totalKills: 100 });
-      mockPrisma.playerFamilyStats.findMany.mockResolvedValue([]);
+      mockResolveStats.mockResolvedValue({ totalKills: 100 });
       mockPrisma.playerAchievement.findMany.mockResolvedValue([
         { playerId: 'p1', achievementId: 'combat_kills_100', rewardClaimed: false },
       ]);
@@ -48,20 +58,64 @@ describe('achievementService', () => {
     });
 
     it('checks family achievements when familyId provided', async () => {
-      mockPrisma.playerStats.findUnique.mockResolvedValue({ playerId: 'p1', totalKills: 1 });
-      mockPrisma.playerFamilyStats.findMany.mockResolvedValue([
-        { playerId: 'p1', mobFamilyId: 'wolves-id', kills: 100 },
-      ]);
+      mockResolveStats.mockResolvedValue({ totalKills: 1 });
+      mockResolveFamilyKills.mockResolvedValue(500);
       mockPrisma.mobFamily.findUnique.mockResolvedValue({ id: 'wolves-id', name: 'Wolves' });
       mockPrisma.playerAchievement.findMany.mockResolvedValue([]);
       mockPrisma.playerAchievement.create.mockResolvedValue({
         playerId: 'p1',
-        achievementId: 'family_wolves_100',
+        achievementId: 'family_wolves_500',
         rewardClaimed: false,
       });
 
       const result = await checkAchievements('p1', { statKeys: ['totalKills'], familyId: 'wolves-id' });
-      expect(result.some((a) => a.id === 'family_wolves_100')).toBe(true);
+      expect(result.some((a) => a.id === 'family_wolves_500')).toBe(true);
+    });
+  });
+
+  describe('getPlayerAchievements', () => {
+    it('returns progress for all achievements using resolved stats', async () => {
+      mockResolveAllStats.mockResolvedValue({
+        totalKills: 150,
+        totalBossKills: 0,
+        totalBossDamage: 0,
+        totalPvpWins: 0,
+        bestPvpWinStreak: 0,
+        totalZonesDiscovered: 3,
+        totalZonesFullyExplored: 0,
+        totalRecipesLearned: 0,
+        totalBestiaryCompleted: 0,
+        totalUniqueMonsterKills: 10,
+        highestCharacterLevel: 5,
+        highestSkillLevel: 8,
+        totalCrafts: 0,
+        totalRaresCrafted: 0,
+        totalEpicsCrafted: 0,
+        totalLegendariesCrafted: 0,
+        totalSalvages: 0,
+        totalForgeUpgrades: 0,
+        totalGatheringActions: 0,
+        totalTurnsSpent: 5000,
+        totalDeaths: 1,
+      });
+      mockResolveAllFamilyKills.mockResolvedValue(new Map());
+      mockPrisma.playerAchievement.findMany.mockResolvedValue([
+        { playerId: 'p1', achievementId: 'combat_kills_100', unlockedAt: new Date(), rewardClaimed: false },
+      ]);
+      mockPrisma.mobFamily.findMany.mockResolvedValue([
+        { id: 'wolves-id', name: 'Wolves' },
+      ]);
+
+      const result = await getPlayerAchievements('p1');
+      expect(result.achievements.length).toBeGreaterThan(0);
+
+      const killsAch = result.achievements.find((a) => a.id === 'combat_kills_100');
+      expect(killsAch?.unlocked).toBe(true);
+      expect(killsAch?.progress).toBe(100);
+
+      const kills500 = result.achievements.find((a) => a.id === 'combat_kills_500');
+      expect(kills500?.unlocked).toBe(false);
+      expect(kills500?.progress).toBe(150);
     });
   });
 

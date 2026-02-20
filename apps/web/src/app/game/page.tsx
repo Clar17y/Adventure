@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { itemImageSrc, monsterImageSrc, resourceImageSrc, skillIconSrc, zoneImageSrc } from '@/lib/assets';
@@ -262,6 +262,7 @@ export default function GamePage() {
     loadAchievements,
   } = useGameController({ isAuthenticated });
 
+  const [achievementCategory, setAchievementCategory] = useState<string | null>(null);
   const chat = useChat({ isAuthenticated, currentZoneId: activeZoneId });
 
   useEffect(() => {
@@ -821,6 +822,8 @@ export default function GamePage() {
             activeTitle={activeTitle}
             onClaim={handleClaimAchievement}
             onSetTitle={handleSetActiveTitle}
+            initialCategory={achievementCategory}
+            onCategoryViewed={() => setAchievementCategory(null)}
           />
         );
       case 'leaderboard':
@@ -976,7 +979,7 @@ export default function GamePage() {
         onNavigate={handleNavigate}
         badgeTabs={achievementUnclaimedCount > 0 ? new Set(['home']) : undefined}
       />
-      <AchievementToast onNavigate={() => setActiveScreen('achievements')} />
+      <AchievementToast onNavigate={(category) => { setAchievementCategory(category); setActiveScreen('achievements'); }} />
     </>
   );
 }

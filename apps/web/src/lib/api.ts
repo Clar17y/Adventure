@@ -1117,6 +1117,8 @@ export interface PvpLadderEntry {
   username: string;
   rating: number;
   characterLevel: number;
+  title?: string;
+  titleTier?: number;
 }
 
 export interface PvpLadderResponse {
@@ -1468,6 +1470,8 @@ export interface LeaderboardEntry {
   characterLevel: number;
   score: number;
   isBot: boolean;
+  title?: string;
+  titleTier?: number;
 }
 
 export interface LeaderboardResponse {

@@ -4,7 +4,6 @@ import { randomIntInclusive } from '../utils/random';
 import { rollAndGrantLoot, enrichLootWithNames } from './lootService';
 import { addStackableItem } from './inventoryService';
 import { grantSkillXp } from './xpService';
-import { incrementStats, incrementFamilyKills } from './statsService';
 import { checkAchievements, emitAchievementNotifications } from './achievementService';
 
 export interface BossContributor {
@@ -150,17 +149,8 @@ export async function distributeBossLoot(
       recipeUnlocked = await rollBossRecipeDrop(contributor.playerId, mobFamilyId);
     }
 
-    // --- Achievement stat tracking ---
-    const bossStats: Record<string, number> = {
-      totalBossKills: 1,
-      totalBossDamage: contributor.totalDamage,
-    };
-    if (recipeUnlocked) bossStats.totalRecipesLearned = 1;
-    await incrementStats(contributor.playerId, bossStats);
-    if (mobFamilyId) {
-      await incrementFamilyKills(contributor.playerId, mobFamilyId);
-    }
-    const bossAchKeys = ['totalBossKills'];
+    // --- Achievement check (boss stats derived from source tables) ---
+    const bossAchKeys = ['totalBossKills', 'totalBossDamage'];
     if (recipeUnlocked) bossAchKeys.push('totalRecipesLearned');
     const bossAchievements = await checkAchievements(contributor.playerId, {
       statKeys: bossAchKeys,

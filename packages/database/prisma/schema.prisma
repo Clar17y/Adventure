@@ -67,7 +67,6 @@ model Player {
   bossParticipants   BossParticipant[]
   persistedMobs      PersistedMob[]
   stats              PlayerStats?
-  familyStats        PlayerFamilyStats[]
   achievements       PlayerAchievement[]
 
   @@map("players")
@@ -429,7 +428,6 @@ model MobFamily {
   encounterSites EncounterSite[]
   advancedRecipes CraftingRecipe[]
   chestDropTables ChestDropTable[]
-  familyStats    PlayerFamilyStats[]
 
   @@map("mob_families")
 }
@@ -543,6 +541,7 @@ model PvpRating {
   losses       Int       @default(0)
   draws        Int       @default(0)
   winStreak    Int       @default(0) @map("win_streak")
+  bestWinStreak Int      @default(0) @map("best_win_streak")
   bestRating   Int       @default(1000) @map("best_rating")
   lastFoughtAt DateTime? @map("last_fought_at")
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -685,11 +684,6 @@ model PersistedMob {
 
 model PlayerStats {
   playerId                String   @id @map("player_id")
-  totalKills              Int      @default(0) @map("total_kills")
-  totalBossKills          Int      @default(0) @map("total_boss_kills")
-  totalBossDamage         Int      @default(0) @map("total_boss_damage")
-  totalPvpWins            Int      @default(0) @map("total_pvp_wins")
-  bestPvpWinStreak        Int      @default(0) @map("best_pvp_win_streak")
   totalCrafts             Int      @default(0) @map("total_crafts")
   totalRaresCrafted       Int      @default(0) @map("total_rares_crafted")
   totalEpicsCrafted       Int      @default(0) @map("total_epics_crafted")
@@ -698,31 +692,12 @@ model PlayerStats {
   totalForgeUpgrades      Int      @default(0) @map("total_forge_upgrades")
   totalGatheringActions   Int      @default(0) @map("total_gathering_actions")
   totalTurnsSpent         Int      @default(0) @map("total_turns_spent")
-  totalZonesDiscovered    Int      @default(0) @map("total_zones_discovered")
-  totalZonesFullyExplored Int      @default(0) @map("total_zones_fully_explored")
-  totalRecipesLearned     Int      @default(0) @map("total_recipes_learned")
-  totalBestiaryCompleted  Int      @default(0) @map("total_bestiary_completed")
-  totalUniqueMonsterKills Int      @default(0) @map("total_unique_monster_kills")
   totalDeaths             Int      @default(0) @map("total_deaths")
-  highestCharacterLevel   Int      @default(1) @map("highest_character_level")
-  highestSkillLevel       Int      @default(1) @map("highest_skill_level")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@map("player_stats")
-}
-
-model PlayerFamilyStats {
-  playerId    String @map("player_id")
-  mobFamilyId String @map("mob_family_id")
-  kills       Int    @default(0)
-
-  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  mobFamily MobFamily @relation(fields: [mobFamilyId], references: [id], onDelete: Cascade)
-
-  @@id([playerId, mobFamilyId])
-  @@map("player_family_stats")
 }
 
 model PlayerAchievement {

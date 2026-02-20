@@ -128,6 +128,7 @@ const COMBAT_ACHIEVEMENTS: AchievementDef[] = [
     titleReward: 'The Unstoppable',
     statKey: 'bestPvpWinStreak',
     threshold: 10,
+    tier: 2,
     secret: true,
   },
 ];
@@ -242,6 +243,7 @@ const CRAFTING_ACHIEVEMENTS: AchievementDef[] = [
     titleReward: 'The Forger',
     statKey: 'totalEpicsCrafted',
     threshold: 1,
+    tier: 3,
   },
   {
     id: 'craft_legendary_1',
@@ -251,6 +253,7 @@ const CRAFTING_ACHIEVEMENTS: AchievementDef[] = [
     titleReward: 'Legendsmith',
     statKey: 'totalLegendariesCrafted',
     threshold: 1,
+    tier: 4,
     rewards: [{ type: 'attribute_points', amount: 1 }],
   },
   {
@@ -506,6 +509,7 @@ const GENERAL_ACHIEVEMENTS: AchievementDef[] = [
     titleReward: 'Golden Hands',
     statKey: 'totalLegendariesCrafted',
     threshold: 1,
+    tier: 5,
     secret: true,
   },
 ];
@@ -567,32 +571,32 @@ const FAMILY_ACHIEVEMENTS: AchievementDef[] = FAMILY_KEYS.flatMap((key) => {
   const name = FAMILY_DISPLAY_NAMES[key];
   return [
     {
-      id: `family_${key}_100`,
+      id: `family_${key}_500`,
       category: 'family' as const,
       title: `${name} Hunter`,
-      description: `Kill 100 ${name}s`,
+      description: `Kill 500 ${name}s`,
       familyKey: key,
-      threshold: 100,
+      threshold: 500,
       tier: 1,
     },
     {
-      id: `family_${key}_500`,
+      id: `family_${key}_2500`,
       category: 'family' as const,
       title: `${name} Slayer`,
-      description: `Kill 500 ${name}s`,
+      description: `Kill 2,500 ${name}s`,
       titleReward: `${name} Slayer`,
       familyKey: key,
-      threshold: 500,
+      threshold: 2500,
       tier: 2,
     },
     {
-      id: `family_${key}_1000`,
+      id: `family_${key}_5000`,
       category: 'family' as const,
       title: `${name}'s Bane`,
-      description: `Kill 1,000 ${name}s`,
+      description: `Kill 5,000 ${name}s`,
       titleReward: `${name}'s Bane`,
       familyKey: key,
-      threshold: 1000,
+      threshold: 5000,
       tier: 3,
       rewards: [{ type: 'item', amount: 1, itemTemplateId: FAMILY_REWARD_ITEMS[key] }],
     },

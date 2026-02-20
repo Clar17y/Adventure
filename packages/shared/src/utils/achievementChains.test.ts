@@ -65,6 +65,18 @@ describe('groupAchievementChains', () => {
     expect(result[0].totalTiers).toBe(3);
   });
 
+  it('shows unclaimed reward tier before the next incomplete tier', () => {
+    const achievements: PlayerAchievementProgress[] = [
+      makeAch({ id: 'kills_100', statKey: 'totalKills', threshold: 100, tier: 1, progress: 150, unlocked: true, rewardClaimed: false, rewards: [{ type: 'xp', amount: 100 }] }),
+      makeAch({ id: 'kills_500', statKey: 'totalKills', threshold: 500, tier: 2, progress: 150, unlocked: false }),
+    ];
+
+    const result = groupAchievementChains(achievements);
+    const chain = result.find((e) => e.achievement.statKey === 'totalKills');
+    expect(chain!.achievement.id).toBe('kills_100');
+    expect(chain!.currentTier).toBe(1);
+  });
+
   it('returns correct total counts across all chains', () => {
     const achievements: PlayerAchievementProgress[] = [
       makeAch({ id: 'a1', statKey: 'totalKills', threshold: 100, tier: 1, progress: 100, unlocked: true }),

@@ -36,6 +36,9 @@ model Player {
   // Auto-Potion
   autoPotionThreshold Int @default(0) @map("auto_potion_threshold")
 
+  // Tutorial
+  tutorialStep    Int      @default(0) @map("tutorial_step")
+
   // Zone / Travel
   currentZoneId          String? @map("current_zone_id")
   lastTravelledFromZoneId String? @map("last_travelled_from_zone_id")

@@ -11,7 +11,7 @@ import {
   sessionInactivityCutoff,
   verifyRefreshToken,
 } from '../middleware/auth';
-import { ensureStarterDiscoveries } from '../services/zoneDiscoveryService';
+import { ensureStarterDiscoveries, ensureStarterEncounterAndNodes } from '../services/zoneDiscoveryService';
 
 export const authRouter = Router();
 
@@ -100,6 +100,9 @@ authRouter.post('/register', async (req, res, next) => {
 
     // Create initial zone discovery records
     await ensureStarterDiscoveries(player.id);
+
+    // Seed starter resource nodes and encounter site
+    await ensureStarterEncounterAndNodes(player.id);
 
     // Generate tokens
     const payload = { playerId: player.id, username: player.username, role: player.role };

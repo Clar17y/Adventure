@@ -49,6 +49,8 @@ interface DashboardProps {
     attribute: 'vitality' | 'strength' | 'dexterity' | 'intelligence' | 'luck' | 'evasion',
     points?: number
   ) => Promise<void>;
+  onQuickRest?: () => Promise<void>;
+  quickRestPercent?: number;
 }
 
 const ATTRIBUTE_META = {
@@ -62,7 +64,7 @@ const ATTRIBUTE_META = {
 
 type AttributeType = keyof typeof ATTRIBUTE_META;
 
-export function Dashboard({ playerData, skills, onNavigate, characterProgression, activityLog, onAllocateAttribute }: DashboardProps) {
+export function Dashboard({ playerData, skills, onNavigate, characterProgression, activityLog, onAllocateAttribute, onQuickRest, quickRestPercent }: DashboardProps) {
   const [allocating, setAllocating] = useState<AttributeType | null>(null);
 
   const handleAllocate = async (attribute: AttributeType) => {
@@ -168,6 +170,15 @@ export function Dashboard({ playerData, skills, onNavigate, characterProgression
               showNumbers={false}
             />
           </div>
+        )}
+        {onQuickRest && !playerData.isRecovering && playerData.currentHp < playerData.maxHp && (
+          <PixelButton
+            variant="secondary"
+            className="mt-2 w-full text-xs"
+            onClick={onQuickRest}
+          >
+            Quick Rest ({quickRestPercent ?? 100}%)
+          </PixelButton>
         )}
       </PixelCard>
 

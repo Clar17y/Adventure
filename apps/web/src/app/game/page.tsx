@@ -268,6 +268,7 @@ export default function GamePage() {
     handleSetQuickRestHealPercent,
     defaultRefiningMax,
     handleSetDefaultRefiningMax,
+    handleQuickRest,
     zoneCraftingLevel,
     zoneCraftingName,
     loadTurnsAndHp,
@@ -340,6 +341,8 @@ export default function GamePage() {
             onNavigate={handleNavigate}
             activityLog={activityLog}
             onAllocateAttribute={handleAllocateAttribute}
+            onQuickRest={handleQuickRest}
+            quickRestPercent={quickRestHealPercent}
           />
         );
       case 'explore':

@@ -26,6 +26,8 @@ import {
   getZoneEvents,
   mine,
   repairItem,
+  rest,
+  restEstimate,
   salvage,
   selectSiteStrategy,
   useItem,
@@ -1575,6 +1577,21 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const handleSetDefaultRefiningMax = (value: boolean) =>
     handleSetSetting('defaultRefiningMax', value, setDefaultRefiningMax, defaultRefiningMax);
 
+  const handleQuickRest = async () => {
+    if (!hpState || hpState.currentHp >= hpState.maxHp || hpState.isRecovering) return;
+    const estimate = await restEstimate(10);
+    if (!estimate.data?.healPerTurn) return;
+    const missingHp = hpState.maxHp - hpState.currentHp;
+    const targetHeal = missingHp * (quickRestHealPercent / 100);
+    const rawTurns = Math.ceil(targetHeal / estimate.data.healPerTurn);
+    const turnsToSpend = Math.max(10, Math.ceil(rawTurns / 10) * 10);
+    const result = await rest(Math.min(turnsToSpend, turns));
+    if (result.data) {
+      setTurns(result.data.turns.currentTurns);
+      setHpState(prev => ({ ...prev, currentHp: result.data!.currentHp, maxHp: result.data!.maxHp }));
+    }
+  };
+
   const handleClaimAchievement = async (achievementId: string) => {
     const res = await claimAchievementReward(achievementId);
     if (res.data) {
@@ -1715,6 +1732,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleSetDefaultExploreTurns,
     handleSetQuickRestHealPercent,
     handleSetDefaultRefiningMax,
+    handleQuickRest,
   };
 }
 

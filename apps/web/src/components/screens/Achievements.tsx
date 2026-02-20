@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { StatBar } from '@/components/StatBar';
+import { groupAchievementChains } from '@adventure/shared';
+import type { PlayerAchievementProgress as SharedProgress } from '@adventure/shared';
 import type { PlayerAchievementProgress, AchievementRewardResponse } from '@/lib/api';
 
 interface AchievementsProps {
@@ -36,21 +38,48 @@ function RewardBadge({ reward }: { reward: AchievementRewardResponse }) {
   }
 }
 
+function TierStars({ current, total }: { current: number; total: number }) {
+  if (total <= 1) return null;
+  return (
+    <span className="inline-flex gap-0.5 ml-1">
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className={i < current ? 'text-[var(--rpg-gold)]' : 'text-[var(--rpg-text-secondary)] opacity-40'}
+          style={{ fontSize: '10px' }}
+        >
+          ★
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function Achievements({ achievements, unclaimedCount, activeTitle, onClaim, onSetTitle }: AchievementsProps) {
   const [activeCategory, setActiveCategory] = useState('all');
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
-  const filtered = activeCategory === 'all'
-    ? achievements
-    : achievements.filter((a) => a.category === activeCategory);
+  // Chain grouping
+  const chainEntries = groupAchievementChains(achievements as unknown as SharedProgress[]);
+  const totalAchievements = chainEntries.reduce((sum, e) => sum + e.totalTiers, 0);
+  const totalCompleted = chainEntries.reduce((sum, e) => sum + e.completedTiers, 0);
 
-  // Sort: unclaimed first, then in-progress, then locked
+  // Filter by category
+  const filtered = activeCategory === 'all'
+    ? chainEntries
+    : chainEntries.filter((e) => e.achievement.category === activeCategory);
+
+  // Sort: unclaimed first, then completed, then by progress
   const sorted = [...filtered].sort((a, b) => {
-    if (a.unlocked && !a.rewardClaimed && a.rewards?.length) return -1;
-    if (b.unlocked && !b.rewardClaimed && b.rewards?.length) return 1;
-    if (a.unlocked && !b.unlocked) return -1;
-    if (!a.unlocked && b.unlocked) return 1;
-    return (b.progress / b.threshold) - (a.progress / a.threshold);
+    const aAch = a.achievement;
+    const bAch = b.achievement;
+    const aClaimable = aAch.unlocked && !aAch.rewardClaimed && (aAch.rewards?.length ?? 0) > 0;
+    const bClaimable = bAch.unlocked && !bAch.rewardClaimed && (bAch.rewards?.length ?? 0) > 0;
+    if (aClaimable && !bClaimable) return -1;
+    if (!aClaimable && bClaimable) return 1;
+    if (aAch.unlocked && !bAch.unlocked) return -1;
+    if (!aAch.unlocked && bAch.unlocked) return 1;
+    return (bAch.progress / bAch.threshold) - (aAch.progress / aAch.threshold);
   });
 
   const handleClaim = async (id: string) => {
@@ -63,6 +92,19 @@ export function Achievements({ achievements, unclaimedCount, activeTitle, onClai
 
   return (
     <div className="space-y-4">
+      {/* Completion counter */}
+      <PixelCard padding="sm">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-medium text-[var(--rpg-text-primary)]">
+            {totalCompleted} / {totalAchievements} Achievements
+          </span>
+          <span className="text-xs text-[var(--rpg-text-secondary)]">
+            {totalAchievements > 0 ? Math.round((totalCompleted / totalAchievements) * 100) : 0}%
+          </span>
+        </div>
+        <StatBar current={totalCompleted} max={totalAchievements} color="xp" size="sm" />
+      </PixelCard>
+
       {/* Title selector */}
       {unlockedTitles.length > 0 && (
         <PixelCard padding="sm">
@@ -114,7 +156,8 @@ export function Achievements({ achievements, unclaimedCount, activeTitle, onClai
 
       {/* Achievement cards */}
       <div className="space-y-2">
-        {sorted.map((achievement) => {
+        {sorted.map((entry) => {
+          const achievement = entry.achievement;
           const isClaimable = achievement.unlocked && !achievement.rewardClaimed && (achievement.rewards?.length ?? 0) > 0;
           const isClaiming = claimingId === achievement.id;
 
@@ -134,6 +177,7 @@ export function Achievements({ achievements, unclaimedCount, activeTitle, onClai
                       }`}>
                         {achievement.title}
                       </span>
+                      <TierStars current={entry.completedTiers} total={entry.totalTiers} />
                       {achievement.titleReward && achievement.unlocked && (
                         <span className="text-xs text-[var(--rpg-purple)] italic">
                           &quot;{achievement.titleReward}&quot;

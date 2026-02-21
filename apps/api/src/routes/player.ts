@@ -38,6 +38,12 @@ playerRouter.get('/', async (req, res, next) => {
         attributePoints: true,
         attributes: true,
         autoPotionThreshold: true,
+        combatLogSpeedMs: true,
+        explorationSpeedMs: true,
+        autoSkipKnownCombat: true,
+        defaultExploreTurns: true,
+        quickRestHealPercent: true,
+        defaultRefiningMax: true,
         activeTitle: true,
       },
     });
@@ -128,25 +134,37 @@ playerRouter.post('/attributes', async (req, res, next) => {
   }
 });
 
+const SETTINGS_FIELDS = [
+  'autoPotionThreshold', 'combatLogSpeedMs', 'explorationSpeedMs',
+  'autoSkipKnownCombat', 'defaultExploreTurns', 'quickRestHealPercent', 'defaultRefiningMax',
+] as const;
+
 const settingsSchema = z.object({
-  autoPotionThreshold: z.number().int().min(0).max(100),
-});
+  autoPotionThreshold: z.number().int().min(0).max(100).optional(),
+  combatLogSpeedMs: z.number().int().min(100).max(1000).refine(v => v % 100 === 0, { message: 'Must be a multiple of 100' }).optional(),
+  explorationSpeedMs: z.number().int().min(100).max(1000).refine(v => v % 100 === 0, { message: 'Must be a multiple of 100' }).optional(),
+  autoSkipKnownCombat: z.boolean().optional(),
+  defaultExploreTurns: z.number().int().min(10).max(10000).refine(v => v % 10 === 0, { message: 'Must be a multiple of 10' }).optional(),
+  quickRestHealPercent: z.number().int().min(25).max(100).refine(v => v % 25 === 0, { message: 'Must be a multiple of 25' }).optional(),
+  defaultRefiningMax: z.boolean().optional(),
+}).refine(data => Object.values(data).some(v => v !== undefined), { message: 'At least one setting required' });
 
 /**
  * PATCH /api/v1/player/settings
- * Update player settings (e.g. auto-potion threshold).
+ * Update player settings.
  */
 playerRouter.patch('/settings', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
     const body = settingsSchema.parse(req.body);
 
-    await prismaAny.player.update({
+    const updated = await prismaAny.player.update({
       where: { id: playerId },
-      data: { autoPotionThreshold: body.autoPotionThreshold },
+      data: body,
+      select: Object.fromEntries(SETTINGS_FIELDS.map(f => [f, true])),
     });
 
-    res.json({ autoPotionThreshold: body.autoPotionThreshold });
+    res.json(updated);
   } catch (err) {
     next(err);
   }

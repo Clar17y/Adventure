@@ -1579,7 +1579,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleSetSetting('defaultRefiningMax', value, setDefaultRefiningMax, defaultRefiningMax);
 
   const handleQuickRest = async () => {
-    if (!hpState || hpState.currentHp >= hpState.maxHp || hpState.isRecovering) return;
+    if (!hpState || hpState.currentHp >= hpState.maxHp || hpState.isRecovering || turns <= 0) return;
 
     await runAction('quick_rest', async () => {
       const estimate = await restEstimate(10);

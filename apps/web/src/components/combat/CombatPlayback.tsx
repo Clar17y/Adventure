@@ -54,7 +54,12 @@ export function CombatPlayback({
   useEffect(() => {
     if (!autoSkip) return;
     setRevealedCount(log.length);
-    setPhase(outcome === 'victory' ? 'finished-auto' : 'finished-manual');
+    if (outcome === 'victory') {
+      setPhase('finished-auto');
+      completeTimer.current = setTimeout(onComplete, 500);
+    } else {
+      setPhase('finished-manual');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

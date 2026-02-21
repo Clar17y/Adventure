@@ -27,6 +27,7 @@ import {
   mine,
   repairItem,
   salvage,
+  selectSiteStrategy,
   useItem,
   updatePlayerSettings,
   startCombatFromEncounterSite,
@@ -75,6 +76,10 @@ export interface PendingEncounter {
   nextMobPrefix: string | null;
   nextMobDisplayName: string | null;
   discoveredAt: string;
+  clearStrategy: string | null;
+  currentRoom: number;
+  totalRooms: number;
+  roomMobCounts: Array<{ room: number; alive: number; total: number }>;
 }
 
 export interface LastCombatLogEntry {
@@ -116,6 +121,7 @@ export interface LastCombatLogEntry {
 export interface LastCombat {
   mobTemplateId: string;
   mobPrefix: string | null;
+  mobName: string;
   mobDisplayName: string;
   outcome: string;
   combatantAMaxHp: number;
@@ -144,6 +150,7 @@ export interface LastCombat {
         recipeName: string;
         soulbound: boolean;
       } | null;
+      fullClearBonus?: boolean;
     } | null;
     skillXp: {
       skillType: string;
@@ -399,7 +406,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [achievementUnclaimedCount, setAchievementUnclaimedCount] = useState(0);
   const [activeTitle, setActiveTitleState] = useState<string | null>(null);
   const [playbackActive, setPlaybackActive] = useState(false);
-  const [combatPlaybackData, setCombatPlaybackData] = useState<{
+  const [combatPlaybackQueue, setCombatPlaybackQueue] = useState<Array<{
+    mobName: string;
     mobDisplayName: string;
     outcome: string;
     combatantAMaxHp: number;
@@ -407,7 +415,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     combatantBMaxHp: number;
     log: LastCombatLogEntry[];
     rewards: LastCombat['rewards'];
-  } | null>(null);
+  }> | null>(null);
+  const [combatPlaybackIndex, setCombatPlaybackIndex] = useState(0);
+  const pendingCombatRewardsRef = useRef<LastCombat['rewards'] | null>(null);
+  const combatPlaybackData = combatPlaybackQueue?.[combatPlaybackIndex] ?? null;
   const [explorationPlaybackData, setExplorationPlaybackData] = useState<{
     totalTurns: number;
     zoneName: string;
@@ -605,6 +616,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           nextMobPrefix: site.nextMobPrefix,
           nextMobDisplayName: site.nextMobDisplayName,
           discoveredAt: site.discoveredAt,
+          clearStrategy: site.clearStrategy,
+          currentRoom: site.currentRoom,
+          totalRooms: site.totalRooms,
+          roomMobCounts: site.roomMobCounts,
         }))
       );
       setPendingEncounterPagination(res.data.pagination);
@@ -950,16 +965,55 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           : null,
       };
 
-      // Store for animated playback instead of setting lastCombat directly
-      setCombatPlaybackData({
-        mobDisplayName: data.combat.mobDisplayName,
-        outcome: data.combat.outcome,
-        combatantAMaxHp: data.combat.playerMaxHp,
-        playerStartHp: hpBefore,
-        combatantBMaxHp: data.combat.mobMaxHp,
-        log: data.combat.log,
-        rewards,
-      });
+      // Build playback queue from fights[] or single-element queue for zone combat
+      if (data.combat.fights && data.combat.fights.length > 0) {
+        const queue = data.combat.fights.map((fight) => ({
+          mobName: fight.mobName ?? data.combat.mobName,
+          mobDisplayName: fight.mobDisplayName,
+          outcome: fight.outcome,
+          combatantAMaxHp: fight.playerMaxHp,
+          playerStartHp: fight.playerStartHp,
+          combatantBMaxHp: fight.mobMaxHp,
+          log: fight.log as LastCombatLogEntry[],
+          rewards: {
+            xp: fight.xp,
+            loot: fight.loot,
+            siteCompletion: null as LastCombat['rewards']['siteCompletion'],
+            skillXp: fight.skillXp
+              ? {
+                  skillType: fight.skillXp.skillType,
+                  xpGained: fight.skillXp.xpGained,
+                  xpAfterEfficiency: fight.skillXp.xpAfterEfficiency,
+                  efficiency: fight.skillXp.efficiency,
+                  leveledUp: fight.skillXp.leveledUp,
+                  newLevel: fight.skillXp.newLevel,
+                  characterXpGain: fight.skillXp.characterXpGain,
+                  characterXpAfter: fight.skillXp.characterXpAfter,
+                  characterLevelBefore: fight.skillXp.characterLevelBefore,
+                  characterLevelAfter: fight.skillXp.characterLevelAfter,
+                  attributePointsAfter: fight.skillXp.attributePointsAfter,
+                  characterLeveledUp: fight.skillXp.characterLeveledUp,
+                }
+              : null,
+          } satisfies LastCombat['rewards'],
+        }));
+        pendingCombatRewardsRef.current = rewards;
+        setCombatPlaybackQueue(queue);
+        setCombatPlaybackIndex(0);
+      } else {
+        setCombatPlaybackQueue([{
+          mobName: data.combat.mobName,
+          mobDisplayName: data.combat.mobDisplayName,
+          outcome: data.combat.outcome,
+          combatantAMaxHp: data.combat.playerMaxHp,
+          playerStartHp: hpBefore,
+          combatantBMaxHp: data.combat.mobMaxHp,
+          log: data.combat.log,
+          rewards,
+        }]);
+        setCombatPlaybackIndex(0);
+        pendingCombatRewardsRef.current = rewards;
+      }
       setPlaybackActive(true);
 
       if (data.activeEvents?.length) {
@@ -997,24 +1051,59 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       logDurabilityWarnings(data.rewards.durabilityLost);
 
+      if (data.combat.room?.roomCleared && data.combat.room.siteStrategy === 'room_by_room') {
+        pushLog({
+          timestamp: nowStamp(),
+          type: 'success',
+          message: `Room ${data.combat.room.currentRoom} cleared! You can rest before the next room.`,
+        });
+      }
+
       await Promise.all([loadAll(), loadTurnsAndHp(), refreshPendingEncounters(), loadBestiary()]);
     });
   };
 
+  const handleSelectStrategy = useCallback(async (
+    encounterSiteId: string,
+    strategy: 'full_clear' | 'room_by_room'
+  ) => {
+    setBusyAction('strategy');
+    try {
+      await selectSiteStrategy(encounterSiteId, strategy);
+      await refreshPendingEncounters();
+    } catch (err) {
+      pushLog({ timestamp: nowStamp(), type: 'danger', message: `Failed to select strategy: ${(err as Error).message}` });
+    } finally {
+      setBusyAction(null);
+    }
+  }, [refreshPendingEncounters]);
+
   const handleCombatPlaybackComplete = () => {
-    if (combatPlaybackData) {
+    if (combatPlaybackQueue && combatPlaybackIndex < combatPlaybackQueue.length - 1) {
+      // More fights in the queue — advance to next
+      setCombatPlaybackIndex(combatPlaybackIndex + 1);
+      return;
+    }
+
+    // All fights done — finalize lastCombat with aggregated rewards
+    const lastFight = combatPlaybackQueue?.[combatPlaybackQueue.length - 1];
+    if (lastFight) {
+      const aggregatedRewards = pendingCombatRewardsRef.current ?? lastFight.rewards;
       setLastCombat({
         mobTemplateId: '',
         mobPrefix: null,
-        mobDisplayName: combatPlaybackData.mobDisplayName,
-        outcome: combatPlaybackData.outcome,
-        combatantAMaxHp: combatPlaybackData.combatantAMaxHp,
-        combatantBMaxHp: combatPlaybackData.combatantBMaxHp,
-        log: combatPlaybackData.log,
-        rewards: combatPlaybackData.rewards,
+        mobName: lastFight.mobName,
+        mobDisplayName: lastFight.mobDisplayName,
+        outcome: lastFight.outcome,
+        combatantAMaxHp: lastFight.combatantAMaxHp,
+        combatantBMaxHp: lastFight.combatantBMaxHp,
+        log: lastFight.log,
+        rewards: aggregatedRewards,
       });
     }
-    setCombatPlaybackData(null);
+    setCombatPlaybackQueue(null);
+    setCombatPlaybackIndex(0);
+    pendingCombatRewardsRef.current = null;
     setPlaybackActive(false);
   };
 
@@ -1024,8 +1113,26 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       if (explorationPlaybackData) {
         handlePlaybackSkip();
       }
-      if (combatPlaybackData) {
-        handleCombatPlaybackComplete();
+      if (combatPlaybackQueue) {
+        // Skip to the end of the queue
+        const lastFight = combatPlaybackQueue[combatPlaybackQueue.length - 1];
+        if (lastFight) {
+          const aggregatedRewards = pendingCombatRewardsRef.current ?? lastFight.rewards;
+          setLastCombat({
+            mobTemplateId: '',
+            mobPrefix: null,
+            mobName: lastFight.mobName,
+            mobDisplayName: lastFight.mobDisplayName,
+            outcome: lastFight.outcome,
+            combatantAMaxHp: lastFight.combatantAMaxHp,
+            combatantBMaxHp: lastFight.combatantBMaxHp,
+            log: lastFight.log,
+            rewards: aggregatedRewards,
+          });
+        }
+        setCombatPlaybackQueue(null);
+        setCombatPlaybackIndex(0);
+        pendingCombatRewardsRef.current = null;
       }
       if (travelPlaybackData) {
         handleTravelPlaybackSkip();
@@ -1512,6 +1619,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setAutoPotionThreshold,
     playbackActive,
     combatPlaybackData,
+    combatPlaybackQueue,
+    combatPlaybackIndex,
     explorationPlaybackData,
     travelPlaybackData,
 
@@ -1535,6 +1644,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleExplorationPlaybackComplete,
     handlePlaybackSkip,
     handleStartCombat,
+    handleSelectStrategy,
     handleCombatPlaybackComplete,
     handleTravelPlaybackComplete,
     handleTravelPlaybackSkip,

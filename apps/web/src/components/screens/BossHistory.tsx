@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getBossHistory, type BossHistoryEntry } from '@/lib/api';
 import { Pagination } from '@/components/common/Pagination';
 import { BossRewardsDisplay } from '@/components/common/BossRewardsDisplay';
+import { monsterImageSrc } from '@/lib/assets';
 
 const PAGE_SIZE = 10;
 
@@ -62,7 +63,12 @@ export function BossHistory() {
                 onClick={() => setExpandedId(isExpanded ? null : entry.encounter.id)}
               >
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={monsterImageSrc(entry.mobName)}
+                      alt={entry.mobName}
+                      className="w-8 h-8 rounded object-cover shrink-0"
+                    />
                     <span className="text-[var(--rpg-text-primary)] font-semibold">
                       {entry.mobName} (Lv.{entry.mobLevel})
                     </span>

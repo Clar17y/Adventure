@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { PixelCard } from '@/components/PixelCard';
 import { ExplorationPlayback, type ExplorationPlaybackEvent } from '@/components/exploration/ExplorationPlayback';
 import { CombatPlayback } from '@/components/combat/CombatPlayback';
+import { monsterImageSrc } from '@/lib/assets';
 
 interface TurnPlaybackProps {
   totalTurns: number;
@@ -85,6 +86,7 @@ export function TurnPlayback({
           <CombatPlayback
             key={combatEvent.turn}
             mobDisplayName={(combatEvent.details?.mobDisplayName as string) ?? 'Unknown'}
+            mobImageSrc={combatEvent.details?.mobName ? monsterImageSrc(combatEvent.details.mobName as string) : undefined}
             outcome={
               // Distinguish fled vs knockout: fleeResult.outcome is 'knockout' or 'fled'
               (combatEvent.details?.fleeResult as { outcome?: string } | undefined)?.outcome === 'fled'

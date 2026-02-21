@@ -219,6 +219,8 @@ export default function GamePage() {
     pvpNotificationCount,
     playbackActive,
     combatPlaybackData,
+    combatPlaybackQueue,
+    combatPlaybackIndex,
     explorationPlaybackData,
     travelPlaybackData,
     currentZone,
@@ -227,6 +229,7 @@ export default function GamePage() {
     handleExplorationPlaybackComplete,
     handlePlaybackSkip,
     handleStartCombat,
+    handleSelectStrategy,
     handleCombatPlaybackComplete,
     handleTravelPlaybackComplete,
     handleTravelPlaybackSkip,
@@ -741,12 +744,17 @@ export default function GamePage() {
             lastCombat={lastCombat}
             bestiaryMobs={bestiaryMobs.map((mob) => ({ id: mob.id, isDiscovered: mob.isDiscovered }))}
             onStartCombat={handleStartCombat}
+            onSelectStrategy={handleSelectStrategy}
             onPendingEncounterPageChange={handlePendingEncounterPageChange}
             onPendingEncounterZoneFilterChange={handlePendingEncounterZoneFilterChange}
             onPendingEncounterMobFilterChange={handlePendingEncounterMobFilterChange}
             onPendingEncounterSortChange={handlePendingEncounterSortChange}
             combatPlaybackData={combatPlaybackData}
             onCombatPlaybackComplete={handleCombatPlaybackComplete}
+            fightProgress={combatPlaybackQueue && combatPlaybackQueue.length > 1
+              ? { current: combatPlaybackIndex + 1, total: combatPlaybackQueue.length }
+              : null
+            }
           />
         );
       case 'arena':

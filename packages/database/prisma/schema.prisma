@@ -474,6 +474,11 @@ model EncounterSite {
   discoveredAt DateTime @default(now()) @map("discovered_at")
   sourceLogId String?  @map("source_log_id")
 
+  clearStrategy    String?  @map("clear_strategy") @db.VarChar(16)
+  currentRoom      Int      @default(1) @map("current_room")
+  fullClearActive  Boolean  @default(true) @map("full_clear_active")
+  roomCarryHp      Int?     @map("room_carry_hp")
+
   player    Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
   zone      Zone       @relation(fields: [zoneId], references: [id], onDelete: Cascade)
   mobFamily MobFamily  @relation(fields: [mobFamilyId], references: [id], onDelete: Cascade)

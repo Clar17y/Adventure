@@ -50,6 +50,9 @@ export function CombatPlayback({
   const completeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logScrollRef = useRef<HTMLDivElement>(null);
 
+  // Ensure minimum 2s total playback so short fights don't flash by after API delay
+  const effectiveSpeedMs = log.length > 0 ? Math.max(speedMs, 2000 / log.length) : speedMs;
+
   // Auto-skip if the player has already seen this mob+prefix
   useEffect(() => {
     if (!autoSkip) return;
@@ -69,12 +72,12 @@ export function CombatPlayback({
 
     playbackTimer.current = setTimeout(() => {
       setRevealedCount(prev => prev + 1);
-    }, speedMs);
+    }, effectiveSpeedMs);
 
     return () => {
       if (playbackTimer.current) clearTimeout(playbackTimer.current);
     };
-  }, [phase, revealedCount, log.length, speedMs]);
+  }, [phase, revealedCount, log.length, effectiveSpeedMs]);
 
   // Transition to finished phase when all entries revealed
   useEffect(() => {

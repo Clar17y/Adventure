@@ -40,6 +40,7 @@ interface CombatScreenProps {
   lastCombat: LastCombat | null;
   bestiaryMobs: Array<{ id: string; isDiscovered: boolean }>;
   onStartCombat: (encounterSiteId: string) => void | Promise<void>;
+  onSelectStrategy?: (encounterSiteId: string, strategy: 'full_clear' | 'room_by_room') => void | Promise<void>;
   onPendingEncounterPageChange: (page: number) => void;
   onPendingEncounterZoneFilterChange: (zoneId: string) => void;
   onPendingEncounterMobFilterChange: (mobTemplateId: string) => void;
@@ -55,6 +56,7 @@ interface CombatScreenProps {
     rewards: LastCombat['rewards'];
   } | null;
   onCombatPlaybackComplete?: () => void;
+  fightProgress?: { current: number; total: number } | null;
 }
 
 export function CombatScreen({
@@ -74,15 +76,26 @@ export function CombatScreen({
   lastCombat,
   bestiaryMobs,
   onStartCombat,
+  onSelectStrategy,
   onPendingEncounterPageChange,
   onPendingEncounterZoneFilterChange,
   onPendingEncounterMobFilterChange,
   onPendingEncounterSortChange,
   combatPlaybackData,
   onCombatPlaybackComplete,
+  fightProgress,
 }: CombatScreenProps) {
   const [activeView, setActiveView] = useState<'encounters' | 'history' | 'bossHistory'>('encounters');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [strategyModalSite, setStrategyModalSite] = useState<PendingEncounter | null>(null);
+
+  const handleFightClick = (site: PendingEncounter) => {
+    if (!site.clearStrategy) {
+      setStrategyModalSite(site);
+    } else {
+      void onStartCombat(site.encounterSiteId);
+    }
+  };
 
   // Player max HP should be the player's real max HP.
   // Mob max HP comes from combat payload (supports wounded monster starts later).
@@ -134,6 +147,56 @@ export function CombatScreen({
 
   return (
     <div className="space-y-4">
+      {/* Strategy Selection Modal */}
+      {strategyModalSite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-[var(--rpg-bg-dark,#1a1a2e)] border border-[var(--rpg-gold,#c8a84e)] rounded-lg p-6 max-w-sm w-full mx-4">
+            <h3 className="text-[var(--rpg-gold,#c8a84e)] font-bold text-lg mb-1">Choose Strategy</h3>
+            <p className="text-[var(--rpg-light-dim,#a0a0b0)] text-sm mb-4">
+              {strategyModalSite.siteName} — {strategyModalSite.totalRooms} room{strategyModalSite.totalRooms !== 1 ? 's' : ''}
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                className="bg-[var(--rpg-gold)] hover:bg-[#e4b85b] text-[var(--rpg-background)] rounded-lg font-semibold transition-all w-full text-left p-3"
+                disabled={!!busyAction}
+                onClick={async () => {
+                  const siteId = strategyModalSite.encounterSiteId;
+                  if (onSelectStrategy) {
+                    await onSelectStrategy(siteId, 'full_clear');
+                  }
+                  setStrategyModalSite(null);
+                  void onStartCombat(siteId);
+                }}
+              >
+                <span className="font-bold block">Full Clear</span>
+                <span className="text-xs opacity-80 block mt-1">Fight all rooms back-to-back. Better drops on success.</span>
+              </button>
+              <button
+                className="bg-[var(--rpg-surface)] hover:bg-[var(--rpg-border)] text-[var(--rpg-text-primary)] border border-[var(--rpg-border)] rounded-lg font-semibold transition-all w-full text-left p-3"
+                disabled={!!busyAction}
+                onClick={async () => {
+                  const siteId = strategyModalSite.encounterSiteId;
+                  if (onSelectStrategy) {
+                    await onSelectStrategy(siteId, 'room_by_room');
+                  }
+                  setStrategyModalSite(null);
+                  void onStartCombat(siteId);
+                }}
+              >
+                <span className="font-bold block">Room by Room</span>
+                <span className="text-xs opacity-80 block mt-1">Clear one room at a time. Heal between rooms.</span>
+              </button>
+              <button
+                className="text-[var(--rpg-light-dim,#a0a0b0)] text-sm mt-1 hover:text-white"
+                onClick={() => setStrategyModalSite(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Knockout Banner */}
       {hpState.isRecovering && (
         <KnockoutBanner action="fighting" recoveryCost={hpState.recoveryCost} />
@@ -258,8 +321,19 @@ export function CombatScreen({
                         )}
                         <div>
                           <div className="text-[var(--rpg-text-primary)] font-semibold">
-                            {e.siteName} ({e.aliveMobs}/{e.totalMobs})
+                            {e.siteName}
                           </div>
+                          <span className="text-xs text-[var(--rpg-text-secondary)]">
+                            {e.totalRooms > 1
+                              ? `Room ${e.currentRoom}/${e.totalRooms} · ${e.aliveMobs}/${e.totalMobs} mobs`
+                              : `${e.aliveMobs}/${e.totalMobs} mobs`
+                            }
+                          </span>
+                          {e.clearStrategy && (
+                            <span className="text-xs text-[var(--rpg-gold)] ml-2">
+                              {e.clearStrategy === 'full_clear' ? 'Full Clear' : 'Room by Room'}
+                            </span>
+                          )}
                           <div className="text-xs text-[var(--rpg-text-secondary)]">
                             Next monster: {nextMobLabel ?? 'None (site decayed)'}
                           </div>
@@ -271,7 +345,7 @@ export function CombatScreen({
                       </div>
                       <button
                         type="button"
-                        onClick={() => void onStartCombat(e.encounterSiteId)}
+                        onClick={() => handleFightClick(e)}
                         disabled={isDisabled}
                         className={`px-3 py-2 rounded font-semibold ${
                           isDisabled
@@ -306,7 +380,13 @@ export function CombatScreen({
           {/* Combat Playback (animated) */}
           {combatPlaybackData && (
             <div className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded-lg p-3">
+              {fightProgress && fightProgress.total > 1 && (
+                <div className="text-sm text-[var(--rpg-gold)] font-semibold mb-2">
+                  Fight {fightProgress.current}/{fightProgress.total}
+                </div>
+              )}
               <CombatPlayback
+                key={fightProgress ? fightProgress.current : 0}
                 mobDisplayName={combatPlaybackData.mobDisplayName}
                 mobImageSrc={monsterImageSrc(combatPlaybackData.mobName)}
                 outcome={combatPlaybackData.outcome}

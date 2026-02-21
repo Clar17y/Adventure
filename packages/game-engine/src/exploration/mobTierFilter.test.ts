@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterAndWeightMobsByTier } from './mobTierFilter';
+import { filterAndWeightMobsByTier, selectTierWithBleedthrough } from './mobTierFilter';
 
 const makeMob = (id: string, tier: number, weight = 100) => ({
   id,
@@ -110,5 +110,37 @@ describe('filterAndWeightMobsByTier', () => {
     const result = filterAndWeightMobsByTier([mob], 10, defaultTiers);
     expect(result[0]!.name).toBe('Rat');
     expect(result[0]!.level).toBe(3);
+  });
+});
+
+describe('selectTierWithBleedthrough', () => {
+  const defaultTiers = { '1': 0, '2': 25, '3': 50, '4': 75 };
+
+  it('returns current tier when rng < 0.75', () => {
+    expect(selectTierWithBleedthrough(1, defaultTiers, () => 0.5)).toBe(1);
+  });
+
+  it('returns tier+1 when rng is between 0.75 and 0.95', () => {
+    expect(selectTierWithBleedthrough(1, defaultTiers, () => 0.85)).toBe(2);
+  });
+
+  it('returns tier+2 when rng >= 0.95', () => {
+    expect(selectTierWithBleedthrough(1, defaultTiers, () => 0.96)).toBe(3);
+  });
+
+  it('caps at max tier in zone', () => {
+    expect(selectTierWithBleedthrough(1, { '1': 0, '2': 25 }, () => 0.96)).toBe(2);
+  });
+
+  it('caps tier+1 at max tier when already at highest tier', () => {
+    expect(selectTierWithBleedthrough(4, defaultTiers, () => 0.85)).toBe(4);
+  });
+
+  it('returns current tier for single-tier zone', () => {
+    expect(selectTierWithBleedthrough(1, { '1': 0 }, () => 0.96)).toBe(1);
+  });
+
+  it('uses default tiers when zoneTiers is null', () => {
+    expect(selectTierWithBleedthrough(1, null, () => 0.85)).toBe(2);
   });
 });

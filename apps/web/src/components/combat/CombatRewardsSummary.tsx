@@ -74,6 +74,11 @@ export function CombatRewardsSummary({ rewards, outcome }: CombatRewardsSummaryP
 
       {siteCompletion && (
         <div className="space-y-1">
+          {siteCompletion.fullClearBonus && (
+            <div className="text-[var(--rpg-gold,#c8a84e)] font-bold text-sm mb-2 text-center">
+              ★ FULL CLEAR BONUS — Enhanced Rewards ★
+            </div>
+          )}
           <div className="flex items-center gap-2 text-sm">
             <span>CHEST</span>
             <span className="text-[var(--rpg-text-primary)] capitalize">

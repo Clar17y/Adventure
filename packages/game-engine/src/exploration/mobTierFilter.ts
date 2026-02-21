@@ -1,4 +1,4 @@
-import { ZONE_EXPLORATION_CONSTANTS } from '@adventure/shared';
+import { TIER_BLEED_CONSTANTS, ZONE_EXPLORATION_CONSTANTS } from '@adventure/shared';
 
 interface MobWithTier {
   id: string;
@@ -40,4 +40,27 @@ export function filterAndWeightMobsByTier<T extends MobWithTier>(
       ? m.encounterWeight * multiplier
       : m.encounterWeight,
   }));
+}
+
+export function selectTierWithBleedthrough(
+  currentTier: number,
+  zoneTiers: Record<string, number> | null,
+  rng: () => number = Math.random,
+): number {
+  const tiers = zoneTiers ?? ZONE_EXPLORATION_CONSTANTS.DEFAULT_TIERS;
+  const maxTier = Math.max(...Object.keys(tiers).map(Number).filter(n => !isNaN(n)), 0);
+  if (maxTier <= 0) return currentTier;
+
+  const roll = rng();
+  let selectedTier: number;
+
+  if (roll < TIER_BLEED_CONSTANTS.CURRENT_TIER_WEIGHT) {
+    selectedTier = currentTier;
+  } else if (roll < TIER_BLEED_CONSTANTS.CURRENT_TIER_WEIGHT + TIER_BLEED_CONSTANTS.PLUS_ONE_TIER_WEIGHT) {
+    selectedTier = currentTier + 1;
+  } else {
+    selectedTier = currentTier + 2;
+  }
+
+  return Math.min(selectedTier, maxTier);
 }

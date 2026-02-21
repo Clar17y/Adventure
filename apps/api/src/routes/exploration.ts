@@ -11,6 +11,8 @@ import {
   mobToCombatantStats,
   rollMobPrefix,
   runCombat,
+  generateRoomAssignments,
+  selectTierWithBleedthrough,
   simulateExploration,
   validateExplorationTurns,
 } from '@adventure/game-engine';
@@ -81,6 +83,7 @@ interface EncounterMobSlot {
   role: EncounterMobRole;
   prefix: string | null;
   status: EncounterMobStatus;
+  room: number;
 }
 
 interface NarrativeEvent {
@@ -234,71 +237,90 @@ function buildEncounterSiteMobs(
   zoneTiers: Record<string, number> | null = null,
 ): EncounterMobSlot[] {
   const tiers = zoneTiers ?? ZONE_EXPLORATION_CONSTANTS.DEFAULT_TIERS;
+
+  // Determine current unlocked tier
+  let currentTier = 0;
+  for (const [tierStr, threshold] of Object.entries(tiers)) {
+    const tier = Number(tierStr);
+    if (explorationPercent >= threshold && tier > currentTier) {
+      currentTier = tier;
+    }
+  }
+  if (currentTier === 0) return [];
+
+  // Get ALL zone members (not filtered by tier)
   const zoneMembers = family.members
-    .filter((member) => member.mobTemplate.zoneId === zoneId)
-    .filter((member) => {
-      const mobTier = member.mobTemplate.explorationTier ?? 1;
-      const threshold = tiers[String(mobTier)] ?? 0;
-      return explorationPercent >= threshold;
-    });
+    .filter((member) => member.mobTemplate.zoneId === zoneId);
   if (zoneMembers.length === 0) return [];
 
-  const { min, max } = getEncounterRange(size);
-  const total = randomIntInclusive(min, max);
+  // Group members by tier
+  const membersByTier = new Map<number, ZoneFamilyMember[]>();
+  for (const member of zoneMembers) {
+    const tier = member.mobTemplate.explorationTier ?? 1;
+    if (!membersByTier.has(tier)) membersByTier.set(tier, []);
+    membersByTier.get(tier)!.push(member);
+  }
 
+  // Pick a member at a bleedthrough-selected tier, falling back to lower tiers
+  function pickMemberWithBleedthrough(
+    role: EncounterMobRole,
+    fallbackRoles: EncounterMobRole[],
+  ): ZoneFamilyMember | null {
+    const selectedTier = selectTierWithBleedthrough(currentTier, tiers);
+    for (let t = selectedTier; t >= 1; t--) {
+      const tierMembers = membersByTier.get(t) ?? [];
+      if (tierMembers.length === 0) continue;
+      const picked = pickFamilyMemberByRole(tierMembers, role, fallbackRoles);
+      if (picked) return picked;
+    }
+    return pickFamilyMemberByRole(zoneMembers, role, fallbackRoles);
+  }
+
+  const { rooms, totalMobs } = generateRoomAssignments(size);
+
+  // Role composition based on total mobs and site size
   let bossCount = 0;
   let eliteCount = 0;
-  if (size === 'medium') {
-    eliteCount = 1;
-  } else if (size === 'large') {
-    bossCount = 1;
-    eliteCount = 2;
-  }
+  if (size === 'medium') eliteCount = 1;
+  else if (size === 'large') { bossCount = 1; eliteCount = 2; }
 
-  let trashCount = Math.max(0, total - eliteCount - bossCount);
-  if (size === 'small' && trashCount < 2) {
-    trashCount = Math.max(2, total);
-  }
+  const trashCount = Math.max(0, totalMobs - eliteCount - bossCount);
 
+  // Build role queue — trash first, elites/bosses last so they land in final rooms
+  const roleQueue: EncounterMobRole[] = [
+    ...Array(trashCount).fill('trash' as const),
+    ...Array(eliteCount).fill('elite' as const),
+    ...Array(bossCount).fill('boss' as const),
+  ];
+
+  // Assign mobs to rooms sequentially
   const mobs: EncounterMobSlot[] = [];
   let slot = 0;
+  let roleIndex = 0;
 
-  for (let i = 0; i < trashCount; i++) {
-    const member = pickFamilyMemberByRole(zoneMembers, 'trash', ['elite', 'boss']);
-    if (!member) continue;
-    mobs.push({
-      slot: slot++,
-      mobTemplateId: member.mobTemplate.id,
-      role: 'trash',
-      prefix: rollMobPrefix(),
-      status: 'alive',
-    });
+  for (const room of rooms) {
+    for (let i = 0; i < room.mobCount && roleIndex < roleQueue.length; i++) {
+      const role = roleQueue[roleIndex]!;
+      const fallbacks: EncounterMobRole[] = role === 'trash'
+        ? ['elite', 'boss'] : role === 'elite'
+        ? ['trash', 'boss'] : ['elite', 'trash'];
+
+      const member = pickMemberWithBleedthrough(role, fallbacks);
+      if (!member) { roleIndex++; continue; }
+
+      mobs.push({
+        slot: slot++,
+        mobTemplateId: member.mobTemplate.id,
+        role,
+        prefix: rollMobPrefix(),
+        status: 'alive',
+        room: room.roomNumber,
+      });
+      roleIndex++;
+    }
   }
 
-  for (let i = 0; i < eliteCount; i++) {
-    const member = pickFamilyMemberByRole(zoneMembers, 'elite', ['trash', 'boss']);
-    if (!member) continue;
-    mobs.push({
-      slot: slot++,
-      mobTemplateId: member.mobTemplate.id,
-      role: 'elite',
-      prefix: rollMobPrefix(),
-      status: 'alive',
-    });
-  }
-
-  for (let i = 0; i < bossCount; i++) {
-    const member = pickFamilyMemberByRole(zoneMembers, 'boss', ['elite', 'trash']);
-    if (!member) continue;
-    mobs.push({
-      slot: slot++,
-      mobTemplateId: member.mobTemplate.id,
-      role: 'boss',
-      prefix: rollMobPrefix(),
-      status: 'alive',
-    });
-  }
-
+  // Fallback: if no mobs were generated
   if (mobs.length === 0 && zoneMembers.length > 0) {
     const member = zoneMembers[0]!;
     mobs.push({
@@ -307,6 +329,7 @@ function buildEncounterSiteMobs(
       role: 'trash',
       prefix: rollMobPrefix(),
       status: 'alive',
+      room: 1,
     });
   }
 
@@ -460,7 +483,20 @@ explorationRouter.post('/start', async (req, res, next) => {
           zoneTiers,
         );
         if (tieredMobs.length === 0) continue;
-        const mob = pickWeighted(tieredMobs, 'encounterWeight') as typeof tieredMobs[number] | null;
+
+        // Apply tier bleedthrough: select a target tier, filter to it, fall back to lower tiers
+        const highestUnlockedTier = Math.max(...tieredMobs.map(m => m.explorationTier));
+        const targetTier = selectTierWithBleedthrough(highestUnlockedTier, zoneTiers);
+        let candidates = tieredMobs.filter(m => m.explorationTier === targetTier);
+        if (candidates.length === 0) {
+          for (let t = targetTier - 1; t >= 1; t--) {
+            candidates = tieredMobs.filter(m => m.explorationTier === t);
+            if (candidates.length > 0) break;
+          }
+        }
+        if (candidates.length === 0) candidates = tieredMobs;
+
+        const mob = pickWeighted(candidates, 'encounterWeight') as typeof candidates[number] | null;
         if (!mob) continue;
 
         const baseMob: MobTemplate = {
@@ -957,6 +993,7 @@ explorationRouter.post('/start', async (req, res, next) => {
       }> = [];
 
       for (const discovery of pendingSites) {
+        const distinctRooms = new Set(discovery.mobs.map(m => m.room)).size;
         const site = await txAny.encounterSite.create({
           data: {
             playerId,
@@ -965,6 +1002,7 @@ explorationRouter.post('/start', async (req, res, next) => {
             name: discovery.siteName,
             size: discovery.size,
             mobs: { mobs: discovery.mobs },
+            ...(distinctRooms <= 1 ? { clearStrategy: 'full_clear', fullClearActive: true } : {}),
           },
           select: {
             id: true,

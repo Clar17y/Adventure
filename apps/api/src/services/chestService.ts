@@ -1,12 +1,13 @@
 import { Prisma } from '@adventure/database';
 import {
   getChestRarityForEncounterSize,
+  getChestRecipeChanceForEncounterSize,
+  getUpgradedChestSize,
   rollChestMaterialRolls,
-  rollEncounterChestRecipeDrop,
   type ChestRarity,
   type EncounterSiteSize,
 } from '@adventure/game-engine';
-import type { LootDrop } from '@adventure/shared';
+import { FULL_CLEAR_CONSTANTS, type LootDrop } from '@adventure/shared';
 import { randomIntInclusive } from '../utils/random';
 import { addStackableItemTx } from './inventoryService';
 
@@ -73,11 +74,19 @@ export async function grantEncounterSiteChestRewardsTx(
     playerId: string;
     mobFamilyId: string;
     size: EncounterSiteSize;
+    fullClearBonus?: boolean;
   }
 ): Promise<EncounterSiteChestRewards> {
   const txAny = tx as unknown as any;
-  const chestRarity = getChestRarityForEncounterSize(params.size);
-  const materialRolls = rollChestMaterialRolls(params.size);
+  const effectiveSize = params.fullClearBonus && FULL_CLEAR_CONSTANTS.CHEST_TIER_UPGRADE
+    ? getUpgradedChestSize(params.size)
+    : params.size;
+
+  const chestRarity = getChestRarityForEncounterSize(effectiveSize);
+  const baseRolls = rollChestMaterialRolls(effectiveSize);
+  const materialRolls = params.fullClearBonus
+    ? Math.ceil(baseRolls * FULL_CLEAR_CONSTANTS.DROP_MULTIPLIER)
+    : baseRolls;
 
   const dropEntries = (await txAny.chestDropTable.findMany({
     where: {
@@ -136,7 +145,12 @@ export async function grantEncounterSiteChestRewardsTx(
   }
 
   let recipeUnlocked: RecipeUnlockReward | null = null;
-  if (rollEncounterChestRecipeDrop(params.size)) {
+  const baseRecipeChance = getChestRecipeChanceForEncounterSize(effectiveSize);
+  const recipeChance = params.fullClearBonus
+    ? baseRecipeChance * FULL_CLEAR_CONSTANTS.RECIPE_MULTIPLIER
+    : baseRecipeChance;
+  const rolledRecipe = Math.random() < recipeChance;
+  if (rolledRecipe) {
     const advancedRecipes = (await txAny.craftingRecipe.findMany({
       where: {
         isAdvanced: true,

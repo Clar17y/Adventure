@@ -65,7 +65,7 @@ authRouter.post('/register', async (req, res, next) => {
     if (!starterTown) throw new AppError(500, 'No starter zone configured', 'NO_STARTER_ZONE');
 
     const firstWildConnection = await prisma.zoneConnection.findFirst({
-      where: { fromId: starterTown.id },
+      where: { fromId: starterTown.id, toZone: { zoneType: 'wild' } },
       include: { toZone: true },
     });
     const startingZone = firstWildConnection?.toZone ?? starterTown;

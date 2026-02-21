@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   TUTORIAL_STEPS,
   TUTORIAL_STEP_WELCOME,
+  TUTORIAL_STEP_DONE,
   isTutorialActive,
 } from '@/lib/tutorial';
 
@@ -36,8 +37,8 @@ export function TutorialDialog({ tutorialStep, onDismiss }: TutorialDialogProps)
 
   const handleGotIt = () => {
     setVisible(false);
-    // For the welcome step, dismissing the dialog IS the completion trigger
-    if (shownForStep === TUTORIAL_STEP_WELCOME) {
+    // For welcome and done steps, dismissing the dialog IS the completion trigger
+    if (shownForStep === TUTORIAL_STEP_WELCOME || shownForStep === TUTORIAL_STEP_DONE) {
       onDismiss();
     }
   };

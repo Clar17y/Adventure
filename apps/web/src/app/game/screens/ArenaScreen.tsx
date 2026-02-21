@@ -24,7 +24,7 @@ import { CombatPlayback } from '@/components/combat/CombatPlayback';
 import { CombatLogEntry } from '@/components/combat/CombatLogEntry';
 import { PVP_CONSTANTS } from '@adventure/shared';
 import { rarityFromTier, RARITY_COLORS } from '@/lib/rarity';
-import { Swords, Eye, Trophy, Bell, ChevronLeft, ChevronRight, Medal } from 'lucide-react';
+import { Swords, Eye, Trophy, Bell, ChevronLeft, ChevronRight, Medal, Shield } from 'lucide-react';
 import { LeaderboardTable } from '@/components/leaderboard/LeaderboardTable';
 import { getLeaderboard, type LeaderboardResponse } from '@/lib/api';
 
@@ -384,6 +384,7 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
                       &lt;{opponent.title}&gt;
                     </span>
                   )}
+                  {opponent.isAdmin && <Shield className="w-3.5 h-3.5 text-[var(--rpg-gold)] shrink-0" />}
                 </div>
                 <div className="text-xs text-[var(--rpg-text-secondary)]">
                   Rating: {opponent.rating} | Lv.{opponent.characterLevel}

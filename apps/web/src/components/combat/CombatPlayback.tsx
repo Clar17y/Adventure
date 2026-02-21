@@ -69,7 +69,7 @@ export function CombatPlayback({
     return () => {
       if (playbackTimer.current) clearTimeout(playbackTimer.current);
     };
-  }, [phase, revealedCount, log.length]);
+  }, [phase, revealedCount, log.length, speedMs]);
 
   // Transition to finished phase when all entries revealed
   useEffect(() => {

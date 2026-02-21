@@ -51,6 +51,7 @@ interface DashboardProps {
   ) => Promise<void>;
   onQuickRest?: () => Promise<void>;
   quickRestPercent?: number;
+  busyAction?: string | null;
 }
 
 const ATTRIBUTE_META = {
@@ -64,7 +65,7 @@ const ATTRIBUTE_META = {
 
 type AttributeType = keyof typeof ATTRIBUTE_META;
 
-export function Dashboard({ playerData, skills, onNavigate, characterProgression, activityLog, onAllocateAttribute, onQuickRest, quickRestPercent }: DashboardProps) {
+export function Dashboard({ playerData, skills, onNavigate, characterProgression, activityLog, onAllocateAttribute, onQuickRest, quickRestPercent, busyAction }: DashboardProps) {
   const [allocating, setAllocating] = useState<AttributeType | null>(null);
 
   const handleAllocate = async (attribute: AttributeType) => {
@@ -176,8 +177,9 @@ export function Dashboard({ playerData, skills, onNavigate, characterProgression
             variant="secondary"
             className="mt-2 w-full text-xs"
             onClick={onQuickRest}
+            disabled={busyAction !== null && busyAction !== undefined}
           >
-            Quick Rest ({quickRestPercent ?? 100}%)
+            {busyAction === 'quick_rest' ? 'Resting...' : `Quick Rest (${quickRestPercent ?? 100}%)`}
           </PixelButton>
         )}
       </PixelCard>

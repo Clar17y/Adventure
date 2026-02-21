@@ -140,11 +140,11 @@ const SETTINGS_FIELDS = [
 
 const settingsSchema = z.object({
   autoPotionThreshold: z.number().int().min(0).max(100).optional(),
-  combatLogSpeedMs: z.number().int().min(100).max(1000).optional(),
-  explorationSpeedMs: z.number().int().min(100).max(1000).optional(),
+  combatLogSpeedMs: z.number().int().min(100).max(1000).refine(v => v % 100 === 0, { message: 'Must be a multiple of 100' }).optional(),
+  explorationSpeedMs: z.number().int().min(100).max(1000).refine(v => v % 100 === 0, { message: 'Must be a multiple of 100' }).optional(),
   autoSkipKnownCombat: z.boolean().optional(),
-  defaultExploreTurns: z.number().int().min(10).max(10000).optional(),
-  quickRestHealPercent: z.number().int().min(25).max(100).optional(),
+  defaultExploreTurns: z.number().int().min(10).max(10000).refine(v => v % 10 === 0, { message: 'Must be a multiple of 10' }).optional(),
+  quickRestHealPercent: z.number().int().min(25).max(100).refine(v => v % 25 === 0, { message: 'Must be a multiple of 25' }).optional(),
   defaultRefiningMax: z.boolean().optional(),
 }).refine(data => Object.values(data).some(v => v !== undefined), { message: 'At least one setting required' });
 

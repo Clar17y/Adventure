@@ -24,6 +24,7 @@ import { Leaderboard } from '@/components/screens/Leaderboard';
 import { PixelCard } from '@/components/PixelCard';
 import { PixelButton } from '@/components/PixelButton';
 import { Slider } from '@/components/ui/Slider';
+import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { rarityFromTier } from '@/lib/rarity';
 import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
@@ -343,6 +344,7 @@ export default function GamePage() {
             onAllocateAttribute={handleAllocateAttribute}
             onQuickRest={handleQuickRest}
             quickRestPercent={quickRestHealPercent}
+            busyAction={busyAction}
           />
         );
       case 'explore':
@@ -848,12 +850,7 @@ export default function GamePage() {
                       <p className="text-xs text-[var(--rpg-text-secondary)]">Auto-Skip Known Combat</p>
                       <p className="text-xs text-[var(--rpg-text-secondary)] opacity-60">Skip playback for mob+prefix combos you&apos;ve killed before</p>
                     </div>
-                    <button
-                      onClick={() => handleSetAutoSkipKnownCombat(!autoSkipKnownCombat)}
-                      className={`w-10 h-5 rounded-full transition-colors ${autoSkipKnownCombat ? 'bg-[var(--rpg-green-light)]' : 'bg-[var(--rpg-border)]'}`}
-                    >
-                      <div className={`w-4 h-4 rounded-full bg-white transition-transform mx-0.5 ${autoSkipKnownCombat ? 'translate-x-5' : ''}`} />
-                    </button>
+                    <ToggleSwitch checked={autoSkipKnownCombat} onChange={handleSetAutoSkipKnownCombat} />
                   </div>
                 </div>
 
@@ -943,12 +940,7 @@ export default function GamePage() {
                   <p className="text-xs text-[var(--rpg-text-secondary)]">Default Refining to Max</p>
                   <p className="text-xs text-[var(--rpg-text-secondary)] opacity-60">Auto-set refining quantity to maximum when selecting a recipe</p>
                 </div>
-                <button
-                  onClick={() => handleSetDefaultRefiningMax(!defaultRefiningMax)}
-                  className={`w-10 h-5 rounded-full transition-colors ${defaultRefiningMax ? 'bg-[var(--rpg-green-light)]' : 'bg-[var(--rpg-border)]'}`}
-                >
-                  <div className={`w-4 h-4 rounded-full bg-white transition-transform mx-0.5 ${defaultRefiningMax ? 'translate-x-5' : ''}`} />
-                </button>
+                <ToggleSwitch checked={defaultRefiningMax} onChange={handleSetDefaultRefiningMax} />
               </div>
             </PixelCard>
 

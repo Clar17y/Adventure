@@ -37,6 +37,7 @@ import {
   travelToZone,
   unequip,
   type AchievementsResponse,
+  type PlayerSettings,
   type WorldEventResponse,
 } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -1556,7 +1557,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     });
   };
 
-  const handleSetSetting = async <T>(key: string, value: T, setter: (v: T) => void, prev: T) => {
+  const handleSetSetting = async <T>(key: keyof PlayerSettings, value: T, setter: (v: T) => void, prev: T) => {
     setter(value);
     const res = await updatePlayerSettings({ [key]: value });
     if (!res.data) setter(prev);
@@ -1579,17 +1580,23 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
   const handleQuickRest = async () => {
     if (!hpState || hpState.currentHp >= hpState.maxHp || hpState.isRecovering) return;
-    const estimate = await restEstimate(10);
-    if (!estimate.data?.healPerTurn) return;
-    const missingHp = hpState.maxHp - hpState.currentHp;
-    const targetHeal = missingHp * (quickRestHealPercent / 100);
-    const rawTurns = Math.ceil(targetHeal / estimate.data.healPerTurn);
-    const turnsToSpend = Math.max(10, Math.ceil(rawTurns / 10) * 10);
-    const result = await rest(Math.min(turnsToSpend, turns));
-    if (result.data) {
-      setTurns(result.data.turns.currentTurns);
-      setHpState(prev => ({ ...prev, currentHp: result.data!.currentHp, maxHp: result.data!.maxHp }));
-    }
+
+    await runAction('quick_rest', async () => {
+      const estimate = await restEstimate(10);
+      if (!estimate.data?.healPerTurn) return;
+      const missingHp = hpState.maxHp - hpState.currentHp;
+      const targetHeal = missingHp * (quickRestHealPercent / 100);
+      const rawTurns = Math.ceil(targetHeal / estimate.data.healPerTurn);
+      const turnsToSpend = Math.max(10, Math.ceil(rawTurns / 10) * 10);
+      const actualTurns = Math.min(turnsToSpend, turns);
+      const result = await rest(actualTurns);
+      if (result.data) {
+        const healed = result.data.currentHp - hpState.currentHp;
+        setTurns(result.data.turns.currentTurns);
+        setHpState(prev => ({ ...prev, currentHp: result.data!.currentHp, maxHp: result.data!.maxHp }));
+        pushLog({ timestamp: nowStamp(), type: 'success', message: `Rested ${actualTurns.toLocaleString()} turns, healed ${Math.round(healed)} HP` });
+      }
+    });
   };
 
   const handleClaimAchievement = async (achievementId: string) => {

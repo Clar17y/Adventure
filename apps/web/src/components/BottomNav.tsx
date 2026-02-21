@@ -16,7 +16,7 @@ const navItems = [
   { id: 'explore', label: 'Explore', icon: 'explore' as UiIconName },
   { id: 'inventory', label: 'Inventory', icon: 'inventory' as UiIconName },
   { id: 'combat', label: 'Combat', icon: 'attack' as UiIconName },
-  { id: 'profile', label: 'Profile', icon: 'settings' as UiIconName },
+  { id: 'settings', label: 'Settings', icon: 'settings' as UiIconName },
 ];
 
 export function BottomNav({ activeTab, onNavigate, badgeTabs = new Set(), pulseTabs = new Set() }: BottomNavProps) {

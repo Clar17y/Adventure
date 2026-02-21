@@ -41,10 +41,13 @@ interface ExplorationProps {
   onPlaybackComplete?: () => void;
   onPlaybackSkip?: () => void;
   onPushLog?: (...entries: Array<{ timestamp: string; message: string; type: 'info' | 'success' | 'danger' }>) => void;
+  combatSpeedMs?: number;
+  explorationSpeedMs?: number;
+  defaultTurns?: number;
 }
 
-export function Exploration({ currentZone, explorationProgress, availableTurns, onStartExploration, activityLog, isRecovering = false, recoveryCost, playbackData, onPlaybackComplete, onPlaybackSkip, onPushLog }: ExplorationProps) {
-  const [turnInvestment, setTurnInvestment] = useState([Math.min(100, availableTurns)]);
+export function Exploration({ currentZone, explorationProgress, availableTurns, onStartExploration, activityLog, isRecovering = false, recoveryCost, playbackData, onPlaybackComplete, onPlaybackSkip, onPushLog, combatSpeedMs, explorationSpeedMs, defaultTurns }: ExplorationProps) {
+  const [turnInvestment, setTurnInvestment] = useState([Math.min(defaultTurns ?? 100, availableTurns)]);
 
   const calculateProbabilities = (turns: number) => {
     const expectedAmbushes = turns * EXPLORATION_CONSTANTS.AMBUSH_CHANCE_PER_TURN;
@@ -111,6 +114,8 @@ export function Exploration({ currentZone, explorationProgress, availableTurns, 
           refundedTurns={playbackData.refundedTurns}
           playerHpBefore={playbackData.playerHpBeforeExploration}
           playerMaxHp={playbackData.playerMaxHp}
+          combatSpeedMs={combatSpeedMs}
+          explorationSpeedMs={explorationSpeedMs}
           onComplete={onPlaybackComplete!}
           onSkip={onPlaybackSkip!}
           onPushLog={onPushLog}

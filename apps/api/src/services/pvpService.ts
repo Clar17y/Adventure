@@ -38,8 +38,10 @@ export async function getLadder(playerId: string) {
   const lowerBound = Math.floor(myRating.rating * (1 - PVP_CONSTANTS.BRACKET_RANGE));
   const upperBound = Math.ceil(myRating.rating * (1 + PVP_CONSTANTS.BRACKET_RANGE));
 
-  // Get active cooldowns for this attacker
-  const cooldowns = await prisma.pvpCooldown.findMany({
+  // Admins bypass cooldowns for testing
+  const isAdmin = (await prisma.player.findUnique({ where: { id: playerId }, select: { role: true } }))?.role === 'admin';
+
+  const cooldowns = isAdmin ? [] : await prisma.pvpCooldown.findMany({
     where: { attackerId: playerId, expiresAt: { gt: new Date() } },
     select: { defenderId: true },
   });
@@ -229,6 +231,7 @@ export async function challenge(
     select: {
       characterLevel: true,
       attributes: true,
+      role: true,
       currentZone: { select: { id: true, zoneType: true } },
     },
   });
@@ -242,12 +245,14 @@ export async function challenge(
     throw new AppError(400, `Must be character level ${PVP_CONSTANTS.MIN_CHARACTER_LEVEL}+`, 'INSUFFICIENT_LEVEL');
   }
 
-  // Validation: cooldown
-  const cooldown = await prisma.pvpCooldown.findUnique({
-    where: { attackerId_defenderId: { attackerId, defenderId: targetId } },
-  });
-  if (cooldown && cooldown.expiresAt > new Date()) {
-    throw new AppError(400, 'Opponent is on cooldown', 'ON_COOLDOWN');
+  // Validation: cooldown (admins bypass for testing)
+  if (attacker.role !== 'admin') {
+    const cooldown = await prisma.pvpCooldown.findUnique({
+      where: { attackerId_defenderId: { attackerId, defenderId: targetId } },
+    });
+    if (cooldown && cooldown.expiresAt > new Date()) {
+      throw new AppError(400, 'Opponent is on cooldown', 'ON_COOLDOWN');
+    }
   }
 
   // Validation: target level
@@ -343,13 +348,15 @@ export async function challenge(
   let defenderRatingChange = elo.deltaB;
 
   // Zero ELO changes when an admin is involved (friendly match)
-  const [attackerPlayer, defenderPlayer] = await Promise.all([
-    prisma.player.findUnique({ where: { id: attackerId }, select: { role: true } }),
-    prisma.player.findUnique({ where: { id: targetId }, select: { role: true } }),
-  ]);
-  if (attackerPlayer?.role === 'admin' || defenderPlayer?.role === 'admin') {
+  if (attacker.role === 'admin') {
     attackerRatingChange = 0;
     defenderRatingChange = 0;
+  } else {
+    const defenderPlayer = await prisma.player.findUnique({ where: { id: targetId }, select: { role: true } });
+    if (defenderPlayer?.role === 'admin') {
+      attackerRatingChange = 0;
+      defenderRatingChange = 0;
+    }
   }
   const now = new Date();
 
@@ -423,13 +430,15 @@ export async function challenge(
       },
     });
 
-    // Upsert cooldown
-    const expiresAt = new Date(now.getTime() + PVP_CONSTANTS.COOLDOWN_HOURS * 60 * 60 * 1000);
-    await tx.pvpCooldown.upsert({
-      where: { attackerId_defenderId: { attackerId, defenderId: targetId } },
-      create: { attackerId, defenderId: targetId, expiresAt },
-      update: { expiresAt },
-    });
+    // Upsert cooldown (admins bypass for testing)
+    if (attacker.role !== 'admin') {
+      const expiresAt = new Date(now.getTime() + PVP_CONSTANTS.COOLDOWN_HOURS * 60 * 60 * 1000);
+      await tx.pvpCooldown.upsert({
+        where: { attackerId_defenderId: { attackerId, defenderId: targetId } },
+        create: { attackerId, defenderId: targetId, expiresAt },
+        update: { expiresAt },
+      });
+    }
 
     return matchRecord;
   });

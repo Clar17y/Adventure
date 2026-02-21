@@ -21,16 +21,19 @@ import {
   adminDiscoverAllZones,
   adminTeleport,
   adminSpawnEncounter,
+  adminGetResourceNodes,
+  adminSpawnResourceNode,
   type AdminItemTemplate,
   type AdminZone,
   type AdminMobTemplate,
   type AdminMobFamily,
   type AdminEventTemplate,
   type AdminActiveEvent,
+  type AdminResourceNode,
 } from '@/lib/api';
 import { Shield } from 'lucide-react';
 
-type AdminTab = 'player' | 'items' | 'world' | 'zones';
+type AdminTab = 'player' | 'items' | 'world' | 'zones' | 'resources';
 
 function StatusMsg({ msg }: { msg: { text: string; ok: boolean } | null }) {
   if (!msg) return null;
@@ -430,6 +433,87 @@ function ZonesTab() {
   );
 }
 
+// ── Resources Tab ────────────────────────────────────────────────────────────
+
+function ResourcesTab() {
+  const [zones, setZones] = useState<AdminZone[]>([]);
+  const [nodes, setNodes] = useState<AdminResourceNode[]>([]);
+  const [zoneId, setZoneId] = useState('');
+  const [selectedNodeId, setSelectedNodeId] = useState('');
+  const [capacity, setCapacity] = useState('');
+  const { busy, msg, act } = useAdminAction();
+
+  useEffect(() => {
+    adminGetZones().then((r) => {
+      if (r.data) {
+        setZones(r.data.zones);
+        if (r.data.zones.length > 0) setZoneId(r.data.zones[0].id);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!zoneId) return;
+    adminGetResourceNodes(zoneId).then((r) => {
+      if (r.data) {
+        setNodes(r.data.nodes);
+        setSelectedNodeId('');
+      }
+    });
+  }, [zoneId]);
+
+  const selected = nodes.find((n) => n.id === selectedNodeId);
+
+  return (
+    <div className="space-y-4">
+      <PixelCard>
+        <h3 className="text-sm font-semibold text-[var(--rpg-gold)] mb-3">Spawn Resource Node</h3>
+        <div className="space-y-2">
+          <select value={zoneId} onChange={(e) => setZoneId(e.target.value)}
+            className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-full text-[var(--rpg-text-primary)]">
+            {zones.map((z) => <option key={z.id} value={z.id}>{z.name} (Lv.{z.difficulty})</option>)}
+          </select>
+
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {nodes.length === 0 && <div className="text-xs text-[var(--rpg-text-secondary)]">No resource nodes in this zone</div>}
+            {nodes.map((n) => (
+              <div key={n.id} onClick={() => setSelectedNodeId(n.id)}
+                className={`px-2 py-1.5 rounded text-sm cursor-pointer transition-colors ${
+                  n.id === selectedNodeId
+                    ? 'bg-[var(--rpg-gold)]/20 border border-[var(--rpg-gold)]/40'
+                    : 'bg-[var(--rpg-surface)] hover:bg-[var(--rpg-surface-hover)]'
+                }`}>
+                <span className="text-[var(--rpg-text-primary)]">{n.resourceType}</span>
+                <span className="text-xs text-[var(--rpg-text-secondary)] ml-2">
+                  {n.skillRequired} Lv.{n.levelRequired} | Cap: {n.minCapacity}-{n.maxCapacity}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </PixelCard>
+
+      {selected && (
+        <PixelCard>
+          <h3 className="text-sm font-semibold text-[var(--rpg-gold)] mb-3">Spawn: {selected.resourceType}</h3>
+          <div className="flex items-center gap-2">
+            <input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)}
+              placeholder={`Random (${selected.minCapacity}-${selected.maxCapacity})`} min={1} max={10000}
+              className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-48 text-[var(--rpg-text-primary)]" />
+            <PixelButton size="sm" disabled={busy}
+              onClick={() => act('Spawn node', () => adminSpawnResourceNode(selectedNodeId, capacity ? Number(capacity) : undefined))}>
+              Spawn
+            </PixelButton>
+          </div>
+          <div className="text-xs text-[var(--rpg-text-secondary)] mt-1">Leave capacity blank for random</div>
+        </PixelCard>
+      )}
+
+      <StatusMsg msg={msg} />
+    </div>
+  );
+}
+
 // ── Main Admin Screen ───────────────────────────────────────────────────────
 
 const TABS: { id: AdminTab; label: string }[] = [
@@ -437,6 +521,7 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: 'items', label: 'Items' },
   { id: 'world', label: 'World' },
   { id: 'zones', label: 'Zones' },
+  { id: 'resources', label: 'Resources' },
 ];
 
 export default function AdminScreen() {
@@ -466,6 +551,7 @@ export default function AdminScreen() {
       {tab === 'items' && <ItemsTab />}
       {tab === 'world' && <WorldTab />}
       {tab === 'zones' && <ZonesTab />}
+      {tab === 'resources' && <ResourcesTab />}
     </div>
   );
 }

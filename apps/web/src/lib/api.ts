@@ -1701,3 +1701,27 @@ export async function adminSpawnEncounter(mobFamilyId: string, zoneId: string, s
     body: JSON.stringify({ mobFamilyId, zoneId, size }),
   });
 }
+
+export interface AdminResourceNode {
+  id: string;
+  zoneId: string;
+  resourceType: string;
+  skillRequired: string;
+  levelRequired: number;
+  baseYield: number;
+  minCapacity: number;
+  maxCapacity: number;
+  zone: { name: string };
+}
+
+export async function adminGetResourceNodes(zoneId?: string) {
+  const qs = zoneId ? `?zoneId=${zoneId}` : '';
+  return fetchApi<{ nodes: AdminResourceNode[] }>(`/api/v1/admin/resource-nodes${qs}`);
+}
+
+export async function adminSpawnResourceNode(resourceNodeId: string, capacity?: number) {
+  return fetchApi<{ success: boolean; resourceType: string; capacity: number }>('/api/v1/admin/resource-nodes/spawn', {
+    method: 'POST',
+    body: JSON.stringify({ resourceNodeId, ...(capacity !== undefined && { capacity }) }),
+  });
+}

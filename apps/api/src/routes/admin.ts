@@ -413,4 +413,45 @@ router.post('/encounter/spawn', asyncHandler(async (req, res) => {
   res.json({ success: true, site });
 }));
 
+// ---------------------------------------------------------------------------
+// Resource Nodes
+// ---------------------------------------------------------------------------
+
+router.get('/resource-nodes', asyncHandler(async (req, res) => {
+  const zoneId = typeof req.query.zoneId === 'string' ? req.query.zoneId : undefined;
+  const where: Prisma.ResourceNodeWhereInput = {};
+  if (zoneId) where.zoneId = zoneId;
+
+  const nodes = await prisma.resourceNode.findMany({
+    where,
+    include: { zone: { select: { name: true } } },
+    orderBy: [{ zone: { name: 'asc' } }, { resourceType: 'asc' }],
+  });
+  res.json({ nodes });
+}));
+
+const spawnResourceNodeSchema = z.object({
+  resourceNodeId: z.string().uuid(),
+  capacity: z.number().int().min(1).max(10000).optional(),
+});
+
+router.post('/resource-nodes/spawn', asyncHandler(async (req, res) => {
+  const { resourceNodeId, capacity } = spawnResourceNodeSchema.parse(req.body);
+  const playerId = req.player!.playerId;
+
+  const template = await prisma.resourceNode.findUniqueOrThrow({ where: { id: resourceNodeId } });
+  const finalCapacity = capacity
+    ?? Math.floor(Math.random() * (template.maxCapacity - template.minCapacity + 1)) + template.minCapacity;
+
+  const node = await prisma.playerResourceNode.create({
+    data: {
+      playerId,
+      resourceNodeId,
+      remainingCapacity: finalCapacity,
+      decayedCapacity: 0,
+    },
+  });
+  res.json({ success: true, node, resourceType: template.resourceType, capacity: finalCapacity });
+}));
+
 export const adminRouter = router;

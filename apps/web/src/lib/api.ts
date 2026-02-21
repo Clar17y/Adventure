@@ -639,7 +639,7 @@ export interface CombatFightResult {
   playerHpRemaining: number;
   potionsConsumed: Array<{ tier: number; healAmount: number; round: number; templateId?: string }>;
   xp: number;
-  loot: Array<{ itemTemplateId: string; quantity: number; rarity?: string; itemName?: string | null }>;
+  loot: Array<{ itemTemplateId: string; quantity: number; rarity?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'; itemName?: string | null }>;
   durabilityLost: Array<{ itemId: string; amount: number; itemName?: string; newDurability?: number; maxDurability?: number; isBroken?: boolean; crossedWarningThreshold?: boolean }>;
   skillXp: SkillXpGrantResponse | null;
 }
@@ -1654,10 +1654,10 @@ export async function adminGetActiveEvents() {
   return fetchApi<{ events: AdminActiveEvent[] }>('/api/v1/admin/events/active');
 }
 
-export async function adminSpawnEvent(templateIndex: number, zoneId: string, durationHours?: number) {
+export async function adminSpawnEvent(templateIndex: number, zoneId: string, durationHours?: number, target?: string) {
   return fetchApi<{ success: boolean }>('/api/v1/admin/events/spawn', {
     method: 'POST',
-    body: JSON.stringify({ templateIndex, zoneId, durationHours }),
+    body: JSON.stringify({ templateIndex, zoneId, durationHours, ...(target && { target }) }),
   });
 }
 
@@ -1669,8 +1669,9 @@ export async function adminGetMobs() {
   return fetchApi<{ mobs: AdminMobTemplate[] }>('/api/v1/admin/mobs');
 }
 
-export async function adminGetMobFamilies() {
-  return fetchApi<{ families: AdminMobFamily[] }>('/api/v1/admin/mob-families');
+export async function adminGetMobFamilies(zoneId?: string) {
+  const qs = zoneId ? `?zoneId=${zoneId}` : '';
+  return fetchApi<{ families: AdminMobFamily[] }>(`/api/v1/admin/mob-families${qs}`);
 }
 
 export async function adminSpawnBoss(mobTemplateId: string, zoneId: string) {

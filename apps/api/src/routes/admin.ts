@@ -124,7 +124,7 @@ router.get('/items/templates', asyncHandler(async (req, res) => {
 }));
 
 const grantItemSchema = z.object({
-  templateId: z.string().uuid(),
+  templateId: z.string().min(1),
   rarity: z.enum(['common', 'uncommon', 'rare', 'epic', 'legendary']).default('common'),
   quantity: z.number().int().min(1).max(1000).default(1),
 });
@@ -196,10 +196,11 @@ const spawnEventSchema = z.object({
   templateIndex: z.number().int().min(0),
   zoneId: z.string().uuid(),
   durationHours: z.number().min(0.1).max(168).default(2),
+  target: z.string().min(1).optional(),
 });
 
 router.post('/events/spawn', asyncHandler(async (req, res) => {
-  const { templateIndex, zoneId, durationHours } = spawnEventSchema.parse(req.body);
+  const { templateIndex, zoneId, durationHours, target } = spawnEventSchema.parse(req.body);
   const template = WORLD_EVENT_TEMPLATES[templateIndex];
   if (!template) {
     res.status(400).json({ error: { message: 'Invalid template index', code: 'INVALID_TEMPLATE' } });
@@ -208,7 +209,11 @@ router.post('/events/spawn', asyncHandler(async (req, res) => {
 
   let targetFamily: string | undefined;
   let targetResource: string | undefined;
-  if (template.fixedTarget) {
+  if (target) {
+    // Admin-provided override
+    if (template.targeting === 'family') targetFamily = target;
+    else if (template.targeting === 'resource') targetResource = target;
+  } else if (template.fixedTarget) {
     if (template.targeting === 'family') targetFamily = template.fixedTarget;
     if (template.targeting === 'resource') targetResource = template.fixedTarget;
   } else if (template.targeting === 'family') {
@@ -343,7 +348,18 @@ router.post('/zones/teleport', asyncHandler(async (req, res) => {
   res.json({ success: true, zoneId });
 }));
 
-router.get('/mob-families', asyncHandler(async (_req, res) => {
+router.get('/mob-families', asyncHandler(async (req, res) => {
+  const zoneId = typeof req.query.zoneId === 'string' ? req.query.zoneId : undefined;
+
+  if (zoneId) {
+    const zoneFamilies = await prisma.zoneMobFamily.findMany({
+      where: { zoneId },
+      include: { mobFamily: { select: { id: true, name: true } } },
+    });
+    res.json({ families: zoneFamilies.map((zf) => zf.mobFamily) });
+    return;
+  }
+
   const families = await prisma.mobFamily.findMany({
     select: { id: true, name: true },
     orderBy: { name: 'asc' },

@@ -44,7 +44,7 @@ function StatusMsg({ msg }: { msg: { text: string; ok: boolean } | null }) {
   );
 }
 
-function useAdminAction() {
+function useAdminAction(onAction?: () => void) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -56,7 +56,10 @@ function useAdminAction() {
     try {
       const res = await fn();
       if (res.error) setMsg({ text: `${label} failed: ${res.error.message}`, ok: false });
-      else setMsg({ text: `${label} succeeded`, ok: true });
+      else {
+        setMsg({ text: `${label} succeeded`, ok: true });
+        onAction?.();
+      }
     } finally {
       setBusy(false);
     }
@@ -67,13 +70,13 @@ function useAdminAction() {
 
 // ── Player Tab ──────────────────────────────────────────────────────────────
 
-function PlayerTab() {
+function PlayerTab({ onAction }: { onAction?: () => void }) {
   const [turns, setTurns] = useState(10000);
   const [level, setLevel] = useState(10);
   const [xp, setXp] = useState(10000);
   const [attrPoints, setAttrPoints] = useState(10);
   const [attrs, setAttrs] = useState({ vitality: 0, strength: 0, dexterity: 0, intelligence: 0, luck: 0, evasion: 0 });
-  const { busy, msg, act } = useAdminAction();
+  const { busy, msg, act } = useAdminAction(onAction);
 
   return (
     <div className="space-y-4">
@@ -142,7 +145,7 @@ function PlayerTab() {
 
 // ── Items Tab ───────────────────────────────────────────────────────────────
 
-function ItemsTab() {
+function ItemsTab({ onAction }: { onAction?: () => void }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [templates, setTemplates] = useState<AdminItemTemplate[]>([]);
@@ -150,7 +153,7 @@ function ItemsTab() {
   const [rarity, setRarity] = useState('common');
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
-  const { busy, msg, act } = useAdminAction();
+  const { busy, msg, act } = useAdminAction(onAction);
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -227,7 +230,7 @@ function ItemsTab() {
 
 // ── World Tab ───────────────────────────────────────────────────────────────
 
-function WorldTab() {
+function WorldTab({ onAction }: { onAction?: () => void }) {
   const [eventTemplates, setEventTemplates] = useState<AdminEventTemplate[]>([]);
   const [activeEvents, setActiveEvents] = useState<AdminActiveEvent[]>([]);
   const [zones, setZones] = useState<AdminZone[]>([]);
@@ -237,7 +240,9 @@ function WorldTab() {
   const [duration, setDuration] = useState(2);
   const [bossZoneId, setBossZoneId] = useState('');
   const [bossMobId, setBossMobId] = useState('');
-  const { busy, msg, setMsg, act } = useAdminAction();
+  const [targetOptions, setTargetOptions] = useState<string[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState('');
+  const { busy, msg, setMsg, act } = useAdminAction(onAction);
 
   useEffect(() => {
     adminGetEventTemplates().then((r) => { if (r.data) setEventTemplates(r.data.templates); });
@@ -259,13 +264,39 @@ function WorldTab() {
     });
   }, []);
 
+  // Load target options when template or zone changes
+  const template = selectedTemplate >= 0 ? eventTemplates.find((t) => t.id === selectedTemplate) : null;
+  const needsTarget = template && !template.fixedTarget && (template.targeting === 'family' || template.targeting === 'resource');
+
+  useEffect(() => {
+    if (!needsTarget || !eventZoneId) {
+      setTargetOptions([]);
+      setSelectedTarget('');
+      return;
+    }
+    if (template.targeting === 'family') {
+      adminGetMobFamilies(eventZoneId).then((r) => {
+        const names = r.data?.families.map((f) => f.name) ?? [];
+        setTargetOptions(names);
+        setSelectedTarget(names[0] ?? '');
+      });
+    } else {
+      adminGetResourceNodes(eventZoneId).then((r) => {
+        const types = [...new Set(r.data?.nodes.map((n) => n.resourceType) ?? [])];
+        setTargetOptions(types);
+        setSelectedTarget(types[0] ?? '');
+      });
+    }
+  }, [needsTarget, template?.targeting, eventZoneId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const refreshEvents = () => {
     adminGetActiveEvents().then((r) => { if (r.data) setActiveEvents(r.data.events); });
   };
 
   const handleSpawnEvent = async () => {
     if (busy || selectedTemplate < 0 || !eventZoneId) return;
-    await act('Spawn event', () => adminSpawnEvent(selectedTemplate, eventZoneId, duration));
+    if (needsTarget && !selectedTarget) return;
+    await act('Spawn event', () => adminSpawnEvent(selectedTemplate, eventZoneId, duration, needsTarget ? selectedTarget : undefined));
     refreshEvents();
   };
 
@@ -307,7 +338,21 @@ function WorldTab() {
             <input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} min={0.1} max={168} step={0.5}
               className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm w-20 text-[var(--rpg-text-primary)]"
               title="Duration (hours)" />
-            <PixelButton size="sm" disabled={busy} onClick={handleSpawnEvent}>Spawn</PixelButton>
+          </div>
+          {needsTarget && (
+            <div className="flex gap-2">
+              <select value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)}
+                className="bg-[var(--rpg-surface)] border border-[var(--rpg-border)] rounded px-2 py-1 text-sm flex-1 text-[var(--rpg-text-primary)]">
+                {targetOptions.length === 0 && <option value="">No {template.targeting === 'family' ? 'mob families' : 'resources'} in zone</option>}
+                {targetOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <span className="text-xs text-[var(--rpg-text-secondary)] self-center whitespace-nowrap">
+                Target ({template.targeting})
+              </span>
+            </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <PixelButton size="sm" disabled={busy || (!!needsTarget && !selectedTarget)} onClick={handleSpawnEvent}>Spawn</PixelButton>
           </div>
         </div>
       </PixelCard>
@@ -350,13 +395,13 @@ function WorldTab() {
 
 // ── Zones Tab ───────────────────────────────────────────────────────────────
 
-function ZonesTab() {
+function ZonesTab({ onAction }: { onAction?: () => void }) {
   const [zones, setZones] = useState<AdminZone[]>([]);
   const [families, setFamilies] = useState<AdminMobFamily[]>([]);
   const [encZoneId, setEncZoneId] = useState('');
   const [encFamilyId, setEncFamilyId] = useState('');
   const [encSize, setEncSize] = useState<'small' | 'medium' | 'large'>('medium');
-  const { busy, msg, act } = useAdminAction();
+  const { busy, msg, act } = useAdminAction(onAction);
 
   useEffect(() => {
     adminGetZones().then((r) => {
@@ -435,13 +480,13 @@ function ZonesTab() {
 
 // ── Resources Tab ────────────────────────────────────────────────────────────
 
-function ResourcesTab() {
+function ResourcesTab({ onAction }: { onAction?: () => void }) {
   const [zones, setZones] = useState<AdminZone[]>([]);
   const [nodes, setNodes] = useState<AdminResourceNode[]>([]);
   const [zoneId, setZoneId] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [capacity, setCapacity] = useState('');
-  const { busy, msg, act } = useAdminAction();
+  const { busy, msg, act } = useAdminAction(onAction);
 
   useEffect(() => {
     adminGetZones().then((r) => {
@@ -524,7 +569,7 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: 'resources', label: 'Resources' },
 ];
 
-export default function AdminScreen() {
+export default function AdminScreen({ onAction }: { onAction?: () => void }) {
   const [tab, setTab] = useState<AdminTab>('player');
 
   return (
@@ -547,11 +592,11 @@ export default function AdminScreen() {
         ))}
       </div>
 
-      {tab === 'player' && <PlayerTab />}
-      {tab === 'items' && <ItemsTab />}
-      {tab === 'world' && <WorldTab />}
-      {tab === 'zones' && <ZonesTab />}
-      {tab === 'resources' && <ResourcesTab />}
+      {tab === 'player' && <PlayerTab onAction={onAction} />}
+      {tab === 'items' && <ItemsTab onAction={onAction} />}
+      {tab === 'world' && <WorldTab onAction={onAction} />}
+      {tab === 'zones' && <ZonesTab onAction={onAction} />}
+      {tab === 'resources' && <ResourcesTab onAction={onAction} />}
     </div>
   );
 }

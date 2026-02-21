@@ -264,6 +264,7 @@ export default function GamePage() {
     handleClaimAchievement,
     handleSetActiveTitle,
     loadAchievements,
+    loadAll,
   } = useGameController({ isAuthenticated });
 
   const [achievementCategory, setAchievementCategory] = useState<string | null>(null);
@@ -838,7 +839,7 @@ export default function GamePage() {
       case 'leaderboard':
         return <Leaderboard playerId={player?.id ?? null} />;
       case 'admin':
-        return <AdminScreen />;
+        return <AdminScreen onAction={loadAll} />;
       default:
         return null;
     }

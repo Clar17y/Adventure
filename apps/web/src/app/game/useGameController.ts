@@ -1666,6 +1666,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleEquipItem,
     handleUnequipSlot,
     handleAllocateAttribute,
+    loadAll,
     loadTurnsAndHp,
     loadPvpNotificationCount,
     handleSetAutoPotionThreshold,

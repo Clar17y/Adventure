@@ -38,11 +38,12 @@ interface ArenaScreenProps {
   onNotificationsChanged?: () => void;
   onHpChanged?: () => void;
   onNavigate?: (screen: string) => void;
+  combatSpeedMs?: number;
 }
 
 type ArenaView = 'ladder' | 'history' | 'notifications' | 'rankings';
 
-export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId, isInTown = true, onTurnsChanged, onNotificationsChanged, onHpChanged, onNavigate }: ArenaScreenProps) {
+export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId, isInTown = true, onTurnsChanged, onNotificationsChanged, onHpChanged, onNavigate, combatSpeedMs }: ArenaScreenProps) {
   const [rating, setRating] = useState<PvpRatingResponse | null>(null);
   const [ladder, setLadder] = useState<PvpLadderEntry[]>([]);
   const [notifications, setNotifications] = useState<PvpNotification[]>([]);
@@ -266,6 +267,7 @@ export function ArenaScreen({ characterLevel, busyAction, currentTurns, playerId
         log={lastResult.combat.log}
         playerLabel={lastResult.attackerName}
         defeatButtonLabel="Continue"
+        speedMs={combatSpeedMs}
         onComplete={() => setPvpPlaybackActive(false)}
         onSkip={() => setPvpPlaybackActive(false)}
       />

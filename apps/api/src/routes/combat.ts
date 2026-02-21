@@ -503,7 +503,7 @@ const strategySchema = z.object({
 combatRouter.post('/sites/:id/strategy', async (req, res, next) => {
   try {
     const playerId = req.player!.playerId;
-    const siteId = req.params.id;
+    const siteId = z.string().uuid().parse(req.params.id);
     const body = strategySchema.parse(req.body);
 
     const site = await prismaAny.encounterSite.findFirst({
@@ -582,12 +582,29 @@ async function handleEncounterSiteRoomCombat(req: Request, res: Response, player
 
   const siteStrategy = site.clearStrategy as 'full_clear' | 'room_by_room';
   const siteFullClearActive = site.fullClearActive ?? true;
-  const currentRoom = site.currentRoom ?? 1;
+  let currentRoom = site.currentRoom ?? 1;
   const zoneId = site.zoneId as string;
 
-  // Get ALL alive mobs in the current room
-  const roomMobs = getAllAliveMobsInRoom(decayed.mobs, currentRoom);
-  if (roomMobs.length === 0) throw new AppError(400, 'No mobs remaining in current room', 'ROOM_EMPTY');
+  // Get ALL alive mobs in the current room — advance if decay emptied it
+  let roomMobs = getAllAliveMobsInRoom(decayed.mobs, currentRoom);
+  if (roomMobs.length === 0) {
+    const totalRooms = new Set(decayed.mobs.map(m => m.room)).size || 1;
+    let advanced = false;
+    for (let r = currentRoom + 1; r <= totalRooms; r++) {
+      const candidate = getAllAliveMobsInRoom(decayed.mobs, r);
+      if (candidate.length > 0) {
+        currentRoom = r;
+        roomMobs = candidate;
+        advanced = true;
+        await prismaAny.encounterSite.update({
+          where: { id: site.id },
+          data: { currentRoom: r },
+        });
+        break;
+      }
+    }
+    if (!advanced) throw new AppError(410, 'Encounter site has decayed', 'SITE_DECAYED');
+  }
 
   // Upfront turn cost for entire room
   const totalTurnCost = roomMobs.length * COMBAT_CONSTANTS.ENCOUNTER_TURN_COST;

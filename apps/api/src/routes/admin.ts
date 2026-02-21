@@ -207,22 +207,28 @@ router.post('/events/spawn', asyncHandler(async (req, res) => {
     return;
   }
 
+  // Resolve target: family targeting stores the mob family ID, not the name
   let targetFamily: string | undefined;
+  let targetFamilyName: string | undefined;
   let targetResource: string | undefined;
-  if (target) {
-    // Admin-provided override
-    if (template.targeting === 'family') targetFamily = target;
-    else if (template.targeting === 'resource') targetResource = target;
-  } else if (template.fixedTarget) {
-    if (template.targeting === 'family') targetFamily = template.fixedTarget;
-    if (template.targeting === 'resource') targetResource = template.fixedTarget;
-  } else if (template.targeting === 'family') {
+
+  if (template.targeting === 'family') {
     const families = await prisma.zoneMobFamily.findMany({
       where: { zoneId },
-      include: { mobFamily: { select: { name: true } } },
+      include: { mobFamily: { select: { id: true, name: true } } },
     });
-    if (families.length > 0) {
-      targetFamily = families[Math.floor(Math.random() * families.length)].mobFamily.name;
+
+    const familyName = target ?? template.fixedTarget;
+    let picked;
+    if (familyName) {
+      const lower = familyName.toLowerCase();
+      picked = families.find((f) => f.mobFamily.name.toLowerCase() === lower);
+    } else if (families.length > 0) {
+      picked = families[Math.floor(Math.random() * families.length)];
+    }
+    if (picked) {
+      targetFamily = picked.mobFamily.id;
+      targetFamilyName = picked.mobFamily.name;
     }
   } else if (template.targeting === 'resource') {
     const nodes = await prisma.resourceNode.findMany({
@@ -230,13 +236,18 @@ router.post('/events/spawn', asyncHandler(async (req, res) => {
       select: { resourceType: true },
     });
     const types = [...new Set(nodes.map((n) => n.resourceType))];
-    if (types.length > 0) {
+    const resourceName = target ?? template.fixedTarget;
+    if (resourceName) {
+      const lower = resourceName.toLowerCase();
+      targetResource = types.find((t) => t.toLowerCase() === lower);
+    } else if (types.length > 0) {
       targetResource = types[Math.floor(Math.random() * types.length)];
     }
   }
 
-  const title = template.title.replace('{target}', targetFamily ?? targetResource ?? 'Unknown');
-  const description = template.description.replace('{target}', targetFamily ?? targetResource ?? 'Unknown');
+  const displayTarget = targetFamilyName ?? targetResource ?? 'Unknown';
+  const title = template.title.replace('{target}', displayTarget);
+  const description = template.description.replace('{target}', displayTarget);
 
   const event = await spawnWorldEvent({
     type: template.type,
@@ -250,6 +261,11 @@ router.post('/events/spawn', asyncHandler(async (req, res) => {
     durationHours,
     createdBy: 'system',
   });
+
+  if (!event) {
+    res.status(409).json({ error: { message: 'Could not spawn event (slot conflict)', code: 'SLOT_CONFLICT' } });
+    return;
+  }
 
   res.json({ success: true, event });
 }));

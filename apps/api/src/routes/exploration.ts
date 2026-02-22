@@ -444,9 +444,22 @@ explorationRouter.post('/start', async (req, res, next) => {
     // Fetch zone modifiers from active world events
     const zoneModifiers = await getActiveZoneModifiers(body.zoneId);
 
-    const turnSpend = await spendPlayerTurns(playerId, body.turns);
+    // Auto-potion setup + tutorial detection
+    const playerRecord = await prismaAny.player.findUnique({
+      where: { id: playerId },
+      select: { autoPotionThreshold: true, tutorialStep: true },
+    });
+    const isTutorialExplore = playerRecord?.tutorialStep === 1;
+    const autoPotionThreshold = playerRecord?.autoPotionThreshold ?? 0;
 
-    const outcomes = simulateExploration(body.turns, effectiveExitChance);
+    // Tutorial explore step: force 100 turns and a single guaranteed ambush
+    const turnsToSpend = isTutorialExplore ? 100 : body.turns;
+
+    const turnSpend = await spendPlayerTurns(playerId, turnsToSpend);
+
+    const outcomes = isTutorialExplore
+      ? [{ turnOccurred: 50, type: 'ambush' as const }]
+      : simulateExploration(turnsToSpend, effectiveExitChance);
 
     const pendingResources: PendingResourceDiscovery[] = [];
     const pendingSites: PendingEncounterSiteDiscovery[] = [];
@@ -456,13 +469,6 @@ explorationRouter.post('/start', async (req, res, next) => {
     const hiddenCaches: Array<{ turnOccurred: number }> = [];
     let zoneExitDiscovered = false;
     let wasKnockedOut = false;
-
-    // Auto-potion setup for exploration ambushes
-    const playerRecord = await prismaAny.player.findUnique({
-      where: { id: playerId },
-      select: { autoPotionThreshold: true },
-    });
-    const autoPotionThreshold = playerRecord?.autoPotionThreshold ?? 0;
     const potionPool = autoPotionThreshold > 0
       ? await buildPotionPool(playerId, hpState.maxHp)
       : [];
@@ -477,37 +483,53 @@ explorationRouter.post('/start', async (req, res, next) => {
       if (aborted) break;
 
       if (outcome.type === 'ambush' && mobTemplates.length > 0) {
-        const tieredMobs = filterAndWeightMobsByTier(
-          mobTemplates.map(m => ({ ...m, explorationTier: m.explorationTier ?? 1 })),
-          explorationProgress.percent,
-          zoneTiers,
-        );
-        if (tieredMobs.length === 0) continue;
+        let baseMob: MobTemplate;
+        let prefixedMob: ReturnType<typeof applyMobPrefix>;
 
-        // Apply tier bleedthrough: select a target tier, filter to it, fall back to lower tiers
-        const highestUnlockedTier = Math.max(...tieredMobs.map(m => m.explorationTier));
-        const targetTier = selectTierWithBleedthrough(highestUnlockedTier, zoneTiers);
-        let candidates = tieredMobs.filter(m => m.explorationTier === targetTier);
-        if (candidates.length === 0) {
-          for (let t = targetTier - 1; t >= 1; t--) {
-            candidates = tieredMobs.filter(m => m.explorationTier === t);
-            if (candidates.length > 0) break;
+        if (isTutorialExplore) {
+          // Tutorial: guaranteed Field Mouse with no prefix
+          const fieldMouse = mobTemplates.find(m => m.name === 'Field Mouse')
+            ?? mobTemplates[0]!;
+          baseMob = {
+            ...(fieldMouse as unknown as MobTemplate),
+            spellPattern: Array.isArray((fieldMouse as { spellPattern: unknown }).spellPattern)
+              ? ((fieldMouse as { spellPattern: unknown }).spellPattern as MobTemplate['spellPattern'])
+              : [],
+          };
+          prefixedMob = applyMobPrefix(baseMob, null);
+        } else {
+          const tieredMobs = filterAndWeightMobsByTier(
+            mobTemplates.map(m => ({ ...m, explorationTier: m.explorationTier ?? 1 })),
+            explorationProgress.percent,
+            zoneTiers,
+          );
+          if (tieredMobs.length === 0) continue;
+
+          // Apply tier bleedthrough: select a target tier, filter to it, fall back to lower tiers
+          const highestUnlockedTier = Math.max(...tieredMobs.map(m => m.explorationTier));
+          const targetTier = selectTierWithBleedthrough(highestUnlockedTier, zoneTiers);
+          let candidates = tieredMobs.filter(m => m.explorationTier === targetTier);
+          if (candidates.length === 0) {
+            for (let t = targetTier - 1; t >= 1; t--) {
+              candidates = tieredMobs.filter(m => m.explorationTier === t);
+              if (candidates.length > 0) break;
+            }
           }
+          if (candidates.length === 0) candidates = tieredMobs;
+
+          const mob = pickWeighted(candidates, 'encounterWeight') as typeof candidates[number] | null;
+          if (!mob) continue;
+
+          baseMob = {
+            ...(mob as unknown as MobTemplate),
+            spellPattern: Array.isArray((mob as { spellPattern: unknown }).spellPattern)
+              ? ((mob as { spellPattern: unknown }).spellPattern as MobTemplate['spellPattern'])
+              : [],
+          };
+
+          const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
+          prefixedMob = applyMobPrefix(modifiedMob, rollMobPrefix());
         }
-        if (candidates.length === 0) candidates = tieredMobs;
-
-        const mob = pickWeighted(candidates, 'encounterWeight') as typeof candidates[number] | null;
-        if (!mob) continue;
-
-        const baseMob: MobTemplate = {
-          ...(mob as unknown as MobTemplate),
-          spellPattern: Array.isArray((mob as { spellPattern: unknown }).spellPattern)
-            ? ((mob as { spellPattern: unknown }).spellPattern as MobTemplate['spellPattern'])
-            : [],
-        };
-
-        const modifiedMob = applyMobEventModifiers(baseMob, zoneModifiers);
-        const prefixedMob = applyMobPrefix(modifiedMob, rollMobPrefix());
         const playerStats = buildPlayerCombatStats(
           currentHp,
           hpState.maxHp,
@@ -941,13 +963,13 @@ explorationRouter.post('/start', async (req, res, next) => {
     // Deduct all potions consumed across ambushes
     await deductConsumedPotions(playerId, allPotionsConsumed);
 
-    const spentTurns = aborted && abortedAtTurn ? abortedAtTurn : body.turns;
+    const spentTurns = aborted && abortedAtTurn ? abortedAtTurn : turnsToSpend;
     const explorationBefore = await getExplorationPercent(playerId, body.zoneId);
     await addExplorationTurns(playerId, body.zoneId, spentTurns);
     const explorationAfter = await getExplorationPercent(playerId, body.zoneId);
     const zoneJustFullyExplored = explorationBefore.percent < 100 && explorationAfter.percent >= 100;
 
-    const refundAmount = aborted && abortedAtTurn ? Math.max(0, body.turns - abortedAtTurn) : 0;
+    const refundAmount = aborted && abortedAtTurn ? Math.max(0, turnsToSpend - abortedAtTurn) : 0;
     const refundedTurns = refundAmount > 0 ? await refundPlayerTurns(playerId, refundAmount) : null;
 
     const persisted = await prisma.$transaction(async (tx) => {
@@ -1036,7 +1058,7 @@ explorationRouter.post('/start', async (req, res, next) => {
         data: {
           playerId,
           activityType: 'exploration',
-          turnsSpent: body.turns,
+          turnsSpent: turnsToSpend,
           result: {
             zoneId: body.zoneId,
             zoneName: zone.name,
@@ -1108,9 +1130,9 @@ explorationRouter.post('/start', async (req, res, next) => {
 
     if (events.length === 0) {
       events.push({
-        turn: body.turns,
+        turn: turnsToSpend,
         type: 'hidden_cache',
-        description: `You explored the ${zone.name} for ${body.turns} turns but found nothing of interest.`,
+        description: `You explored the ${zone.name} for ${turnsToSpend} turns but found nothing of interest.`,
         details: {},
       });
     }

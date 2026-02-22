@@ -36,6 +36,7 @@ import {
   isTutorialActive,
   TUTORIAL_STEPS,
   TUTORIAL_STEP_WELCOME,
+  TUTORIAL_STEP_EXPLORE,
   TUTORIAL_STEP_DONE,
 } from '@/lib/tutorial';
 import AdminScreen from '@/components/screens/AdminScreen';
@@ -302,6 +303,22 @@ export default function GamePage() {
     }
   }, [activeScreen, loadAchievements]);
 
+  // Auto-navigate to the relevant screen when the tutorial step changes
+  useEffect(() => {
+    if (!isTutorialActive(tutorialStep)) return;
+    const stepDef = TUTORIAL_STEPS[tutorialStep];
+    if (stepDef?.navigateTo) {
+      setActiveScreen(stepDef.navigateTo as Screen);
+    }
+  }, [tutorialStep, setActiveScreen]);
+
+  const tutorialPulseTabs = React.useMemo(() => {
+    if (!isTutorialActive(tutorialStep)) return undefined;
+    const stepDef = TUTORIAL_STEPS[tutorialStep];
+    if (!stepDef?.pulseTab) return undefined;
+    return new Set([stepDef.pulseTab]);
+  }, [tutorialStep]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[var(--rpg-background)] flex items-center justify-center">
@@ -404,6 +421,7 @@ export default function GamePage() {
             combatSpeedMs={combatLogSpeedMs}
             explorationSpeedMs={explorationSpeedMs}
             defaultTurns={defaultExploreTurns}
+            tutorialLocked={tutorialStep === TUTORIAL_STEP_EXPLORE}
           />
         );
       case 'inventory':
@@ -994,13 +1012,6 @@ export default function GamePage() {
         return null;
     }
   };
-
-  const tutorialPulseTabs = React.useMemo(() => {
-    if (!isTutorialActive(tutorialStep)) return undefined;
-    const stepDef = TUTORIAL_STEPS[tutorialStep];
-    if (!stepDef?.pulseTab) return undefined;
-    return new Set([stepDef.pulseTab]);
-  }, [tutorialStep]);
 
   return (
     <>

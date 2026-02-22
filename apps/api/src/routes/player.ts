@@ -201,8 +201,8 @@ playerRouter.patch('/tutorial', async (req, res, next) => {
       throw new AppError(400, 'Invalid tutorial step', 'INVALID_STEP');
     }
 
-    // Don't allow advancing past completed
-    if (player.tutorialStep >= 9 && !isSkip) {
+    // Don't allow changes once tutorial is completed or skipped
+    if (player.tutorialStep >= 9 || player.tutorialStep === -1) {
       throw new AppError(400, 'Tutorial already completed', 'TUTORIAL_COMPLETE');
     }
 

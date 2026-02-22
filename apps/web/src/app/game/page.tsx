@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { itemImageSrc, monsterImageSrc, resourceImageSrc, skillIconSrc, zoneImageSrc } from '@/lib/assets';
@@ -30,6 +30,15 @@ import { titleCaseFromSnake } from '@/lib/format';
 import { TURN_CONSTANTS, type SkillType } from '@adventure/shared';
 import { calculateEfficiency, xpForLevel } from '@adventure/game-engine';
 import { Sword, Shield, Crosshair, Sparkles, Pickaxe, Hammer, Leaf, FlaskConical, Axe, Scissors, Anvil } from 'lucide-react';
+import { TutorialBanner } from '@/components/TutorialBanner';
+import { TutorialDialog } from '@/components/TutorialDialog';
+import {
+  isTutorialActive,
+  TUTORIAL_STEPS,
+  TUTORIAL_STEP_WELCOME,
+  TUTORIAL_STEP_EXPLORE,
+  TUTORIAL_STEP_DONE,
+} from '@/lib/tutorial';
 import AdminScreen from '@/components/screens/AdminScreen';
 import { ArenaScreen } from './screens/ArenaScreen';
 import { CombatScreen } from './screens/CombatScreen';
@@ -281,6 +290,7 @@ export default function GamePage() {
     handleClaimAchievement,
     handleSetActiveTitle,
     loadAchievements,
+    tutorialStep, skipTutorial, advanceTutorial,
     loadAll,
   } = useGameController({ isAuthenticated });
 
@@ -292,6 +302,22 @@ export default function GamePage() {
       void loadAchievements();
     }
   }, [activeScreen, loadAchievements]);
+
+  // Auto-navigate to the relevant screen when the tutorial step changes
+  useEffect(() => {
+    if (!isTutorialActive(tutorialStep)) return;
+    const stepDef = TUTORIAL_STEPS[tutorialStep];
+    if (stepDef?.navigateTo) {
+      setActiveScreen(stepDef.navigateTo as Screen);
+    }
+  }, [tutorialStep, setActiveScreen]);
+
+  const tutorialPulseTabs = React.useMemo(() => {
+    if (!isTutorialActive(tutorialStep)) return undefined;
+    const stepDef = TUTORIAL_STEPS[tutorialStep];
+    if (!stepDef?.pulseTab) return undefined;
+    return new Set([stepDef.pulseTab]);
+  }, [tutorialStep]);
 
   if (isLoading) {
     return (
@@ -395,6 +421,7 @@ export default function GamePage() {
             combatSpeedMs={combatLogSpeedMs}
             explorationSpeedMs={explorationSpeedMs}
             defaultTurns={defaultExploreTurns}
+            tutorialLocked={tutorialStep === TUTORIAL_STEP_EXPLORE}
           />
         );
       case 'inventory':
@@ -1000,6 +1027,11 @@ export default function GamePage() {
           </div>
         )}
 
+        <TutorialBanner
+          tutorialStep={tutorialStep}
+          onSkip={skipTutorial}
+        />
+
         {/* Sub-navigation for screens */}
         {getActiveTab() === 'home' && (
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
@@ -1143,6 +1175,17 @@ export default function GamePage() {
         activeTab={getActiveTab()}
         onNavigate={handleNavigate}
         badgeTabs={achievementUnclaimedCount > 0 ? new Set(['home']) : undefined}
+        pulseTabs={tutorialPulseTabs}
+      />
+      <TutorialDialog
+        tutorialStep={tutorialStep}
+        onDismiss={() => {
+          if (tutorialStep === TUTORIAL_STEP_WELCOME) {
+            advanceTutorial(TUTORIAL_STEP_WELCOME);
+          } else if (tutorialStep === TUTORIAL_STEP_DONE) {
+            advanceTutorial(TUTORIAL_STEP_DONE);
+          }
+        }}
       />
       <AchievementToast onNavigate={(category) => { setAchievementCategory(category); setActiveScreen('achievements'); }} />
     </>

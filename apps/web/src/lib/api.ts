@@ -207,6 +207,7 @@ export async function getPlayer() {
       characterLevel: number;
       attributePoints: number;
       autoPotionThreshold: number;
+      tutorialStep: number;
       combatLogSpeedMs: number;
       explorationSpeedMs: number;
       autoSkipKnownCombat: boolean;
@@ -239,6 +240,13 @@ export async function updatePlayerSettings(settings: PlayerSettings) {
   return fetchApi<PlayerSettings>('/api/v1/player/settings', {
     method: 'PATCH',
     body: JSON.stringify(settings),
+  });
+}
+
+export async function updateTutorialStep(step: number) {
+  return fetchApi<{ tutorialStep: number }>('/api/v1/player/tutorial', {
+    method: 'PATCH',
+    body: JSON.stringify({ step }),
   });
 }
 

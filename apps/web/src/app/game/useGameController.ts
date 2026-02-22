@@ -1,4 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { updateTutorialStep } from '@/lib/api';
+import {
+  TUTORIAL_STEP_WELCOME,
+  TUTORIAL_STEP_EXPLORE,
+  TUTORIAL_STEP_COMBAT,
+  TUTORIAL_STEP_GATHER,
+  TUTORIAL_STEP_TRAVEL,
+  TUTORIAL_STEP_REFINE,
+  TUTORIAL_STEP_CRAFT,
+  TUTORIAL_STEP_EQUIP,
+  TUTORIAL_STEP_DONE,
+  TUTORIAL_COMPLETED,
+  TUTORIAL_SKIPPED,
+  isTutorialActive,
+  TUTORIAL_STEPS,
+  type BottomTab,
+} from '@/lib/tutorial';
 import {
   allocatePlayerAttribute,
   craft,
@@ -405,6 +422,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   const [pvpNotificationCount, setPvpNotificationCount] = useState(0);
   const [activeEvents, setActiveEvents] = useState<WorldEventResponse[]>([]);
   const [autoPotionThreshold, setAutoPotionThreshold] = useState(0);
+  const [tutorialStep, setTutorialStep] = useState<number>(TUTORIAL_COMPLETED);
   const [combatLogSpeedMs, setCombatLogSpeedMs] = useState(800);
   const [explorationSpeedMs, setExplorationSpeedMs] = useState(800);
   const [autoSkipKnownCombat, setAutoSkipKnownCombat] = useState(false);
@@ -429,6 +447,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
   }> | null>(null);
   const [combatPlaybackIndex, setCombatPlaybackIndex] = useState(0);
   const pendingCombatRewardsRef = useRef<LastCombat['rewards'] | null>(null);
+  const siteJustClearedRef = useRef(false);
+  const arrivedInTownRef = useRef(false);
   const combatPlaybackData = combatPlaybackQueue?.[combatPlaybackIndex] ?? null;
   const [explorationPlaybackData, setExplorationPlaybackData] = useState<{
     totalTurns: number;
@@ -499,6 +519,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         attributes: playerRes.data.player.attributes,
       });
       setAutoPotionThreshold(playerRes.data.player.autoPotionThreshold ?? 0);
+      setTutorialStep(playerRes.data.player.tutorialStep ?? TUTORIAL_COMPLETED);
       setCombatLogSpeedMs(playerRes.data.player.combatLogSpeedMs ?? 800);
       setExplorationSpeedMs(playerRes.data.player.explorationSpeedMs ?? 800);
       setAutoSkipKnownCombat(playerRes.data.player.autoSkipKnownCombat ?? false);
@@ -543,6 +564,29 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       setZoneCraftingName(recipesRes.data.zoneName);
     }
   }, []);
+
+  const advanceTutorial = useCallback(async (fromStep: number) => {
+    if (tutorialStep !== fromStep) return;
+    const nextStep = fromStep + 1;
+    const res = await updateTutorialStep(nextStep);
+    if (res.data) setTutorialStep(res.data.tutorialStep);
+  }, [tutorialStep]);
+
+  const skipTutorial = useCallback(async () => {
+    const res = await updateTutorialStep(TUTORIAL_SKIPPED);
+    if (res.data) setTutorialStep(res.data.tutorialStep);
+  }, []);
+
+  // Default tabs during tutorial steps so the player sees the right content
+  useEffect(() => {
+    if (tutorialStep === TUTORIAL_STEP_GATHER) {
+      setActiveGatheringSkill('woodcutting');
+    } else if (tutorialStep === TUTORIAL_STEP_REFINE) {
+      setActiveCraftingSkill('refining');
+    } else if (tutorialStep === TUTORIAL_STEP_CRAFT) {
+      setActiveCraftingSkill('weaponsmithing');
+    }
+  }, [tutorialStep]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -899,6 +943,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
     setExplorationPlaybackData(null);
     setPlaybackActive(false);
+    advanceTutorial(TUTORIAL_STEP_EXPLORE);
     await loadAll();
   };
 
@@ -935,6 +980,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     }
     setExplorationPlaybackData(null);
     setPlaybackActive(false);
+    advanceTutorial(TUTORIAL_STEP_EXPLORE);
     await loadAll();
   };
 
@@ -1037,6 +1083,10 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
       setPlaybackActive(true);
 
+      if (data.rewards.siteCompletion) {
+        siteJustClearedRef.current = true;
+      }
+
       if (data.activeEvents?.length) {
         for (const evt of data.activeEvents) {
           const sign = evt.effectType.endsWith('_down') ? '-' : '+';
@@ -1126,6 +1176,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setCombatPlaybackIndex(0);
     pendingCombatRewardsRef.current = null;
     setPlaybackActive(false);
+
+    if (siteJustClearedRef.current) {
+      siteJustClearedRef.current = false;
+      advanceTutorial(TUTORIAL_STEP_COMBAT);
+    }
   };
 
   const handleNavigate = (screen: string) => {
@@ -1211,6 +1266,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       pushLog(...newLogs);
       await Promise.all([loadAll(), loadGatheringNodes()]);
+      advanceTutorial(TUTORIAL_STEP_GATHER);
     });
   };
 
@@ -1288,6 +1344,8 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
 
       pushLog(...newLogs);
       await loadAll();
+      advanceTutorial(TUTORIAL_STEP_REFINE);
+      advanceTutorial(TUTORIAL_STEP_CRAFT);
     });
   };
 
@@ -1409,6 +1467,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         return;
       }
       await loadAll();
+      advanceTutorial(TUTORIAL_STEP_EQUIP);
     });
   };
 
@@ -1435,12 +1494,14 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
       }
 
       setTurns(data.turns.currentTurns);
+      const arrivedInTown = data.zone.zoneType === 'town';
 
       // Breadcrumb return — instant, no playback
       if (data.breadcrumbReturn) {
         setActiveZoneId(data.zone.id);
         pushLog({ timestamp: nowStamp(), type: 'success', message: `Returned to ${data.zone.name}.` });
         await loadAll();
+        if (arrivedInTown) advanceTutorial(TUTORIAL_STEP_TRAVEL);
         return;
       }
 
@@ -1455,6 +1516,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
           message: `Travelling to ${data.zone.name}...`,
         });
 
+        if (arrivedInTown) arrivedInTownRef.current = true;
         setTravelPlaybackData({
           totalTurns: travelCost,
           destinationName: data.zone.name,
@@ -1471,6 +1533,7 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
         setActiveZoneId(data.zone.id);
         pushLog({ timestamp: nowStamp(), type: 'success', message: `Arrived at ${data.zone.name}.` });
         await loadAll();
+        if (arrivedInTown) advanceTutorial(TUTORIAL_STEP_TRAVEL);
       }
     });
   };
@@ -1504,6 +1567,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setTravelPlaybackData(null);
     setPlaybackActive(false);
     await loadAll();
+
+    if (arrivedInTownRef.current) {
+      arrivedInTownRef.current = false;
+      advanceTutorial(TUTORIAL_STEP_TRAVEL);
+    }
   };
 
   const handleTravelPlaybackSkip = async () => {
@@ -1541,6 +1609,11 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     setTravelPlaybackData(null);
     setPlaybackActive(false);
     await loadAll();
+
+    if (arrivedInTownRef.current) {
+      arrivedInTownRef.current = false;
+      advanceTutorial(TUTORIAL_STEP_TRAVEL);
+    }
   };
 
   const handleAllocateAttribute = async (attribute: AttributeType, points = 1) => {
@@ -1696,6 +1769,9 @@ export function useGameController({ isAuthenticated }: { isAuthenticated: boolea
     handleClaimAchievement,
     handleSetActiveTitle,
     loadAchievements,
+
+    // Tutorial
+    tutorialStep, skipTutorial, advanceTutorial,
 
     // World Events
     activeEvents,

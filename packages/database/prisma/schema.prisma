@@ -709,6 +709,7 @@ model PlayerStats {
   totalGatheringActions   Int      @default(0) @map("total_gathering_actions")
   totalTurnsSpent         Int      @default(0) @map("total_turns_spent")
   totalDeaths             Int      @default(0) @map("total_deaths")
+  tutorialCompleted       Int      @default(0) @map("tutorial_completed")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)

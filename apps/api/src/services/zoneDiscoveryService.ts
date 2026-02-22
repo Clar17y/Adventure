@@ -97,20 +97,17 @@ export async function ensureStarterEncounterAndNodes(playerId: string): Promise<
   });
   if (!zoneMobFamily) return;
 
-  const trashMembers = await db.mobFamilyMember.findMany({
-    where: { mobFamilyId: zoneMobFamily.mobFamilyId, role: 'trash' },
-    select: { mobTemplateId: true },
-    take: 2,
+  // Use Field Mouse specifically for tutorial — easy guaranteed win
+  const fieldMouse = await db.mobTemplate.findFirst({
+    where: { zoneId: wildZone.id, name: 'Field Mouse' },
+    select: { id: true },
   });
-  if (trashMembers.length === 0) return;
+  if (!fieldMouse) return;
 
-  const mobs = trashMembers.map((m: { mobTemplateId: string }, i: number) => ({
-    slot: i,
-    mobTemplateId: m.mobTemplateId,
-    role: 'trash',
-    prefix: null,
-    status: 'alive',
-  }));
+  const mobs = [
+    { slot: 0, mobTemplateId: fieldMouse.id, role: 'trash', prefix: null, status: 'alive', room: 1 },
+    { slot: 1, mobTemplateId: fieldMouse.id, role: 'trash', prefix: null, status: 'alive', room: 1 },
+  ];
 
   const siteName = `Small ${zoneMobFamily.mobFamily.name} ${zoneMobFamily.mobFamily.siteNounSmall}`;
 

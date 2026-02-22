@@ -5,7 +5,7 @@ function isValidTutorialAdvance(currentStep: number, requestedStep: number): boo
   const isSkip = requestedStep === -1;
   const isNextStep = requestedStep === currentStep + 1;
   if (!isSkip && !isNextStep) return false;
-  if (currentStep >= 8 && !isSkip) return false;
+  if (currentStep >= 9 && !isSkip) return false;
   return true;
 }
 
@@ -27,6 +27,6 @@ describe('tutorial step validation', () => {
   });
 
   it('rejects updating already completed tutorial', () => {
-    expect(isValidTutorialAdvance(8, 9)).toBe(false);
+    expect(isValidTutorialAdvance(9, 10)).toBe(false);
   });
 });

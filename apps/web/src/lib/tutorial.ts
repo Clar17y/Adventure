@@ -3,10 +3,11 @@ export const TUTORIAL_STEP_EXPLORE = 1;
 export const TUTORIAL_STEP_COMBAT = 2;
 export const TUTORIAL_STEP_GATHER = 3;
 export const TUTORIAL_STEP_TRAVEL = 4;
-export const TUTORIAL_STEP_CRAFT = 5;
-export const TUTORIAL_STEP_EQUIP = 6;
-export const TUTORIAL_STEP_DONE = 7;
-export const TUTORIAL_COMPLETED = 8;
+export const TUTORIAL_STEP_REFINE = 5;
+export const TUTORIAL_STEP_CRAFT = 6;
+export const TUTORIAL_STEP_EQUIP = 7;
+export const TUTORIAL_STEP_DONE = 8;
+export const TUTORIAL_COMPLETED = 9;
 export const TUTORIAL_SKIPPED = -1;
 
 export type BottomTab = 'home' | 'explore' | 'inventory' | 'combat' | 'profile';
@@ -64,11 +65,20 @@ export const TUTORIAL_STEPS: Record<number, TutorialStepDef> = {
     pulseTab: 'home',
     navigateTo: 'zones',
   },
+  [TUTORIAL_STEP_REFINE]: {
+    banner: 'Raw logs can\u2019t be used directly. Refine them into planks first!',
+    dialog: {
+      title: 'Refining',
+      body: 'Raw materials like logs and ore must be refined before they can be used in crafting. Select a refining recipe and process your Oak Logs into Planks.',
+    },
+    pulseTab: 'explore',
+    navigateTo: 'crafting',
+  },
   [TUTORIAL_STEP_CRAFT]: {
-    banner: 'You\u2019re in town! Select a recipe and craft some gear.',
+    banner: 'Now use your refined materials to craft some gear!',
     dialog: {
       title: 'Crafting',
-      body: 'Use gathered materials to craft equipment. Select a recipe you have materials for and craft it. Higher crafting skill levels unlock better recipes and increase your chance of a critical craft.',
+      body: 'Use refined materials to craft equipment. Select a recipe you have materials for and craft it. Higher crafting skill levels unlock better recipes and increase your chance of a critical craft.',
     },
     pulseTab: 'explore',
     navigateTo: 'crafting',
@@ -86,7 +96,7 @@ export const TUTORIAL_STEPS: Record<number, TutorialStepDef> = {
     banner: 'Tutorial complete! You\u2019ve learned the core loop. Good luck out there!',
     dialog: {
       title: 'Tutorial Complete!',
-      body: 'You now know the core gameplay loop: Explore \u2192 Fight \u2192 Gather \u2192 Travel \u2192 Craft \u2192 Equip. Keep progressing your skills, discover new zones, and take on tougher challenges!',
+      body: 'You now know the core gameplay loop: Explore \u2192 Fight \u2192 Gather \u2192 Travel \u2192 Refine \u2192 Craft \u2192 Equip. Keep progressing your skills, discover new zones, and take on tougher challenges!',
     },
     pulseTab: null,
     navigateTo: null,

@@ -10,6 +10,8 @@ import {
   getPlayerProgressionState,
   normalizePlayerAttributes,
 } from '../services/attributesService';
+import { incrementStats } from '../services/statsService';
+import { checkAchievements, emitAchievementNotifications } from '../services/achievementService';
 
 export const playerRouter = Router();
 const prismaAny = prisma as unknown as any;
@@ -172,7 +174,7 @@ playerRouter.patch('/settings', async (req, res, next) => {
 });
 
 const tutorialSchema = z.object({
-  step: z.number().int().min(-1).max(8),
+  step: z.number().int().min(-1).max(9),
 });
 
 /**
@@ -200,7 +202,7 @@ playerRouter.patch('/tutorial', async (req, res, next) => {
     }
 
     // Don't allow advancing past completed
-    if (player.tutorialStep >= 8 && !isSkip) {
+    if (player.tutorialStep >= 9 && !isSkip) {
       throw new AppError(400, 'Tutorial already completed', 'TUTORIAL_COMPLETE');
     }
 
@@ -208,6 +210,13 @@ playerRouter.patch('/tutorial', async (req, res, next) => {
       where: { id: playerId },
       data: { tutorialStep: body.step },
     });
+
+    // Grant achievement for completing the tutorial (not skipping)
+    if (body.step === 9 && !isSkip) {
+      await incrementStats(playerId, { tutorialCompleted: 1 });
+      const newAchievements = await checkAchievements(playerId, { statKeys: ['tutorialCompleted'] });
+      await emitAchievementNotifications(playerId, newAchievements);
+    }
 
     res.json({ tutorialStep: body.step });
   } catch (err) {
